@@ -43,6 +43,7 @@ jobs:
             echo ""
             echo "=== Memeriksa referensi path Termux ==="
             unzip -p app/src/main/cpp/bootstrap-aarch64.zip | strings | grep -E -m 30 '/data/data/com\.termux|/data/data/com\.yummy' || true
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
