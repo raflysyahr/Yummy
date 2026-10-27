@@ -1,20 +1,22 @@
 name: Build Yummy APK
 
 on:
-push:
-branches:
-- changes/rename-package-name
-workflow_dispatch:
+  push:
+    branches:
+      - changes/rename-package-name
+    workflow_dispatch:
 
 permissions:
-contents: read
+  contents: read
 
 jobs:
-build:
-name: Build Yummy Android APK
-runs-on: ubuntu-latest
+  build:
+    name: Build Yummy Android APK
+    runs-on: ubuntu-latest
 
-steps:
+
+
+  steps:
   - name: Checkout source code
     uses: actions/checkout@v4
 
@@ -22,7 +24,7 @@ steps:
     uses: actions/setup-java@v4
     with:
       distribution: temurin
-      java-version: '17'
+      java-version: "17"
 
   - name: Grant Gradle permission
     run: chmod +x ./gradlew
@@ -116,3 +118,5 @@ steps:
       path: dist/yummy-arm64-debug.apk
       if-no-files-found: error
       retention-days: 7
+
+
