@@ -27,6 +27,14 @@ jobs:
       - name: Grant Gradle permission
         run: chmod +x ./gradlew
 
+      - name: Download Bootstrap
+        run: ./gradlew downloadBootstraps
+  
+      - name: Check Bootstrap Files
+        run: |
+          echo "Memeriksa file bootstrap..."
+          ls -lh app/src/main/cpp/bootstrap-*.zip
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
