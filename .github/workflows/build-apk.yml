@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - changes/rename-package-name
-    workflow_dispatch:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,109 +14,105 @@ jobs:
     name: Build Yummy Android APK
     runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-  steps:
-  - name: Checkout source code
-    uses: actions/checkout@v4
+      - name: Grant Gradle permission
+        run: chmod +x ./gradlew
 
-  - name: Setup Java
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: "17"
+      - name: Download Bootstrap
+        run: ./gradlew downloadBootstraps
 
-  - name: Grant Gradle permission
-    run: chmod +x ./gradlew
+      - name: Check Bootstrap Files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Memeriksa file bootstrap..."
+          ls -lh app/src/main/cpp/bootstrap-*.zip
 
-  - name: Download Bootstrap
-    run: ./gradlew downloadBootstraps
+      - name: Diagnose Bootstrap Login
+        shell: bash
+        run: |
+          set -euo pipefail
 
-  - name: Check Bootstrap Files
-    shell: bash
-    run: |
-      set -euo pipefail
-      echo "Memeriksa file bootstrap..."
-      ls -lh app/src/main/cpp/bootstrap-*.zip
+          ZIP="app/src/main/cpp/bootstrap-aarch64.zip"
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
 
-  - name: Diagnose Bootstrap Login
-    shell: bash
-    run: |
-      set -euo pipefail
+          echo "=== Memeriksa file login di ZIP ==="
+          unzip -Z -v "$ZIP" | grep -A 15 -B 5 'bin/login' | head -40 || true
 
-      ZIP="app/src/main/cpp/bootstrap-aarch64.zip"
-      TMP="$(mktemp -d)"
-      trap 'rm -rf "$TMP"' EXIT
+          echo "=== Mengekstrak file login ==="
+          unzip -p "$ZIP" bin/login > "$TMP/login"
 
-      echo "=== Memeriksa file login di ZIP ==="
-      unzip -Z -v "$ZIP" | grep -A 15 -B 5 'bin/login' | head -40 || true
+          echo "=== Informasi file ==="
+          ls -l "$TMP/login"
+          file "$TMP/login"
 
-      echo "=== Mengekstrak file login ==="
-      unzip -p "$ZIP" bin/login > "$TMP/login"
+          echo "=== Referensi path di binary ==="
+          strings "$TMP/login" |
+            grep -E '/data/data/com\.(termux|yummy)' |
+            head -20 || true
 
-      echo "=== Informasi file ==="
-      ls -l "$TMP/login"
-      file "$TMP/login"
+      - name: Inspect Bootstrap Paths
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      echo "=== Referensi path di binary ==="
-      strings "$TMP/login" |
-        grep -E '/data/data/com\.(termux|yummy)' |
-        head -20 || true
+          ZIP="app/src/main/cpp/bootstrap-aarch64.zip"
 
-  - name: Inspect Bootstrap Paths
-    shell: bash
-    run: |
-      set -euo pipefail
+          echo "=== Memeriksa file ==="
+          test -f "$ZIP"
+          ls -lh "$ZIP"
 
-      ZIP="app/src/main/cpp/bootstrap-aarch64.zip"
+          echo "=== Memeriksa isi ZIP ==="
+          unzip -Z1 "$ZIP" | head -40 || true
 
-      echo "=== Memeriksa file ==="
-      test -f "$ZIP"
-      ls -lh "$ZIP"
+          echo "=== Mencari referensi path ==="
+          unzip -p "$ZIP" |
+            strings |
+            grep -E -m 30 '/data/data/com\.termux|/data/data/com\.yummy' || true
 
-      echo "=== Memeriksa isi ZIP ==="
-      unzip -Z1 "$ZIP" | head -40 || true
+          echo "=== Pemeriksaan selesai ==="
 
-      echo "=== Mencari referensi path ==="
-      unzip -p "$ZIP" |
-        strings |
-        grep -E -m 30 '/data/data/com\.termux|/data/data/com\.yummy' || true
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
 
-      echo "=== Pemeriksaan selesai ==="
+      - name: Find and Rename ARM64 APK
+        shell: bash
+        run: |
+          set -euo pipefail
 
-  - name: Build Debug APK
-    run: ./gradlew assembleDebug
+          echo "=== Daftar APK hasil build ==="
+          find app/build/outputs/apk -type f -name '*.apk' -print
 
-  - name: Find and Rename ARM64 APK
-    shell: bash
-    run: |
-      set -euo pipefail
+          echo "=== Mencari APK ARM64 ==="
+          APK="$(find app/build/outputs/apk -type f \
+            -name '*arm64-v8a.apk' -print -quit)"
 
-      echo "=== Daftar APK hasil build ==="
-      find app/build/outputs/apk -type f -name '*.apk' -print
+          if [ -z "$APK" ]; then
+            echo "APK ARM64 tidak ditemukan."
+            echo "Periksa konfigurasi ABI dan lokasi output Gradle."
+            exit 1
+          fi
 
-      echo "=== Mencari APK ARM64 ==="
-      APK="$(find app/build/outputs/apk -type f \
-        -name '*arm64-v8a.apk' -print -quit)"
+          mkdir -p dist
+          cp "$APK" dist/yummy-arm64-debug.apk
 
-      if [ -z "$APK" ]; then
-        echo "APK ARM64 tidak ditemukan."
-        echo "Periksa konfigurasi ABI dan lokasi output Gradle."
-        exit 1
-      fi
+          echo "=== APK yang akan diunggah ==="
+          ls -lh dist/yummy-arm64-debug.apk
 
-      mkdir -p dist
-      cp "$APK" dist/yummy-arm64-debug.apk
-
-      echo "=== APK yang akan diunggah ==="
-      ls -lh dist/yummy-arm64-debug.apk
-
-  - name: Upload APK
-    uses: actions/upload-artifact@v4
-    with:
-      name: yummy-arm64-debug
-      path: dist/yummy-arm64-debug.apk
-      if-no-files-found: error
-      retention-days: 7
-
-
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: yummy-arm64-debug
+          path: dist/yummy-arm64-debug.apk
+          if-no-files-found: error
+          retention-days: 7
