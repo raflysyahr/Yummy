@@ -35,6 +35,14 @@ jobs:
           echo "Memeriksa file bootstrap..."
           ls -lh app/src/main/cpp/bootstrap-*.zip
 
+      - name: Inspect Bootstrap Paths
+          run: |
+            echo "=== Daftar beberapa file bootstrap ARM64 ==="
+            unzip -Z1 app/src/main/cpp/bootstrap-aarch64.zip | head -40
+  
+            echo ""
+            echo "=== Memeriksa referensi path Termux ==="
+            unzip -p app/src/main/cpp/bootstrap-aarch64.zip | strings | grep -E -m 30 '/data/data/com\.termux|/data/data/com\.yummy' || true
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
