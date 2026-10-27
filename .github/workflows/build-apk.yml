@@ -30,6 +30,59 @@ jobs:
       - name: Download Bootstrap
         run: ./gradlew downloadBootstraps
 
+
+
+      - name: Diagnose Legacy Termux Paths
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP="app/src/main/cpp/bootstrap-aarch64.zip"
+
+          echo "=== Mencari skrip login ==="
+          unzip -p "$ZIP" bin/login | head -40
+
+          echo "=== Mencari konfigurasi package ==="
+          unzip -Z1 "$ZIP" |
+            grep -E '(^|/)(login|termux-login\.sh|profile|bashrc)$' |
+            head -100 || true
+
+          echo "=== Memeriksa referensi lama pada file teks ==="
+          unzip -Z1 "$ZIP" |
+            grep -E '\.(sh|bash|conf|profile|txt)$' |
+            while IFS= read -r file; do
+              if unzip -p "$ZIP" "$file" 2>/dev/null |
+                 grep -q '/data/data/com\.termux'; then
+                echo "Ditemukan referensi lama: $file"
+              fi
+            done
+
+      - name: Diagnose Yummy Bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP="app/src/main/cpp/bootstrap-aarch64.zip"
+
+          echo "=== 1. Memeriksa shell ==="
+          unzip -Z1 "$ZIP" |
+            grep -E '^bin/(sh|bash|login)$' || true
+
+          echo ""
+          echo "=== 2. Memeriksa skrip login ==="
+          unzip -p "$ZIP" bin/login | head -60
+
+          echo ""
+          echo "=== 3. Memeriksa referensi package lama ==="
+          unzip -p "$ZIP" bin/login |
+            grep -n 'com.termux' || true
+
+          echo ""
+          echo "=== 4. Memeriksa metadata file login ==="
+          unzip -Z -v "$ZIP" |
+            grep -A 25 -B 3 'bin/login' |
+            head -35 || true
+
       - name: Check Bootstrap Files
         shell: bash
         run: |
