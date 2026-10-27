@@ -31,6 +31,45 @@ jobs:
         run: ./gradlew downloadBootstraps
 
 
+      - name: Patch Bootstrap Login for Yummy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP="app/src/main/cpp/bootstrap-aarch64.zip"
+          TEMP="$(mktemp -d)"
+          trap 'rm -rf "$TEMP"' EXIT
+
+          echo "=== Mengekstrak bootstrap ARM64 ==="
+          unzip -q "$ZIP" -d "$TEMP"
+
+          LOGIN="$TEMP/bin/login"
+
+          if [ ! -f "$LOGIN" ]; then
+            echo "ERROR: bin/login tidak ditemukan"
+            exit 1
+          fi
+
+          echo "=== Menyesuaikan jalur login ==="
+          sed -i 's#/data/data/com\.termux/files/usr#/data/data/com.yummy/files/usr#g' "$LOGIN"
+
+          chmod 700 "$LOGIN"
+
+          echo "=== Memeriksa hasil patch ==="
+          head -5 "$LOGIN"
+
+          if grep -n '/data/data/com\.termux/files/usr' "$LOGIN"; then
+            echo "ERROR: Masih ditemukan jalur Termux di bin/login"
+            exit 1
+          fi
+
+          echo "=== Membuat ulang bootstrap ZIP ==="
+          (
+            cd "$TEMP"
+            zip -q -r "$GITHUB_WORKSPACE/$ZIP" .
+          )
+
+          echo "Bootstrap ARM64 berhasil disesuaikan."
 
       - name: Diagnose Legacy Termux Paths
         shell: bash
