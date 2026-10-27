@@ -3,7 +3,7 @@ name: Build Yummy APK
 on:
   push:
     branches:
-      - master
+      - changes/rename-package-name
   workflow_dispatch:
 
 permissions:
