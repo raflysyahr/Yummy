@@ -186,11 +186,9 @@ jobs:
           find app/build/outputs/apk -type f -name '*.apk' -print
 
           echo "=== Mencari APK ARM64 ==="
+          
           APK="$(find app/build/outputs/apk -type f \
-  -name '*universal.apk' -print -quit)"
-
-
-
+            -name '*universal.apk' -print -quit)"
 
           if [ -z "$APK" ]; then
             echo "APK ARM64 tidak ditemukan."
