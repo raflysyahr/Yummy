@@ -35,7 +35,7 @@ import com.google.android.material.button.MaterialButton;
 import com.termux.shared.R;
 import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import com.termux.shared.theme.ThemeUtils;
-
+import android.graphics.Typeface;
 /**
  * A {@link View} showing extra keys (such as Escape, Ctrl, Alt) not normally available on an Android soft
  * keyboards.
@@ -412,6 +412,7 @@ public final class ExtraKeysView extends GridLayout {
                 button.setText(buttonInfo.getDisplay());
                 button.setTextColor(mButtonTextColor);
                 button.setAllCaps(mButtonTextAllCaps);
+                button.setTypeface(getButtonTypeface());
                 button.setPadding(0, 0, 0, 0);
 
                 button.setOnClickListener(view -> {
@@ -599,6 +600,7 @@ public final class ExtraKeysView extends GridLayout {
         }
         button.setText(extraButton.getDisplay());
         button.setAllCaps(mButtonTextAllCaps);
+        button.setTypeface(getButtonTypeface());
         button.setPadding(0, 0, 0, 0);
         button.setMinHeight(0);
         button.setMinWidth(0);
@@ -654,12 +656,26 @@ public final class ExtraKeysView extends GridLayout {
         return true;
     }
 
+    private static Typeface sButtonTypeface;
+
+    private Typeface getButtonTypeface() {
+        if (sButtonTypeface == null) {
+            try {
+                sButtonTypeface = Typeface.createFromAsset(getContext().getAssets(), "fonts/JetBrainsMono-Regular.ttf");
+            } catch (Exception e) {
+                sButtonTypeface = Typeface.DEFAULT;
+            }
+        }
+        return sButtonTypeface;
+    }
+
     public MaterialButton createSpecialButton(String buttonKey, boolean needUpdate) {
         SpecialButtonState state = mSpecialButtons.get(SpecialButton.valueOf(buttonKey));
         if (state == null) return null;
         state.setIsCreated(true);
         MaterialButton button = new MaterialButton(getContext(), null, android.R.attr.buttonBarButtonStyle);
         button.setTextColor(state.isActive ? mButtonActiveTextColor : mButtonTextColor);
+        button.setTypeface(getButtonTypeface());
         if (needUpdate) {
             state.buttons.add(button);
         }

@@ -490,6 +490,18 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         return toastTitle.toString();
     }
 
+    private Typeface mDefaultTypeface;
+
+    private Typeface getDefaultTypeface() {
+        if (mDefaultTypeface == null) {
+            try {
+                mDefaultTypeface = Typeface.createFromAsset(mActivity.getAssets(), "fonts/JetBrainsMono-Regular.ttf");
+            } catch (Exception e) {
+                mDefaultTypeface = Typeface.MONOSPACE;
+            }
+        }
+        return mDefaultTypeface;
+    }
 
     public void checkForFontAndColors() {
         try {
@@ -510,7 +522,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             }
             updateBackgroundColor();
 
-            final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
+            final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : getDefaultTypeface();
             mActivity.getTerminalView().setTypeface(newTypeface);
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);

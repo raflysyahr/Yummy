@@ -24,6 +24,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Unduh font JetBrains Mono
+        run: |
+          mkdir -p app/src/main/assets/fonts
+          curl -fsSL -o /tmp/jbm.zip https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip
+          unzip -j /tmp/jbm.zip 'fonts/ttf/JetBrainsMono-Regular.ttf' -d app/src/main/assets/fonts/
+
       - name: Grant Gradle permission
         run: chmod +x ./gradlew
 
