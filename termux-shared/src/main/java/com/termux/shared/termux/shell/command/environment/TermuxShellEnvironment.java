@@ -90,6 +90,12 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
                 environment.put(ENV_PATH, TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH);
                 environment.remove(ENV_LD_LIBRARY_PATH);
             }
+
+            // Muat libtermux-exec agar shebang seperti /usr/bin/env diterjemahkan ke prefix aplikasi
+            String preloadLib = TermuxConstants.TERMUX_LIB_PREFIX_DIR_PATH + "/libtermux-exec-ld-preload.so";
+            if (new java.io.File(preloadLib).exists()) {
+                environment.put("LD_PRELOAD", preloadLib);
+            }
         }
 
         return environment;
