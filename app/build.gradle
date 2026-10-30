@@ -195,7 +195,7 @@ def downloadBootstrap(String arch, String expectedChecksum, String version) {
     }
 
     //def remoteUrl = "https://github.com/termux/termux-packages/releases/download/bootstrap-" + version + "/bootstrap-" + arch + ".zip"
-    def remoteUrl = "https://github.com/raflysyahr/yummy-packages/releases/download/bootstrap-yummy-3/bootstrap-" + arch + ".zip"
+    def remoteUrl = "https://github.com/raflysyahr/yummy-packages/releases/download/bootstrap-yummy-4/bootstrap-" + arch + ".zip"
     logger.quiet("Downloading " + remoteUrl + " ...")
 
     file.parentFile.mkdirs()
@@ -228,7 +228,7 @@ task downloadBootstraps() {
         def packageVariant = project.ext.packageVariant
         if (packageVariant == "apt-android-7") {
             def version = "2026.02.12-r1" + "%2B" + "apt.android-7"
-            downloadBootstrap("aarch64", "b802569390c3233f73fe41cb88d27c3e78f1efdb1ac95aafc540108d536d42f1", version)
+            downloadBootstrap("aarch64", "e11fc9951d9b6c38079548bb3a9dd915d1118dfc4ca561e695af64ea8aedfc2a", version)
 
 
 
