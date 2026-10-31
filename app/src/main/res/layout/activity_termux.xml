@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <com.termux.app.terminal.TermuxActivityRootView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -5,104 +6,606 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:background="@color/yummy_bg"
     android:fitsSystemWindows="true">
 
-    <RelativeLayout
-        android:id="@+id/activity_termux_root_relative_layout"
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:id="@+id/yummy_coordinator"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginHorizontal="3dp"
-        android:layout_marginVertical="0dp"
-        android:orientation="vertical">
+        android:layout_weight="1">
 
-        <androidx.drawerlayout.widget.DrawerLayout
-            android:id="@+id/drawer_layout"
+        <!-- ===================== LAYAR EDITOR ===================== -->
+        <LinearLayout
+            android:id="@+id/yummy_editor_screen"
             android:layout_width="match_parent"
-            android:layout_alignParentTop="true"
-            android:layout_above="@+id/terminal_toolbar_view_pager"
-            android:layout_height="match_parent">
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="@color/yummy_bg">
 
-            <com.termux.view.TerminalView
-                android:id="@+id/terminal_view"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:defaultFocusHighlightEnabled="false"
-                android:focusableInTouchMode="true"
-                android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
-                android:scrollbars="vertical"
-                tools:ignore="UnusedAttribute" />
-
+            <!-- App bar -->
             <LinearLayout
-                android:id="@+id/left_drawer"
-                android:layout_width="240dp"
-                android:layout_height="match_parent"
-                android:layout_gravity="start"
-                android:choiceMode="singleChoice"
-                android:divider="@android:color/transparent"
-                android:dividerHeight="0dp"
-                android:descendantFocusability="blocksDescendants"
-                android:orientation="vertical"
-                android:background="?attr/termuxActivityDrawerBackground">
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:background="@color/yummy_bar">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <ImageButton
+                    android:id="@+id/yummy_btn_menu"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Menu"
+                    android:padding="10dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_menu"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="8dp"
+                    android:src="@drawable/ic_yummy_file"
+                    android:tint="@color/yummy_accent_green"
+                    tools:ignore="ContentDescription" />
+
+                <TextView
+                    android:id="@+id/yummy_title"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-                    <ImageButton
-                        android:id="@+id/settings_button"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:src="@drawable/ic_settings"
-                        android:background="@null"
-                        android:contentDescription="@string/action_open_settings"
-                        app:tint="?attr/termuxActivityDrawerImageTint" />
-                </LinearLayout>
-
-                <ListView
-                    android:id="@+id/terminal_sessions_list"
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_gravity="top"
                     android:layout_weight="1"
-                    android:choiceMode="singleChoice"
-                    android:longClickable="true" />
+                    android:layout_marginStart="10dp"
+                    android:ellipsize="end"
+                    android:fontFamily="serif"
+                    android:maxLines="1"
+                    android:text="main.py"
+                    android:textColor="@color/yummy_text"
+                    android:textSize="20sp"
+                    tools:ignore="HardcodedText" />
 
-                <LinearLayout
-                    style="?android:attr/buttonBarStyle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                <ImageButton
+                    android:id="@+id/yummy_btn_terminal"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Terminal"
+                    android:padding="11dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_terminal"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/toggle_keyboard_button"
-                        style="?android:attr/buttonBarButtonStyle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/action_toggle_soft_keyboard" />
+                <ImageButton
+                    android:id="@+id/yummy_btn_search"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Cari"
+                    android:padding="10dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_search"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/new_session_button"
-                        style="?android:attr/buttonBarButtonStyle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/action_new_session" />
-                </LinearLayout>
+                <ImageButton
+                    android:id="@+id/yummy_btn_run"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Jalankan"
+                    android:padding="9dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_play"
+                    android:tint="@color/yummy_accent_green"
+                    tools:ignore="HardcodedText" />
             </LinearLayout>
 
-        </androidx.drawerlayout.widget.DrawerLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/yummy_divider" />
 
-        <androidx.viewpager.widget.ViewPager
-            android:id="@+id/terminal_toolbar_view_pager"
-            android:visibility="gone"
+            <!-- Tab file -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:orientation="horizontal"
+                android:background="@color/yummy_bar">
+
+                <HorizontalScrollView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/yummy_tabs_container"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:id="@+id/yummy_tab_1"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/yummy_bg_tab_active"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="18dp">
+
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_yummy_file"
+                                android:tint="@color/yummy_accent_green"
+                                tools:ignore="ContentDescription" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
+                                android:fontFamily="serif"
+                                android:text="main.py"
+                                android:textColor="@color/yummy_text"
+                                android:textSize="17sp"
+                                tools:ignore="HardcodedText" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/yummy_tab_2"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="18dp">
+
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_yummy_file"
+                                android:tint="@color/yummy_text_dim"
+                                tools:ignore="ContentDescription" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
+                                android:fontFamily="serif"
+                                android:text="ligner.py"
+                                android:textColor="@color/yummy_text_dim"
+                                android:textSize="17sp"
+                                tools:ignore="HardcodedText" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </HorizontalScrollView>
+
+                <ImageButton
+                    android:id="@+id/yummy_btn_tabs_menu"
+                    android:layout_width="48dp"
+                    android:layout_height="match_parent"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Daftar tab"
+                    android:padding="12dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_sort"
+                    android:tint="@color/yummy_text_dim"
+                    tools:ignore="HardcodedText" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/yummy_divider" />
+
+            <!-- Area editor. Tahap 2: isi diganti editor sungguhan -->
+            <FrameLayout
+                android:id="@+id/yummy_editor_container"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <ScrollView
+                    android:id="@+id/yummy_editor_placeholder"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:fillViewport="true">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingTop="8dp">
+
+                        <TextView
+                            android:layout_width="44dp"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:gravity="end"
+                            android:lineSpacingExtra="4dp"
+                            android:paddingEnd="10dp"
+                            android:text="1&#10;2&#10;3&#10;4&#10;5&#10;6&#10;7&#10;8&#10;9&#10;10&#10;11&#10;12&#10;13&#10;14"
+                            android:textColor="@color/yummy_text_dim"
+                            android:textSize="14sp"
+                            tools:ignore="HardcodedText" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:lineSpacingExtra="4dp"
+                            android:paddingStart="6dp"
+                            android:text="import urwid&#10;&#10;class Application:&#10;    def __init__(self):&#10;        self.loop = MainLoop()&#10;&#10;    def run(self):&#10;        self.loop.run()&#10;&#10;&#10;if __name__ == &quot;__main__&quot;:&#10;    app = Application()&#10;    app.run()"
+                            android:textColor="@color/yummy_text"
+                            android:textSize="14sp"
+                            tools:ignore="HardcodedText" />
+                    </LinearLayout>
+                </ScrollView>
+            </FrameLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/yummy_divider" />
+
+            <!-- Status bar -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:background="@color/yummy_bar"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp">
+
+                <TextView
+                    android:id="@+id/yummy_status_pos"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="serif"
+                    android:text="Ln 1, Col 1"
+                    android:textColor="@color/yummy_text_dim"
+                    android:textSize="15sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/yummy_status_indent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="serif"
+                    android:text="Spaces: 4"
+                    android:textColor="@color/yummy_text_dim"
+                    android:textSize="15sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/yummy_status_lang"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:fontFamily="serif"
+                    android:text="Python"
+                    android:textColor="@color/yummy_text_dim"
+                    android:textSize="15sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/yummy_status_enc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:fontFamily="serif"
+                    android:text="UTF-8"
+                    android:textColor="@color/yummy_text_dim"
+                    android:textSize="15sp"
+                    tools:ignore="HardcodedText" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/yummy_divider" />
+
+            <!-- Baris tombol bawah -->
+            <LinearLayout
+                android:id="@+id/yummy_keys_row"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@color/yummy_bar"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/yummy_key_tab"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    android:contentDescription="Tab"
+                    android:padding="12dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_tab_key"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <ImageButton
+                    android:id="@+id/yummy_key_up"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    android:contentDescription="Atas"
+                    android:padding="10dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_up"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <ImageButton
+                    android:id="@+id/yummy_key_down"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    android:contentDescription="Bawah"
+                    android:padding="10dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_down"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <ImageButton
+                    android:id="@+id/yummy_key_left"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    android:contentDescription="Kiri"
+                    android:padding="10dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_left"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <ImageButton
+                    android:id="@+id/yummy_key_right"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    android:contentDescription="Kanan"
+                    android:padding="10dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_right"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1">
+
+                    <TextView
+                        android:id="@+id/yummy_key_ai"
+                        android:layout_width="40dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/yummy_bg_ai_button"
+                        android:gravity="center"
+                        android:text="AI"
+                        android:textColor="@color/yummy_text"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        tools:ignore="HardcodedText" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/yummy_key_cmd"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="⌘"
+                    android:textColor="@color/yummy_text"
+                    android:textSize="26sp"
+                    tools:ignore="HardcodedText" />
+
+                <TextView
+                    android:id="@+id/yummy_key_more"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="»"
+                    android:textColor="@color/yummy_text"
+                    android:textSize="28sp"
+                    tools:ignore="HardcodedText" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ===================== PANEL TERMINAL ===================== -->
+        <FrameLayout
+            android:id="@+id/yummy_terminal_sheet"
             android:layout_width="match_parent"
-            android:layout_height="37.5dp"
-            android:background="@color/black"
-            android:layout_alignParentBottom="true" />
+            android:layout_height="match_parent"
+            android:background="@color/yummy_sheet_bg"
+            android:elevation="8dp"
+            app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
 
-    </RelativeLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <!-- Header panel: geser ke atas/bawah untuk ubah ukuran -->
+                <LinearLayout
+                    android:id="@+id/yummy_terminal_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@color/yummy_bar"
+                    android:orientation="vertical">
+
+                    <View
+                        android:layout_width="36dp"
+                        android:layout_height="4dp"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/yummy_bg_handle" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="40dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="6dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="serif"
+                            android:text="Terminal"
+                            android:textColor="@color/yummy_text"
+                            android:textSize="16sp"
+                            tools:ignore="HardcodedText" />
+
+                        <ImageButton
+                            android:id="@+id/yummy_btn_terminal_max"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Perbesar"
+                            android:padding="9dp"
+                            android:scaleType="centerInside"
+                            android:src="@drawable/ic_yummy_fullscreen"
+                            android:tint="@color/yummy_text"
+                            tools:ignore="HardcodedText" />
+
+                        <ImageButton
+                            android:id="@+id/yummy_btn_terminal_close"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Tutup"
+                            android:padding="9dp"
+                            android:scaleType="centerInside"
+                            android:src="@drawable/ic_yummy_close"
+                            android:tint="@color/yummy_text"
+                            tools:ignore="HardcodedText" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Terminal asli (tidak diubah dari layout lama) -->
+                <RelativeLayout
+                    android:id="@+id/activity_termux_root_relative_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="3dp"
+                    android:layout_marginVertical="0dp"
+                    android:orientation="vertical">
+
+                    <androidx.drawerlayout.widget.DrawerLayout
+                        android:id="@+id/drawer_layout"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_alignParentTop="true"
+                        android:layout_above="@+id/terminal_toolbar_view_pager">
+
+                        <com.termux.view.TerminalView
+                            android:id="@+id/terminal_view"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:defaultFocusHighlightEnabled="false"
+                            android:focusableInTouchMode="true"
+                            android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
+                            android:scrollbars="vertical"
+                            tools:ignore="UnusedAttribute" />
+
+                        <LinearLayout
+                            android:id="@+id/left_drawer"
+                            android:layout_width="240dp"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="start"
+                            android:choiceMode="singleChoice"
+                            android:divider="@android:color/transparent"
+                            android:dividerHeight="0dp"
+                            android:descendantFocusability="blocksDescendants"
+                            android:orientation="vertical"
+                            android:background="?attr/termuxActivityDrawerBackground">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+
+                                <ImageButton
+                                    android:id="@+id/settings_button"
+                                    android:layout_width="40dp"
+                                    android:layout_height="40dp"
+                                    android:src="@drawable/ic_settings"
+                                    android:background="@null"
+                                    android:contentDescription="@string/action_open_settings"
+                                    app:tint="?attr/termuxActivityDrawerImageTint" />
+                            </LinearLayout>
+
+                            <ListView
+                                android:id="@+id/terminal_sessions_list"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_gravity="top"
+                                android:layout_weight="1"
+                                android:choiceMode="singleChoice"
+                                android:longClickable="true" />
+
+                            <LinearLayout
+                                style="?android:attr/buttonBarStyle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/toggle_keyboard_button"
+                                    style="?android:attr/buttonBarButtonStyle"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/action_toggle_soft_keyboard" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/new_session_button"
+                                    style="?android:attr/buttonBarButtonStyle"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/action_new_session" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                    </androidx.drawerlayout.widget.DrawerLayout>
+
+                    <androidx.viewpager.widget.ViewPager
+                        android:id="@+id/terminal_toolbar_view_pager"
+                        android:visibility="gone"
+                        android:layout_width="match_parent"
+                        android:layout_height="37.5dp"
+                        android:background="@color/black"
+                        android:layout_alignParentBottom="true" />
+
+                </RelativeLayout>
+            </LinearLayout>
+        </FrameLayout>
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
     <View
         android:id="@+id/activity_termux_bottom_space_view"
