@@ -618,11 +618,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 final EditText textInputView =  mActivity.findViewById(R.id.terminal_toolbar_text_input);
                 if (textInputView != null) textInputViewHasFocus = textInputView.hasFocus();
 
-                Toast.makeText(
-                    mActivity,
-                    "Terminal focus: " + hasFocus,
-                    Toast.LENGTH_SHORT
-                ).show();
+//                Toast.makeText(
+//                    mActivity,
+//                    "Terminal focus: " + hasFocus,/                    Toast.LENGTH_SHORT
+//                ).show();
 
                 if (hasFocus || textInputViewHasFocus) {
                     if (mShowSoftKeyboardIgnoreOnce) {

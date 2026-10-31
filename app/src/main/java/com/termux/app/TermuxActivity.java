@@ -297,7 +297,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onStart();
 
-        if (mPreferences.isTerminalMarginAdjustmentEnabled())
+        if (mPreferences.isTerminalMarginAdjustmentEnabled() && mEditorLayoutController == null)
             addTermuxActivityRootViewGlobalLayoutListener();
 
         registerTermuxActivityBroadcastReceiver();
