@@ -447,7 +447,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
             // Update session list.
             termuxSessionListNotifyUpdated();
-            //mActivity.onLastTerminalSessionRemoved();
+
+            mActivity.onLastTerminalSessionRemoved();
             return;
         } else {
             if (index >= size) {
