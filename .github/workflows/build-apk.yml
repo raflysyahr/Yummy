@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - changes/rename-package-name
+      - feature/editor
   workflow_dispatch:
 
 permissions:
