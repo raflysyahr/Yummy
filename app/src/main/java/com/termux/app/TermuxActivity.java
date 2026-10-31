@@ -650,6 +650,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public void finishActivityIfNotFinishing() {
+        android.util.Log.w("YummyFinish", "finishActivityIfNotFinishing dipanggil", new Throwable());
         // prevent duplicate calls to finish() if called from multiple places
         if (!TermuxActivity.this.isFinishing()) {
             finish();

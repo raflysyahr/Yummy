@@ -440,7 +440,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
             // There are no sessions to show, so finish the activity.
-            mActivity.onLastTerminalSessionRemoved();
+            mActivity.getTerminalView().attachSession(null);
+
+            // Clear stored current session.
+            setCurrentStoredSession();
+
+            // Update session list.
+            termuxSessionListNotifyUpdated();
+            //mActivity.onLastTerminalSessionRemoved();
+            return;
         } else {
             if (index >= size) {
                 index = size - 1;

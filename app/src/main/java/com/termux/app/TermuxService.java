@@ -852,7 +852,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     private synchronized void updateNotification() {
         if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()) {
             // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
-            requestStopService();
+            //requestStopService();
+            return;
         } else {
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
         }
