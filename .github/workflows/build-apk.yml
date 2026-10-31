@@ -13,6 +13,10 @@ jobs:
   build:
     name: Build Yummy Android APK
     runs-on: ubuntu-latest
+    env:
+      YUMMY_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      YUMMY_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      YUMMY_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     steps:
       - name: Checkout source code
@@ -23,6 +27,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Siapkan kunci tanda tangan
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/yummy-release.jks"
+            echo "YUMMY_KEYSTORE=$RUNNER_TEMP/yummy-release.jks" >> "$GITHUB_ENV"
+            echo "Kunci rilis dipakai."
+          else
+            echo "KEYSTORE_BASE64 kosong, memakai kunci bawaan."
+          fi
 
       - name: Unduh font JetBrains Mono
         run: |
@@ -192,7 +208,7 @@ jobs:
           find app/build/outputs/apk -type f -name '*.apk' -print
 
           echo "=== Mencari APK ARM64 ==="
-          
+
           APK="$(find app/build/outputs/apk -type f \
             -name '*universal.apk' -print -quit)"
 
@@ -207,6 +223,12 @@ jobs:
 
           echo "=== APK yang akan diunggah ==="
           ls -lh dist/yummy-arm64-debug.apk
+
+      - name: Cek tanda tangan APK
+        shell: bash
+        run: |
+          APKSIGNER="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)"
+          "$APKSIGNER" verify --print-certs dist/yummy-arm64-debug.apk | grep -i "SHA-256"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
