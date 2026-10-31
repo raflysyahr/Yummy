@@ -7,6 +7,8 @@ import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 
 import androidx.annotation.NonNull;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.termux.R;
@@ -60,6 +62,15 @@ public class EditorLayoutController {
         });
 
         bindClick(R.id.yummy_btn_terminal, v -> toggleTerminal());
+        bindClick(R.id.yummy_btn_new_session, v -> {
+            // Memakai tombol sesi baru milik drawer lama, jadi perilakunya sama persis.
+            View newSession = mActivity.findViewById(R.id.new_session_button);
+            if (newSession != null) newSession.performClick();
+        });
+        bindClick(R.id.yummy_btn_sessions, v -> {
+            DrawerLayout drawer = mActivity.findViewById(R.id.drawer_layout);
+            if (drawer != null) drawer.openDrawer(GravityCompat.START);
+        });
         bindClick(R.id.yummy_btn_terminal_close, v -> setSheetState(BottomSheetBehavior.STATE_HIDDEN));
         bindClick(R.id.yummy_btn_terminal_max, v -> {
             if (mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {

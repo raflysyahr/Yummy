@@ -480,6 +480,30 @@
                             tools:ignore="HardcodedText" />
 
                         <ImageButton
+                            android:id="@+id/yummy_btn_sessions"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Daftar sesi"
+                            android:padding="9dp"
+                            android:scaleType="centerInside"
+                            android:src="@drawable/ic_yummy_sessions"
+                            android:tint="@color/yummy_text"
+                            tools:ignore="HardcodedText" />
+
+                        <ImageButton
+                            android:id="@+id/yummy_btn_new_session"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Sesi baru"
+                            android:padding="9dp"
+                            android:scaleType="centerInside"
+                            android:src="@drawable/ic_yummy_add"
+                            android:tint="@color/yummy_text"
+                            tools:ignore="HardcodedText" />
+
+                        <ImageButton
                             android:id="@+id/yummy_btn_terminal_max"
                             android:layout_width="40dp"
                             android:layout_height="40dp"
