@@ -1,6 +1,5 @@
 package com.termux.app.editor;
 
-import android.app.Activity;
 import android.content.Context;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -11,21 +10,24 @@ import androidx.annotation.NonNull;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.termux.R;
+import com.termux.app.TermuxActivity;
 
 /**
  * Mengatur panel terminal (bottom sheet) pada layar editor Yummy.
  *
  * Tiga kondisi panel: tersembunyi, setengah layar, dan penuh.
- * Panel diubah lewat tombol di app bar / header panel, atau dengan menggeser header
- * (bukan seluruh panel, supaya geser untuk scroll teks terminal tetap normal).
+ * Terminal baru aktif (sesi dibuat, fokus dan papan ketik diminta) ketika pengguna
+ * membuka panel. Selama panel tersembunyi, terminal tidak bisa menerima fokus.
  */
 public class EditorLayoutController {
 
-    private final Activity mActivity;
+    private final TermuxActivity mActivity;
     private View mSheet;
     private BottomSheetBehavior<View> mBehavior;
+    private boolean mTerminalOpen = false;
+    private boolean mShowKeyboardOnSettle = false;
 
-    public EditorLayoutController(@NonNull Activity activity) {
+    public EditorLayoutController(@NonNull TermuxActivity activity) {
         mActivity = activity;
     }
 
@@ -43,6 +45,8 @@ public class EditorLayoutController {
         mBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         // INVISIBLE (bukan GONE): terminal tetap diukur, jadi sesi shell tetap berjalan.
         mSheet.setVisibility(View.INVISIBLE);
+        // Terminal tidak boleh merebut fokus / papan ketik sebelum dibuka pengguna.
+        setTerminalFocusable(false);
 
         mBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
             @Override
@@ -85,7 +89,19 @@ public class EditorLayoutController {
         }
     }
 
-    /** Untuk dipakai tombol back: true kalau panel ditutup oleh pemanggilan ini. */
+    /** True kalau panel terminal sedang dibuka (atau sedang dibuka) oleh pengguna. */
+    public boolean isTerminalOpen() {
+        return mTerminalOpen;
+    }
+
+    /** Dipanggil saat sesi terminal terakhir selesai: tutup panel, aplikasi tetap hidup. */
+    public void onTerminalSessionsEmpty() {
+        mActivity.runOnUiThread(() -> {
+            if (mBehavior != null) setSheetState(BottomSheetBehavior.STATE_HIDDEN);
+        });
+    }
+
+    /** Untuk tombol back: true kalau panel ditutup oleh pemanggilan ini. */
     public boolean handleBack() {
         if (mBehavior == null) return false;
         if (mBehavior.getState() == BottomSheetBehavior.STATE_HIDDEN) return false;
@@ -121,7 +137,14 @@ public class EditorLayoutController {
 
     private void setSheetState(int state) {
         if (state != BottomSheetBehavior.STATE_HIDDEN) {
+            boolean wasOpen = mTerminalOpen;
+            mTerminalOpen = true;
+            setTerminalFocusable(true);
             mSheet.setVisibility(View.VISIBLE);
+            if (!wasOpen) {
+                mShowKeyboardOnSettle = true;
+                mActivity.ensureTerminalSession();
+            }
         }
         mBehavior.setState(state);
     }
@@ -137,16 +160,41 @@ public class EditorLayoutController {
 
         View terminalView = mActivity.findViewById(R.id.terminal_view);
         if (state == BottomSheetBehavior.STATE_HIDDEN) {
+            mTerminalOpen = false;
+            mShowKeyboardOnSettle = false;
             mSheet.setVisibility(View.INVISIBLE);
             if (terminalView != null) {
-                terminalView.clearFocus();
                 InputMethodManager imm = (InputMethodManager)
                     mActivity.getSystemService(Context.INPUT_METHOD_SERVICE);
                 if (imm != null) imm.hideSoftInputFromWindow(terminalView.getWindowToken(), 0);
             }
+            setTerminalFocusable(false);
         } else if (state == BottomSheetBehavior.STATE_HALF_EXPANDED
             || state == BottomSheetBehavior.STATE_EXPANDED) {
-            if (terminalView != null) terminalView.requestFocus();
+            if (terminalView != null) {
+                terminalView.requestFocus();
+                if (mShowKeyboardOnSettle) {
+                    mShowKeyboardOnSettle = false;
+                    terminalView.post(() -> {
+                        InputMethodManager imm = (InputMethodManager)
+                            mActivity.getSystemService(Context.INPUT_METHOD_SERVICE);
+                        if (imm != null) imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT);
+                    });
+                }
+            }
+        }
+    }
+
+    private void setTerminalFocusable(boolean focusable) {
+        View terminalView = mActivity.findViewById(R.id.terminal_view);
+        if (terminalView == null) return;
+        if (focusable) {
+            terminalView.setFocusable(true);
+            terminalView.setFocusableInTouchMode(true);
+        } else {
+            terminalView.clearFocus();
+            terminalView.setFocusable(false);
+            terminalView.setFocusableInTouchMode(false);
         }
     }
 

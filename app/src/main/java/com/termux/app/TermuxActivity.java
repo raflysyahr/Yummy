@@ -214,7 +214,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_termux);
-        new com.termux.app.editor.EditorLayoutController(this).setup();
+        mEditorLayoutController = new com.termux.app.editor.EditorLayoutController(this);
+        mEditorLayoutController.setup();
 
         // Load termux shared preferences
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
@@ -397,6 +398,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         if (mTermuxService.isTermuxSessionsEmpty()) {
             if (mIsVisible) {
+                mBootstrapSetupRunning = true;
                 TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
                     if (mTermuxService == null) return; // Activity might have been destroyed.
                     try {
@@ -404,7 +406,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (intent != null && intent.getExtras() != null) {
                             launchFailsafe = intent.getExtras().getBoolean(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
                         }
-                        mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                        mBootstrapSetupRunning = false;
+                        mPendingFailsafeSession = launchFailsafe;
+                        if (mEditorLayoutController != null && mEditorLayoutController.isTerminalOpen()) {
+                            ensureTerminalSession();
+                        }
                     } catch (WindowManager.BadTokenException e) {
                         // Activity finished - ignore.
                     }
@@ -602,8 +608,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
+        if (mEditorLayoutController != null && mEditorLayoutController.handleBack()) return;
         if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
+        } else {
+            finishActivityIfNotFinishing();
+        }
+    }
+
+    private com.termux.app.editor.EditorLayoutController mEditorLayoutController;
+    private boolean mBootstrapSetupRunning = false;
+    private boolean mPendingFailsafeSession = false;
+
+    public com.termux.app.editor.EditorLayoutController getEditorLayoutController() {
+        return mEditorLayoutController;
+    }
+
+    /** Buat sesi terminal pertama hanya saat pengguna membuka panel terminal. */
+    public void ensureTerminalSession() {
+        if (mTermuxService == null || mTermuxTerminalSessionActivityClient == null) return;
+        if (!mTermuxService.isTermuxSessionsEmpty()) return;
+        if (mBootstrapSetupRunning) return; // callback pemasangan yang akan membuat sesi
+        TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
+            if (mTermuxService == null) return;
+            try {
+                mTermuxTerminalSessionActivityClient.addNewSession(mPendingFailsafeSession, null);
+                mPendingFailsafeSession = false;
+            } catch (WindowManager.BadTokenException e) {
+                // Activity finished - ignore.
+            }
+        });
+    }
+
+    /** Dipanggil saat sesi terakhir selesai: tutup panel terminal, bukan aplikasinya. */
+    public void onLastTerminalSessionRemoved() {
+        if (mEditorLayoutController != null) {
+            mEditorLayoutController.onTerminalSessionsEmpty();
         } else {
             finishActivityIfNotFinishing();
         }
