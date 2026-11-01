@@ -216,6 +216,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setContentView(R.layout.activity_termux);
         mEditorLayoutController = new com.termux.app.editor.EditorLayoutController(this);
         mEditorLayoutController.setup();
+        new com.termux.app.editor.EditorController(this).setup();
 
         // Load termux shared preferences
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
@@ -650,7 +651,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public void finishActivityIfNotFinishing() {
-        android.util.Log.w("YummyFinish", "finishActivityIfNotFinishing dipanggil", new Throwable());
         // prevent duplicate calls to finish() if called from multiple places
         if (!TermuxActivity.this.isFinishing()) {
             finish();

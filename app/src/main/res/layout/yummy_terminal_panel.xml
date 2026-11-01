@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/yummy_terminal_sheet"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/yummy_sheet_bg"
+    android:elevation="8dp"
+    app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Header panel: geser ke atas/bawah untuk ubah ukuran -->
+        <LinearLayout
+            android:id="@+id/yummy_terminal_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/yummy_bar"
+            android:orientation="vertical">
+
+            <View
+                android:layout_width="36dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/yummy_bg_handle" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingEnd="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="serif"
+                    android:text="Terminal"
+                    android:textColor="@color/yummy_text"
+                    android:textSize="16sp"
+                    tools:ignore="HardcodedText" />
+
+                <ImageButton
+                    android:id="@+id/yummy_btn_sessions"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Daftar sesi"
+                    android:padding="9dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_sessions"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <ImageButton
+                    android:id="@+id/yummy_btn_new_session"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Sesi baru"
+                    android:padding="9dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_add"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <ImageButton
+                    android:id="@+id/yummy_btn_terminal_max"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Perbesar"
+                    android:padding="9dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_fullscreen"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+
+                <ImageButton
+                    android:id="@+id/yummy_btn_terminal_close"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Tutup"
+                    android:padding="9dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_yummy_close"
+                    android:tint="@color/yummy_text"
+                    tools:ignore="HardcodedText" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Terminal asli (tidak diubah dari layout lama) -->
+        <RelativeLayout
+            android:id="@+id/activity_termux_root_relative_layout"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginHorizontal="3dp"
+            android:layout_marginVertical="0dp"
+            android:orientation="vertical">
+
+            <androidx.drawerlayout.widget.DrawerLayout
+                android:id="@+id/drawer_layout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_alignParentTop="true"
+                android:layout_above="@+id/terminal_toolbar_view_pager">
+
+                <com.termux.view.TerminalView
+                    android:id="@+id/terminal_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:defaultFocusHighlightEnabled="false"
+                    android:focusableInTouchMode="true"
+                    android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
+                    android:scrollbars="vertical"
+                    tools:ignore="UnusedAttribute" />
+
+                <LinearLayout
+                    android:id="@+id/left_drawer"
+                    android:layout_width="240dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="start"
+                    android:choiceMode="singleChoice"
+                    android:divider="@android:color/transparent"
+                    android:dividerHeight="0dp"
+                    android:descendantFocusability="blocksDescendants"
+                    android:orientation="vertical"
+                    android:background="?attr/termuxActivityDrawerBackground">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <ImageButton
+                            android:id="@+id/settings_button"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:src="@drawable/ic_settings"
+                            android:background="@null"
+                            android:contentDescription="@string/action_open_settings"
+                            app:tint="?attr/termuxActivityDrawerImageTint" />
+                    </LinearLayout>
+
+                    <ListView
+                        android:id="@+id/terminal_sessions_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_gravity="top"
+                        android:layout_weight="1"
+                        android:choiceMode="singleChoice"
+                        android:longClickable="true" />
+
+                    <LinearLayout
+                        style="?android:attr/buttonBarStyle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/toggle_keyboard_button"
+                            style="?android:attr/buttonBarButtonStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_toggle_soft_keyboard" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/new_session_button"
+                            style="?android:attr/buttonBarButtonStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_new_session" />
+                    </LinearLayout>
+                </LinearLayout>
+
+            </androidx.drawerlayout.widget.DrawerLayout>
+
+            <androidx.viewpager.widget.ViewPager
+                android:id="@+id/terminal_toolbar_view_pager"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="37.5dp"
+                android:background="@color/black"
+                android:layout_alignParentBottom="true" />
+
+        </RelativeLayout>
+    </LinearLayout>
+</FrameLayout>

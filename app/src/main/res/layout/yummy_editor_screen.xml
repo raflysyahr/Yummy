@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/yummy_editor_screen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/yummy_bg">
+
+    <!-- App bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:background="@color/yummy_bar">
+
+        <ImageButton
+            android:id="@+id/yummy_btn_menu"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Menu"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_menu"
+            android:tint="@color/yummy_text"
+            tools:ignore="HardcodedText" />
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="8dp"
+            android:src="@drawable/ic_yummy_file"
+            android:tint="@color/yummy_accent_green"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:id="@+id/yummy_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:ellipsize="end"
+            android:fontFamily="serif"
+            android:maxLines="1"
+            android:text="main.py"
+            android:textColor="@color/yummy_text"
+            android:textSize="20sp"
+            tools:ignore="HardcodedText" />
+
+        <ImageButton
+            android:id="@+id/yummy_btn_terminal"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Terminal"
+            android:padding="11dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_terminal"
+            android:tint="@color/yummy_text"
+            tools:ignore="HardcodedText" />
+
+        <ImageButton
+            android:id="@+id/yummy_btn_search"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Cari"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_search"
+            android:tint="@color/yummy_text"
+            tools:ignore="HardcodedText" />
+
+        <ImageButton
+            android:id="@+id/yummy_btn_run"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Jalankan"
+            android:padding="9dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_play"
+            android:tint="@color/yummy_accent_green"
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/yummy_divider" />
+
+    <!-- Tab file -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:orientation="horizontal"
+        android:background="@color/yummy_bar">
+
+        <HorizontalScrollView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/yummy_tabs_container"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/yummy_tab_1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/yummy_bg_tab_active"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="18dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_yummy_file"
+                        android:tint="@color/yummy_accent_green"
+                        tools:ignore="ContentDescription" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:fontFamily="serif"
+                        android:text="main.py"
+                        android:textColor="@color/yummy_text"
+                        android:textSize="17sp"
+                        tools:ignore="HardcodedText" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/yummy_tab_2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="18dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_yummy_file"
+                        android:tint="@color/yummy_text_dim"
+                        tools:ignore="ContentDescription" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:fontFamily="serif"
+                        android:text="ligner.py"
+                        android:textColor="@color/yummy_text_dim"
+                        android:textSize="17sp"
+                        tools:ignore="HardcodedText" />
+                </LinearLayout>
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <ImageButton
+            android:id="@+id/yummy_btn_tabs_menu"
+            android:layout_width="48dp"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Daftar tab"
+            android:padding="12dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_sort"
+            android:tint="@color/yummy_text_dim"
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/yummy_divider" />
+
+    <!-- Area editor. Tahap 2: isi diganti editor sungguhan -->
+    <FrameLayout
+        android:id="@+id/yummy_editor_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <io.github.rosemoe.sora.widget.CodeEditor
+            android:id="@+id/yummy_code_editor"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/yummy_divider" />
+
+    <!-- Status bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:background="@color/yummy_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp">
+
+        <TextView
+            android:id="@+id/yummy_status_pos"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="serif"
+            android:text="Ln 1, Col 1"
+            android:textColor="@color/yummy_text_dim"
+            android:textSize="15sp"
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/yummy_status_indent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="serif"
+            android:text="Spaces: 4"
+            android:textColor="@color/yummy_text_dim"
+            android:textSize="15sp"
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/yummy_status_lang"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:fontFamily="serif"
+            android:text="Python"
+            android:textColor="@color/yummy_text_dim"
+            android:textSize="15sp"
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/yummy_status_enc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:fontFamily="serif"
+            android:text="UTF-8"
+            android:textColor="@color/yummy_text_dim"
+            android:textSize="15sp"
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/yummy_divider" />
+
+    <!-- Baris tombol bawah -->
+    <LinearLayout
+        android:id="@+id/yummy_keys_row"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@color/yummy_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/yummy_key_tab"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="Tab"
+            android:padding="12dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_tab_key"
+            android:tint="@color/yummy_text"
+            tools:ignore="HardcodedText" />
+
+        <ImageButton
+            android:id="@+id/yummy_key_up"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="Atas"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_up"
+            android:tint="@color/yummy_text"
+            tools:ignore="HardcodedText" />
+
+        <ImageButton
+            android:id="@+id/yummy_key_down"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="Bawah"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_down"
+            android:tint="@color/yummy_text"
+            tools:ignore="HardcodedText" />
+
+        <ImageButton
+            android:id="@+id/yummy_key_left"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="Kiri"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_left"
+            android:tint="@color/yummy_text"
+            tools:ignore="HardcodedText" />
+
+        <ImageButton
+            android:id="@+id/yummy_key_right"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="Kanan"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_right"
+            android:tint="@color/yummy_text"
+            tools:ignore="HardcodedText" />
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <TextView
+                android:id="@+id/yummy_key_ai"
+                android:layout_width="40dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center"
+                android:background="@drawable/yummy_bg_ai_button"
+                android:gravity="center"
+                android:text="AI"
+                android:textColor="@color/yummy_text"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                tools:ignore="HardcodedText" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/yummy_key_cmd"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:text="⌘"
+            android:textColor="@color/yummy_text"
+            android:textSize="26sp"
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/yummy_key_more"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:text="»"
+            android:textColor="@color/yummy_text"
+            android:textSize="28sp"
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+</LinearLayout>
