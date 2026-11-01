@@ -38,13 +38,10 @@ public class EditorLayoutController {
     private boolean mShowKeyboardOnSettle = false;
 
 
+    private View mCoordinator;
 
-    private View mDecorView;
+    private int mHalfExpandedVisibleHeight = 0;
 
-    private final Rect mVisibleFrame = new Rect();
-    private final int[] mDecorLocation = new int[2];
-
-    private int mImeHeight = 0;
 
     public EditorLayoutController(@NonNull TermuxActivity activity) {
         mActivity = activity;
@@ -57,10 +54,17 @@ public class EditorLayoutController {
 
         mBehavior = BottomSheetBehavior.from(mSheet);
 
-        mDecorView = mActivity.getWindow().getDecorView();
+        mCoordinator = mActivity.findViewById(R.id.yummy_coordinator);
 
-        mDecorView.getViewTreeObserver()
-        .addOnGlobalLayoutListener(this::updateImeOffset);
+        if (mCoordinator != null) {
+                mCoordinator.getViewTreeObserver()
+                .addOnGlobalLayoutListener(this::updateHalfExpandedLayout);
+        }
+
+
+
+
+
 
 
 
@@ -127,69 +131,81 @@ public class EditorLayoutController {
 
 
     public void applySoftInputModeForCurrentState() {
-    if (mBehavior == null) return;
+       if (mBehavior == null) return;
 
-    if (mBehavior.getState()
-        == BottomSheetBehavior.STATE_HALF_EXPANDED) {
-
-        mActivity.getWindow().setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
-        );
-
-    } else {
-
-        mActivity.getWindow().setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-        );
-
-        mSheet.setTranslationY(0f);
+            mActivity.getWindow().setSoftInputMode(
+$           WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        
+            if (mSheet != null) {
+                mSheet.setTranslationY(0f);
+            }
     }
 
-    mSheet.post(this::updateImeOffset);
-}
 
-private void updateImeOffset() {
-    if (mSheet == null || mBehavior == null || mDecorView == null) {
+    private void updateHalfExpandedLayout() {
+    if (mCoordinator == null || mSheet == null || mBehavior == null) {
         return;
     }
 
-    mDecorView.getWindowVisibleDisplayFrame(mVisibleFrame);
-    mDecorView.getLocationOnScreen(mDecorLocation);
+    int parentHeight = mCoordinator.getHeight();
 
-    int windowBottom = mDecorLocation[1] + mDecorView.getHeight();
+    if (parentHeight <= 0) return;
 
-    int keyboardHeight = windowBottom - mVisibleFrame.bottom;
+    int state = mBehavior.getState();
 
-    int threshold = (int) (100 * mActivity.getResources()
-        .getDisplayMetrics().density);
+    if (state == BottomSheetBehavior.STATE_HALF_EXPANDED) {
 
-    if (keyboardHeight < threshold) {
-        keyboardHeight = 0;
+        // Simpan tinggi panel sebelum keyboard mengubah ukuran parent.
+        if (mHalfExpandedVisibleHeight <= 0) {
+            mHalfExpandedVisibleHeight =
+                Math.round(parentHeight * 0.5f);
+        }
+
+        // Hitung ulang rasio agar tinggi panel yang terlihat tetap.
+        float ratio =
+            mHalfExpandedVisibleHeight / (float) parentHeight;
+
+        // BottomSheetBehavior mensyaratkan rasio antara 0 dan 1.
+        ratio = Math.max(0.05f, Math.min(0.95f, ratio));
+
+        if (Math.abs(ratio - mBehavior.getHalfExpandedRatio()) > 0.001f) {
+            mBehavior.setHalfExpandedRatio(ratio);
+
+            // Minta BottomSheetBehavior menghitung ulang posisi panel.
+            mSheet.requestLayout();
+            return;
+        }
     }
 
-    boolean isHalfExpanded =
-        mBehavior.getState() == BottomSheetBehavior.STATE_HALF_EXPANDED;
-
-    mImeHeight = keyboardHeight;
-
-    mSheet.setTranslationY(
-        isHalfExpanded ? -mImeHeight : 0f
-    );
+    updateSheetBottomPadding();
 }
 
+private void updateSheetBottomPadding() {
+    if (mSheet == null || mBehavior == null) return;
 
+    int state = mBehavior.getState();
 
+    // Jangan mengubah padding ketika panel sedang bergerak.
+    if (state != BottomSheetBehavior.STATE_HALF_EXPANDED
+        && state != BottomSheetBehavior.STATE_EXPANDED
+        && state != BottomSheetBehavior.STATE_HIDDEN) {
+        return;
+    }
 
+    int bottomPadding =
+        state == BottomSheetBehavior.STATE_HALF_EXPANDED
+            ? Math.max(0, mSheet.getTop())
+            : 0;
 
-
-
-
-
-
-
-
-
-
+    if (mSheet.getPaddingBottom() != bottomPadding) {
+        mSheet.setPadding(
+            mSheet.getPaddingLeft(),
+            mSheet.getPaddingTop(),
+            mSheet.getPaddingRight(),
+            bottomPadding
+        );
+    }
+}
 
 
 
@@ -263,13 +279,26 @@ private void updateImeOffset() {
 
             applySoftInputModeForCurrentState();
         }
+
+        // Ambil tinggi panel normal sebelum keyboard ditampilkan.
+        if (state == BottomSheetBehavior.STATE_HALF_EXPANDED
+            && mHalfExpandedVisibleHeight <= 0
+            && mCoordinator != null) {
+
+                int parentHeight = mCoordinator.getHeight();
+
+                if (parentHeight > 0) {
+                    mHalfExpandedVisibleHeight =
+                    Math.round(parentHeight * 0.5f);
+                }
+        }
+
         // Pada setengah layar, bagian bawah panel berada di luar layar.
         // Padding bawah menjaga isi terminal tetap muncul seluruhnya.
-        int bottom = (state == BottomSheetBehavior.STATE_HALF_EXPANDED)
-            ? Math.max(0, mSheet.getTop()) : 0;
-        if (mSheet.getPaddingBottom() != bottom) {
-            mSheet.setPadding(0, 0, 0, bottom);
-        }
+        //
+        updateSheetBottomPadding();
+
+      
 
         View terminalView = mActivity.findViewById(R.id.terminal_view);
         if (state == BottomSheetBehavior.STATE_HIDDEN) {
