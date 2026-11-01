@@ -590,8 +590,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 mShowSoftKeyboardWithDelayOnce = true;
         } else {
             // Set flag to automatically push up TerminalView when keyboard is opened instead of showing over it
-            KeyboardUtils.setSoftInputModeAdjustResize(mActivity);
+            if (mActivity.getEditorLayoutController() != null) {
+                mActivity.getEditorLayoutController()
+                .applySoftInputModeForCurrentState();
+            } else {
 
+                KeyboardUtils.setSoftInputModeAdjustResize(mActivity);
+            }
             // Clear any previous flags to disable soft keyboard in case setting updated
             KeyboardUtils.clearDisableSoftKeyboardFlags(mActivity);
 
@@ -637,9 +642,24 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     if (controller != null && controller.isTerminalOpen()) {
 
         // Pertahankan focus terminal setelah perubahan layout.
-                        view.postDelayed(() -> {
+ 
 
-                            if (controller.isTerminalOpen() && !view.hasFocus()) {                  view.requestFocus();
+ 
+ 
+
+ 
+
+                        view.postDelayed(() -> {
+                            if (controller.isTerminalOpen() && !view.hasFocus()) {
+
+                                view.requestFocus();
+
+                                android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                                mActivity.getSystemService(Context.INPUT_METHOD_SERVICE);
+
+                                if (imm != null) {
+                                    imm.restartInput(view);
+                                }
                             }
 
                         }, 150);

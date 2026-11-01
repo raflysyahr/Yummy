@@ -6,6 +6,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 
+import android.view.WindowManager;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+
 import androidx.annotation.NonNull;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
@@ -28,6 +32,8 @@ public class EditorLayoutController {
     private BottomSheetBehavior<View> mBehavior;
     private boolean mTerminalOpen = false;
     private boolean mShowKeyboardOnSettle = false;
+    private int mImeBottom = 0;
+    private boolean mImeVisible = false;
 
     public EditorLayoutController(@NonNull TermuxActivity activity) {
         mActivity = activity;
@@ -39,6 +45,27 @@ public class EditorLayoutController {
         if (mSheet == null) return;
 
         mBehavior = BottomSheetBehavior.from(mSheet);
+
+        View coordinator = mActivity.findViewById(R.id.yummy_coordinator);
+
+        if (coordinator != null) {
+                ViewCompat.setOnApplyWindowInsetsListener(coordinator, (view, insets) -> {
+
+                    mImeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+
+        
+                    mImeBottom = insets
+                    .getInsets(WindowInsetsCompat.Type.ime())
+                    .bottom;
+
+                    updateSheetImeOffset();
+
+                    return insets;
+                });
+
+                ViewCompat.requestApplyInsets(coordinator);
+        }
+
         mBehavior.setDraggable(false);
         mBehavior.setHideable(true);
         mBehavior.setFitToContents(false);
@@ -99,6 +126,38 @@ public class EditorLayoutController {
             header.setOnTouchListener((v, event) -> detector.onTouchEvent(event));
         }
     }
+
+
+    public void applySoftInputModeForCurrentState() {
+    if (mBehavior == null) return;
+
+    int state = mBehavior.getState();
+
+    if (state == BottomSheetBehavior.STATE_HALF_EXPANDED) {
+        mActivity.getWindow().setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+        );
+    } else {
+        mActivity.getWindow().setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        );
+    }
+
+    updateSheetImeOffset();
+}
+
+private void updateSheetImeOffset() {
+    if (mSheet == null || mBehavior == null) return;
+
+    boolean halfExpanded =
+        mBehavior.getState() == BottomSheetBehavior.STATE_HALF_EXPANDED;
+
+    float offset = (halfExpanded && mImeVisible)
+        ? -mImeBottom
+        : 0f;
+
+    mSheet.setTranslationY(offset);
+}
 
     /** True kalau panel terminal sedang dibuka (atau sedang dibuka) oleh pengguna. */
     public boolean isTerminalOpen() {
@@ -161,6 +220,13 @@ public class EditorLayoutController {
     }
 
     private void onSheetStateChanged(int state) {
+
+        if (state == BottomSheetBehavior.STATE_HALF_EXPANDED
+        || state == BottomSheetBehavior.STATE_EXPANDED
+        || state == BottomSheetBehavior.STATE_HIDDEN) {
+
+            applySoftInputModeForCurrentState();
+        }
         // Pada setengah layar, bagian bawah panel berada di luar layar.
         // Padding bawah menjaga isi terminal tetap muncul seluruhnya.
         int bottom = (state == BottomSheetBehavior.STATE_HALF_EXPANDED)
