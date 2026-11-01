@@ -6,6 +6,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 
+
+import android.graphics.Rect;
+import android.view.WindowInsets;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -35,6 +39,13 @@ public class EditorLayoutController {
     private int mImeBottom = 0;
     private boolean mImeVisible = false;
 
+    private View mDecorView;
+
+    private final Rect mVisibleFrame = new Rect();
+    private final int[] mDecorLocation = new int[2];
+
+    private int mImeHeight = 0;
+
     public EditorLayoutController(@NonNull TermuxActivity activity) {
         mActivity = activity;
     }
@@ -45,6 +56,11 @@ public class EditorLayoutController {
         if (mSheet == null) return;
 
         mBehavior = BottomSheetBehavior.from(mSheet);
+
+        mDecorView = mActivity.getWindow().getDecorView();
+
+        mDecorView.getViewTreeObserver()
+        .addOnGlobalLayoutListener(this::updateImeOffset);
 
         View coordinator = mActivity.findViewById(R.id.yummy_coordinator);
 
@@ -126,6 +142,68 @@ public class EditorLayoutController {
             header.setOnTouchListener((v, event) -> detector.onTouchEvent(event));
         }
     }
+
+
+    public void applySoftInputModeForCurrentState() {
+    if (mBehavior == null) return;
+
+    if (mBehavior.getState()
+        == BottomSheetBehavior.STATE_HALF_EXPANDED) {
+
+        mActivity.getWindow().setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+        );
+
+    } else {
+
+        mActivity.getWindow().setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        );
+
+        mSheet.setTranslationY(0f);
+    }
+
+    mSheet.post(this::updateImeOffset);
+}
+
+    private void updateImeOffset() {
+    if (mSheet == null || mBehavior == null || mDecorView == null) {
+        return;
+    }
+
+    mDecorView.getWindowVisibleDisplayFrame(mVisibleFrame);
+    mDecorView.getLocationOnScreen(mDecorLocation);
+
+    int windowBottom = mDecorLocation[1] + mDecorView.getHeight();
+
+    int navigationBarHeight = 0;
+
+    WindowInsets insets = mDecorView.getRootWindowInsets();
+
+    if (insets != null) {
+        navigationBarHeight = insets.getStableInsetBottom();
+    }
+
+    int keyboardHeight = windowBottom
+        - mVisibleFrame.bottom
+        - navigationBarHeight;
+
+    int threshold = (int) (100 * mActivity.getResources()
+        .getDisplayMetrics().density);
+
+    if (keyboardHeight > threshold) {
+        mImeHeight = keyboardHeight;
+    } else {
+        mImeHeight = 0;
+    }
+
+    boolean isHalfExpanded =
+        mBehavior.getState() == BottomSheetBehavior.STATE_HALF_EXPANDED;
+
+    mSheet.setTranslationY(
+        isHalfExpanded ? -mImeHeight : 0f
+    );
+}
 
 
     public void applySoftInputModeForCurrentState() {
