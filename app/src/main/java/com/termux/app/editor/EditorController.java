@@ -76,6 +76,14 @@ public class EditorController {
         mEditor.setLineNumberEnabled(true);
         mEditor.setWordwrap(false);
 
+        // Backspace pada indentasi: hapus satu spasi per ketukan, bukan seluruh baris.
+        mEditor.getProps().deleteEmptyLineFast = false;
+        mEditor.getProps().deleteMultiSpaces = 1;
+
+        // Gutter nomor baris yang lebih lega. Memakai refleksi supaya build tidak gagal kalau
+        // nama method berbeda di versi pustaka; yang tidak ditemukan dicatat di logcat (YummyEditor).
+        applyGutterSpacing();
+
         int bg = ContextCompat.getColor(mActivity, R.color.yummy_bg);
         int text = ContextCompat.getColor(mActivity, R.color.yummy_text);
         int dim = ContextCompat.getColor(mActivity, R.color.yummy_text_dim);
@@ -88,6 +96,30 @@ public class EditorController {
         scheme.setColor(EditorColorScheme.LINE_NUMBER, dim);
         scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
         scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
+    }
+
+    /** Ukuran gutter dalam dp; ubah angkanya kalau masih terasa sempit. */
+    private static final float GUTTER_MARGIN_LEFT_DP = 14f;
+    private static final float GUTTER_DIVIDER_LEFT_DP = 8f;
+    private static final float GUTTER_DIVIDER_RIGHT_DP = 14f;
+
+    private float dp(float value) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_DIP,
+            value, mActivity.getResources().getDisplayMetrics());
+    }
+
+    private void applyGutterSpacing() {
+        callIfPresent("setLineNumberMarginLeft", new Class<?>[]{float.class}, dp(GUTTER_MARGIN_LEFT_DP));
+        callIfPresent("setDividerMargin", new Class<?>[]{float.class, float.class},
+            dp(GUTTER_DIVIDER_LEFT_DP), dp(GUTTER_DIVIDER_RIGHT_DP));
+    }
+
+    private void callIfPresent(String name, Class<?>[] types, Object... args) {
+        try {
+            mEditor.getClass().getMethod(name, types).invoke(mEditor, args);
+        } catch (Exception e) {
+            android.util.Log.w("YummyEditor", "Method tidak tersedia di pustaka: " + name);
+        }
     }
 
     private void updateStatus() {
