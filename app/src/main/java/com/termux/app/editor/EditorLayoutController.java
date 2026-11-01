@@ -36,8 +36,8 @@ public class EditorLayoutController {
     private BottomSheetBehavior<View> mBehavior;
     private boolean mTerminalOpen = false;
     private boolean mShowKeyboardOnSettle = false;
-    private int mImeBottom = 0;
-    private boolean mImeVisible = false;
+
+
 
     private View mDecorView;
 
@@ -62,25 +62,7 @@ public class EditorLayoutController {
         mDecorView.getViewTreeObserver()
         .addOnGlobalLayoutListener(this::updateImeOffset);
 
-        View coordinator = mActivity.findViewById(R.id.yummy_coordinator);
 
-        if (coordinator != null) {
-                ViewCompat.setOnApplyWindowInsetsListener(coordinator, (view, insets) -> {
-
-                    mImeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
-
-        
-                    mImeBottom = insets
-                    .getInsets(WindowInsetsCompat.Type.ime())
-                    .bottom;
-
-                    updateSheetImeOffset();
-
-                    return insets;
-                });
-
-                ViewCompat.requestApplyInsets(coordinator);
-        }
 
         mBehavior.setDraggable(false);
         mBehavior.setHideable(true);
@@ -166,7 +148,7 @@ public class EditorLayoutController {
     mSheet.post(this::updateImeOffset);
 }
 
-    private void updateImeOffset() {
+private void updateImeOffset() {
     if (mSheet == null || mBehavior == null || mDecorView == null) {
         return;
     }
@@ -176,29 +158,19 @@ public class EditorLayoutController {
 
     int windowBottom = mDecorLocation[1] + mDecorView.getHeight();
 
-    int navigationBarHeight = 0;
-
-    WindowInsets insets = mDecorView.getRootWindowInsets();
-
-    if (insets != null) {
-        navigationBarHeight = insets.getStableInsetBottom();
-    }
-
-    int keyboardHeight = windowBottom
-        - mVisibleFrame.bottom
-        - navigationBarHeight;
+    int keyboardHeight = windowBottom - mVisibleFrame.bottom;
 
     int threshold = (int) (100 * mActivity.getResources()
         .getDisplayMetrics().density);
 
-    if (keyboardHeight > threshold) {
-        mImeHeight = keyboardHeight;
-    } else {
-        mImeHeight = 0;
+    if (keyboardHeight < threshold) {
+        keyboardHeight = 0;
     }
 
     boolean isHalfExpanded =
         mBehavior.getState() == BottomSheetBehavior.STATE_HALF_EXPANDED;
+
+    mImeHeight = keyboardHeight;
 
     mSheet.setTranslationY(
         isHalfExpanded ? -mImeHeight : 0f
@@ -206,18 +178,22 @@ public class EditorLayoutController {
 }
 
 
-private void updateSheetImeOffset() {
-    if (mSheet == null || mBehavior == null) return;
 
-    boolean halfExpanded =
-        mBehavior.getState() == BottomSheetBehavior.STATE_HALF_EXPANDED;
 
-    float offset = (halfExpanded && mImeVisible)
-        ? -mImeBottom
-        : 0f;
 
-    mSheet.setTranslationY(offset);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     /** True kalau panel terminal sedang dibuka (atau sedang dibuka) oleh pengguna. */
     public boolean isTerminalOpen() {
