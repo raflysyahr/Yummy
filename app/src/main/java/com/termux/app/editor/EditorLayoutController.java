@@ -206,24 +206,6 @@ public class EditorLayoutController {
 }
 
 
-    public void applySoftInputModeForCurrentState() {
-    if (mBehavior == null) return;
-
-    int state = mBehavior.getState();
-
-    if (state == BottomSheetBehavior.STATE_HALF_EXPANDED) {
-        mActivity.getWindow().setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
-        );
-    } else {
-        mActivity.getWindow().setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-        );
-    }
-
-    updateSheetImeOffset();
-}
-
 private void updateSheetImeOffset() {
     if (mSheet == null || mBehavior == null) return;
 
