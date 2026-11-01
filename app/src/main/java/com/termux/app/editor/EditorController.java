@@ -19,6 +19,14 @@ import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
+import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
+import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
+import io.github.rosemoe.sora.langs.textmate.registry.FileProviderRegistry;
+import io.github.rosemoe.sora.langs.textmate.registry.GrammarRegistry;
+import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry;
+import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel;
+import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver;
+import org.eclipse.tm4e.core.registry.IThemeSource;
 
 /**
  * Bagian editor kode pada layar Yummy. Sengaja terpisah dari panel terminal
@@ -28,6 +36,8 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
  * Buka/simpan file dan tab menyusul di tahap 2b.
  */
 public class EditorController {
+    private static boolean sTextMateInitialized;
+
 
     private static final String SAMPLE =
         "import urwid\n\nclass Application:\n    def __init__(self):\n"
@@ -53,6 +63,7 @@ public class EditorController {
         mStatusIndent = mActivity.findViewById(R.id.yummy_status_indent);
 
         configureEditor();
+        configurePythonLanguage();
         bindKeys();
 
         mEditor.subscribeEvent(SelectionChangeEvent.class, (event, unsubscribe) -> updateStatus());
@@ -74,6 +85,11 @@ public class EditorController {
         mEditor.setTextSize(15f);
         mEditor.setTabWidth(4);
         mEditor.setLineNumberEnabled(true);
+        // Gutter nomor baris tetap di tempat saat scroll horizontal.
+        mEditor.setPinLineNumber(true);
+        // Fitur indentasi dan pasangan simbol dikelola oleh Sora/TextMate.
+        mEditor.getProps().autoIndent = true;
+        mEditor.getProps().symbolPairAutoCompletion = true;
         mEditor.setWordwrap(false);
 
         // Backspace pada indentasi: hapus satu spasi per ketukan, bukan seluruh baris.
@@ -92,9 +108,9 @@ public class EditorController {
         EditorColorScheme scheme = mEditor.getColorScheme();
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, bg);
         scheme.setColor(EditorColorScheme.TEXT_NORMAL, text);
-        scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND, bg);
+        scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND, Color.rgb(22, 26, 32));
         scheme.setColor(EditorColorScheme.LINE_NUMBER, dim);
-        scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
+        scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.rgb(48, 54, 64));
         scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
     }
 
@@ -119,6 +135,80 @@ public class EditorController {
             mEditor.getClass().getMethod(name, types).invoke(mEditor, args);
         } catch (Exception e) {
             android.util.Log.w("YummyEditor", "Method tidak tersedia di pustaka: " + name);
+        }
+    }
+
+
+    /**
+     * Memuat TextMate Python, tema Yummy, auto-indent dan auto-closing pairs.
+     * Registry TextMate bersifat global, sehingga grammar/theme cukup dimuat sekali.
+     */
+    private void configurePythonLanguage() {
+        try {
+            synchronized (EditorController.class) {
+                if (!sTextMateInitialized) {
+                    FileProviderRegistry.getInstance().addFileProvider(
+                        new AssetsFileResolver(
+                            mActivity.getApplicationContext().getAssets()
+                        )
+                    );
+
+                    String themePath = "textmate/yummy-dark.json";
+                    java.io.InputStream themeStream =
+                        FileProviderRegistry.getInstance().tryGetInputStream(themePath);
+
+                    if (themeStream == null) {
+                        throw new IllegalStateException(
+                            "Theme TextMate tidak ditemukan: " + themePath
+                        );
+                    }
+
+                    IThemeSource themeSource =
+                        IThemeSource.fromInputStream(themeStream, themePath, null);
+
+                    ThemeModel themeModel = new ThemeModel(themeSource, "yummy-dark");
+                    themeModel.setDark(true);
+                    ThemeRegistry.getInstance().loadTheme(themeModel);
+
+                    GrammarRegistry.getInstance().loadGrammars(
+                        "textmate/languages.json"
+                    );
+
+                    sTextMateInitialized = true;
+                }
+            }
+
+            // Pasang theme TextMate terlebih dahulu agar hasil token syntax memiliki warna.
+            mEditor.setColorScheme(
+                TextMateColorScheme.create(ThemeRegistry.getInstance())
+            );
+
+            // Pertahankan gutter yang kontras setelah TextMate memasang color scheme.
+            EditorColorScheme scheme = mEditor.getColorScheme();
+            scheme.setColor(
+                EditorColorScheme.LINE_NUMBER_BACKGROUND,
+                Color.rgb(22, 26, 32)
+            );
+            scheme.setColor(
+                EditorColorScheme.LINE_DIVIDER,
+                Color.rgb(48, 54, 64)
+            );
+
+            TextMateLanguage language =
+                TextMateLanguage.create("source.python", true);
+            language.setTabSize(4);
+            language.useTab(false);
+
+            mEditor.setEditorLanguage(language);
+            mEditor.getProps().autoIndent = true;
+            mEditor.getProps().symbolPairAutoCompletion = true;
+
+        } catch (Exception e) {
+            android.util.Log.e(
+                "YummyEditor",
+                "Gagal mengaktifkan TextMate Python; editor tetap dapat digunakan.",
+                e
+            );
         }
     }
 
