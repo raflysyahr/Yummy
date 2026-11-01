@@ -133,8 +133,10 @@ public class EditorLayoutController {
     public void applySoftInputModeForCurrentState() {
        if (mBehavior == null) return;
 
+            
             mActivity.getWindow().setSoftInputMode(
-$           WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+               WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+               );
         
             if (mSheet != null) {
                 mSheet.setTranslationY(0f);
