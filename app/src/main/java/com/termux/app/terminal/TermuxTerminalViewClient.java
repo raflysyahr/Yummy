@@ -629,12 +629,30 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     }
                     Logger.logVerbose(LOG_TAG, "Showing soft keyboard on focus change");
                 } else {
+
+                    // Jangan sembunyikan keyboard jika panel Yummy masih terbuka.
+                    com.termux.app.editor.EditorLayoutController controller =
+                    mActivity.getEditorLayoutController();
+
+                    if (controller != null && controller.isTerminalOpen()) {
+
+        // Pertahankan focus terminal setelah perubahan layout.
+                        view.postDelayed(() -> {
+
+                            if (controller.isTerminalOpen() && !view.hasFocus()) {                  view.requestFocus();
+                            }
+
+                        }, 150);
+
+                        return;
+                    }
+
                     Logger.logVerbose(LOG_TAG, "Hiding soft keyboard on focus change");
                 }
 
                 KeyboardUtils.setSoftKeyboardVisibility(getShowSoftKeyboardRunnable(), mActivity, mActivity.getTerminalView(), 
-                        false
-                //hasFocus || textInputViewHasFocus
+                        
+                hasFocus || textInputViewHasFocus
                         );
             }
         });
