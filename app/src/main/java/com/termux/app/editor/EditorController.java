@@ -108,8 +108,8 @@ public class EditorController {
         EditorColorScheme scheme = mEditor.getColorScheme();
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, bg);
         scheme.setColor(EditorColorScheme.TEXT_NORMAL, text);
-//        scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND,
-//            scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
+        scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND,
+            scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
         scheme.setColor(EditorColorScheme.LINE_NUMBER, dim);
         scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
 //        scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
@@ -117,8 +117,8 @@ public class EditorController {
 
     /** Ukuran gutter dalam dp; ubah angkanya kalau masih terasa sempit. */
     private static final float GUTTER_MARGIN_LEFT_DP = 6f;
-    private static final float GUTTER_DIVIDER_LEFT_DP = 2f;
-    private static final float GUTTER_DIVIDER_RIGHT_DP = 4f;
+    private static final float GUTTER_DIVIDER_LEFT_DP = 5f;
+    private static final float GUTTER_DIVIDER_RIGHT_DP = 5f;
 
     private float dp(float value) {
         return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_DIP,
