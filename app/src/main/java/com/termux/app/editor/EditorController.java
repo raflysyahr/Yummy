@@ -108,19 +108,22 @@ public class EditorController {
         mEditor.setColorScheme(TextMateColorScheme.create(ThemeRegistry.getInstance()));
 
         EditorColorScheme scheme = mEditor.getColorScheme();
+        
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, bg);
         scheme.setColor(EditorColorScheme.TEXT_NORMAL, text);
-        scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND,
-            scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
-        scheme.setColor(EditorColorScheme.LINE_NUMBER, dim);
+
+        scheme.setColor(
+            EditorColorScheme.LINE_NUMBER_BACKGROUND,
+            Color.TRANSPARENT
+//            scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
+        );
+
+        scheme.setColor(EditorColorScheme.LINE_NUMBER, Color.TRANSPARENT);
         scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
         scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
 
         mEditor.setHighlightCurrentLine(true);
-        scheme.setColor(
-            EditorColorScheme.LINE_NUMBER_CURRENT,
-            Color.WHITE
-        );
+        
     }
 
     /** Ukuran gutter dalam dp; ubah angkanya kalau masih terasa sempit. */
