@@ -130,7 +130,7 @@ public class EditorController {
                 scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
         );
 
-        new EditorColorScheme().applyDefault();
+        scheme.applyDefault();
 
         mEditor.setHighlightCurrentLine(true);
         
