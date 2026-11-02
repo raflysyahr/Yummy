@@ -119,7 +119,10 @@ public class EditorController {
 
         scheme.setColor(EditorColorScheme.LINE_NUMBER, Color.TRANSPARENT);
         scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
-        scheme.setColor(EditorColorScheme.CURRENT_LINE, Color.parseColor('#99fa93'));
+        scheme.setColor(
+                EditorColorScheme.CURRENT_LINE, 
+                Color.parseColor(""#99fa93")
+        );
 
         mEditor.setHighlightCurrentLine(true);
         
