@@ -125,7 +125,7 @@ public class EditorController {
                 EditorColorScheme.CURRENT_LINE, 
                 Color.parseColor("#99fa93")
         );
-        scheme.setColor(EditorColorScheme.LINE_NUMBER_CURRENT,Color.TRANSPARENT);
+        scheme.setColor(EditorColorScheme.LINE_NUMBER_CURRENT,scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND());
 
         mEditor.setHighlightCurrentLine(true);
         
