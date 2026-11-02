@@ -88,7 +88,7 @@ public class EditorController {
         // Gutter nomor baris tetap di tempat saat scroll horizontal.
         mEditor.setPinLineNumber(true);
         // Fitur indentasi dan pasangan simbol dikelola oleh Sora/TextMate.
-        mEditor.getProps().autoIndent = true;
+        mEditor.getProps().autoIndent = false;
         mEditor.getProps().symbolPairAutoCompletion = true;
         mEditor.setWordwrap(false);
 
@@ -112,7 +112,7 @@ public class EditorController {
             scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
         scheme.setColor(EditorColorScheme.LINE_NUMBER, dim);
         scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
-//        scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
+        scheme.setColor(EditorColorScheme.CURRENT_LINE, Color.TRANSPARENT);
     }
 
     /** Ukuran gutter dalam dp; ubah angkanya kalau masih terasa sempit. */
