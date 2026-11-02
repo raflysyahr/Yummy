@@ -203,6 +203,8 @@ public class EditorController {
             );
             scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
 
+            mEditor.setHighlightCurrentLine(true);
+
             TextMateLanguage language =
                 TextMateLanguage.create("source.python", true);
             language.setTabSize(4);
