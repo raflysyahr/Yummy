@@ -89,11 +89,17 @@
     "decreaseIndentPattern": "^\\s*(?:elif|else|except|finally|case)\\b"
   },
   "onEnterRules": [
-    {
-      "beforeText": "^\\s*(?:(?:async\\s+)?def|class|if|elif|else|for|while|try|except|finally|with|match|case)\\b.*:\\s*(?:#.*)?$",
-      "action": {
-        "indent": "indent"
-      }
+  {
+    "beforeText": "^(?!\\s*(?:(?:async\\s+)?def|class|if|elif|else|for|while|try|except|finally|with|match|case)\\b.*:\\s*(?:#.*)?$).+",
+    "action": {
+      "indent": "none"
     }
-  ]
+  },
+  {
+    "beforeText": "^\\s*(?:(?:async\\s+)?def|class|if|elif|else|for|while|try|except|finally|with|match|case)\\b.*:\\s*(?:#.*)?$",
+    "action": {
+      "indent": "indent"
+    }
+  }
+]
 }

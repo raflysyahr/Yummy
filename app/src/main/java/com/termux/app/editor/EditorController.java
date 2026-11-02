@@ -103,7 +103,9 @@ public class EditorController {
         int bg = ContextCompat.getColor(mActivity, R.color.yummy_bg);
         int text = ContextCompat.getColor(mActivity, R.color.yummy_text);
         int dim = ContextCompat.getColor(mActivity, R.color.yummy_text_dim);
-    //    int currentLine = ContextCompat.getColor(mActivity, R.color.yummy_line_current);
+        int currentLine = ContextCompat.getColor(mActivity, R.color.yummy_line_current);
+
+        mEditor.setColorScheme(TextMateColorScheme.create(ThemeRegistry.getInstance()));
 
         EditorColorScheme scheme = mEditor.getColorScheme();
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, bg);
@@ -112,7 +114,13 @@ public class EditorController {
             scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
         scheme.setColor(EditorColorScheme.LINE_NUMBER, dim);
         scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
-        scheme.setColor(EditorColorScheme.CURRENT_LINE, Color.TRANSPARENT);
+        scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
+
+        mEditor.setHighlightCurrentLine(true);
+        scheme.setColor(
+            EditorColorScheme.LINE_NUMBER_CURRENT,
+            Color.WHITE
+        );
     }
 
     /** Ukuran gutter dalam dp; ubah angkanya kalau masih terasa sempit. */
