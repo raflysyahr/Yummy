@@ -108,9 +108,10 @@ public class EditorController {
         EditorColorScheme scheme = mEditor.getColorScheme();
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, bg);
         scheme.setColor(EditorColorScheme.TEXT_NORMAL, text);
-        scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND, Color.rgb(22, 26, 32));
+        scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND,
+            scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
         scheme.setColor(EditorColorScheme.LINE_NUMBER, dim);
-        scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.rgb(48, 54, 64));
+        scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
         scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
     }
 
@@ -183,16 +184,11 @@ public class EditorController {
                 TextMateColorScheme.create(ThemeRegistry.getInstance())
             );
 
-            // Pertahankan gutter yang kontras setelah TextMate memasang color scheme.
+            // Gutter mengikuti background editor dari theme aktif; garis pembatas dihilangkan.
             EditorColorScheme scheme = mEditor.getColorScheme();
-            scheme.setColor(
-                EditorColorScheme.LINE_NUMBER_BACKGROUND,
-                Color.rgb(22, 26, 32)
-            );
-            scheme.setColor(
-                EditorColorScheme.LINE_DIVIDER,
-                Color.rgb(48, 54, 64)
-            );
+            scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND,
+            scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
+            scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
 
             TextMateLanguage language =
                 TextMateLanguage.create("source.python", true);

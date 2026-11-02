@@ -118,10 +118,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:background="@drawable/yummy_bg_tab_active"
-                    android:gravity="center_vertical"
+                    android:gravity="center"
                     android:orientation="horizontal"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="18dp">
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp">
 
                     <ImageView
                         android:layout_width="20dp"
@@ -135,6 +135,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
                         android:fontFamily="serif"
+                        android:includeFontPadding="false"
                         android:text="main.py"
                         android:textColor="@color/yummy_text"
                         android:textSize="17sp"
@@ -145,10 +146,10 @@
                     android:id="@+id/yummy_tab_2"
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
-                    android:gravity="center_vertical"
+                    android:gravity="center"
                     android:orientation="horizontal"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="18dp">
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp">
 
                     <ImageView
                         android:layout_width="20dp"
@@ -162,6 +163,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
                         android:fontFamily="serif"
+                        android:includeFontPadding="false"
                         android:text="ligner.py"
                         android:textColor="@color/yummy_text_dim"
                         android:textSize="17sp"
@@ -195,7 +197,7 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <io.github.rosemoe.sora.widget.CodeEditor
+        <com.termux.app.editor.YummyCodeEditor
             android:id="@+id/yummy_code_editor"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
