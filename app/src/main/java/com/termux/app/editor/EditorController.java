@@ -114,13 +114,12 @@ public class EditorController {
 
         scheme.setColor(
             EditorColorScheme.LINE_NUMBER_BACKGROUND,
-            Color.TRANSPARENT
-//            scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
+            scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
         );
 
         scheme.setColor(EditorColorScheme.LINE_NUMBER, Color.TRANSPARENT);
         scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
-        scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
+//        scheme.setColor(EditorColorScheme.CURRENT_LINE, currentLine);
 
         mEditor.setHighlightCurrentLine(true);
         
@@ -198,8 +197,7 @@ public class EditorController {
             // Gutter mengikuti background editor dari theme aktif; garis pembatas dihilangkan.
             EditorColorScheme scheme = mEditor.getColorScheme();
             scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND,
-                    Color.TRANSPARENT
-                //scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
+                scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
             );
             scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
 
