@@ -5,6 +5,8 @@ on:
     branches:
       - changes/rename-package-name
       - feature/editor
+      - feature/storage-provider-system
+
   workflow_dispatch:
 
 permissions:
