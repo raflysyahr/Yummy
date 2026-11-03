@@ -203,7 +203,7 @@ public class EditorController {
 
             // Pasang theme TextMate terlebih dahulu agar hasil token syntax memiliki warna.
             mEditor.setColorScheme(
-                TextMateColorScheme.create(TextMateColorScheme.create(ThemeRegistry.getInstance()))
+                TextMateColorScheme.create(ThemeRegistry.getInstance())
             );
 
             // Gutter mengikuti background editor dari theme aktif; garis pembatas dihilangkan.
