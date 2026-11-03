@@ -191,6 +191,7 @@ public class EditorController {
                     ThemeModel themeModel = new ThemeModel(themeSource, "yummy-dark");
                     themeModel.setDark(true);
                     ThemeRegistry.getInstance().loadTheme(themeModel);
+//                    ThemeRegistry.getInstance().setTheme("");
 
                     GrammarRegistry.getInstance().loadGrammars(
                         "textmate/languages.json"
@@ -202,7 +203,7 @@ public class EditorController {
 
             // Pasang theme TextMate terlebih dahulu agar hasil token syntax memiliki warna.
             mEditor.setColorScheme(
-                TextMateColorScheme.create(ThemeRegistry.getInstance())
+                TextMateColorScheme.create(TextMateColorScheme.create(ThemeRegistry.getInstance()))
             );
 
             // Gutter mengikuti background editor dari theme aktif; garis pembatas dihilangkan.
