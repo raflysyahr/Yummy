@@ -138,29 +138,29 @@ public final class StorageRegistry {
     }
 
     private void registerBuiltInLocations() {
-        File home = TermuxConstants.TERMUX_HOME_DIR;
-        if (home == null) return;
-
         try {
-            File filesRoot = home.getParentFile();
-            if (filesRoot != null) {
-                LocalFileStorageProvider filesProvider = new LocalFileStorageProvider(
-                    "yummy.files",
-                    "Yummy App Files",
-                    "Private files used by Yummy and its Termux environment",
-                    filesRoot
-                );
-                providers.put(filesProvider.getId(), filesProvider);
-            }
-
-            LocalFileStorageProvider homeProvider = new LocalFileStorageProvider(
-                "yummy.home",
-                "Yummy Home",
-                "Yummy's Termux home directory",
-                home
+            // Keep Yummy's own workspace separate from Termux's $PREFIX. Exposing the
+            // parent of $HOME would also expose /usr, where deleting files can break Termux.
+            File yummyWorkspace = context.getDir("yummy-storage", Context.MODE_PRIVATE);
+            LocalFileStorageProvider filesProvider = new LocalFileStorageProvider(
+                "yummy.files",
+                "Yummy Internal",
+                "Private workspace managed by Yummy",
+                yummyWorkspace
             );
-            providers.put(homeProvider.getId(), homeProvider);
-        } catch (IOException e) {
+            providers.put(filesProvider.getId(), filesProvider);
+
+            File home = TermuxConstants.TERMUX_HOME_DIR;
+            if (home != null) {
+                LocalFileStorageProvider homeProvider = new LocalFileStorageProvider(
+                    "yummy.home",
+                    "Yummy Home",
+                    "Yummy's Termux home directory",
+                    home
+                );
+                providers.put(homeProvider.getId(), homeProvider);
+            }
+        } catch (IOException | RuntimeException e) {
             android.util.Log.e("YummyStorage", "Could not register Yummy private storage", e);
         }
     }
