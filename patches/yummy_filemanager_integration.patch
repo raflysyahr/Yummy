@@ -1,0 +1,124 @@
+diff --git a/app/src/main/java/com/termux/app/TermuxActivity.java b/app/src/main/java/com/termux/app/TermuxActivity.java
+--- a/app/src/main/java/com/termux/app/TermuxActivity.java
++++ b/app/src/main/java/com/termux/app/TermuxActivity.java
+@@ -38,5 +38,7 @@
+ import com.termux.app.activities.HelpActivity;
+ import com.termux.app.activities.SettingsActivity;
++import com.termux.app.editor.EditorController;
++import com.termux.app.filemanager.ui.FileManagerController;
+ import com.termux.shared.termux.crash.TermuxCrashUtils;
+ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+ import com.termux.app.terminal.TermuxSessionsListViewController;
+@@ -200,15 +202,20 @@
+ 
+         setContentView(R.layout.activity_termux);
+         mEditorLayoutController = new com.termux.app.editor.EditorLayoutController(this);
+         mEditorLayoutController.setup();
+-        new com.termux.app.editor.EditorController(this).setup();
+         // Load termux shared preferences
+         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
+         mPreferences = TermuxAppSharedPreferences.build(this, true);
+         if (mPreferences == null) {
+             // An AlertDialog should have shown to kill the app, so we don't continue running activity code
+             mIsInvalidState = true;
+             return;
+         }
++
++        // Keep one editor instance and share it with File Manager.
++        mEditorController = new EditorController(this);
++        mEditorController.setup();
++        mFileManagerController = new FileManagerController(this, mEditorController);
++        mFileManagerController.setup();
+ 
+         setMargins();
+@@ -325,6 +332,10 @@
+     public void onDestroy() {
++        if (mFileManagerController != null) {
++            mFileManagerController.destroy();
++            mFileManagerController = null;
++        }
+         super.onDestroy();
+ 
+         Logger.logDebug(LOG_TAG, "onDestroy");
+ 
+         if (mIsInvalidState) return;
+@@ -551,4 +562,6 @@
+     }
+     private com.termux.app.editor.EditorLayoutController mEditorLayoutController;
++    private EditorController mEditorController;
++    private FileManagerController mFileManagerController;
+     private boolean mBootstrapSetupRunning = false;
+     private boolean mPendingFailsafeSession = false;
+@@ -746,4 +759,7 @@
+         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
+             requestStoragePermission(true);
+         }
++        if (mFileManagerController != null) {
++            mFileManagerController.onActivityResult(requestCode, resultCode, data);
++        }
+     }
+
+diff --git a/app/src/main/res/layout/yummy_editor_screen.xml b/app/src/main/res/layout/yummy_editor_screen.xml
+--- a/app/src/main/res/layout/yummy_editor_screen.xml
++++ b/app/src/main/res/layout/yummy_editor_screen.xml
+@@ -20,8 +20,8 @@
+             android:layout_width="48dp"
+             android:layout_height="48dp"
+             android:background="?attr/selectableItemBackgroundBorderless"
+-            android:contentDescription="Menu"
++            android:contentDescription="File Manager"
+             android:padding="10dp"
+             android:scaleType="centerInside"
+             android:src="@drawable/ic_yummy_menu"
+             tools:ignore="HardcodedText" />
+@@ -67,7 +67,18 @@
+             android:src="@drawable/ic_yummy_search"
+             android:tint="@color/yummy_text"
+             tools:ignore="HardcodedText" />
++        <ImageButton
++            android:id="@+id/yummy_btn_save"
++            android:layout_width="44dp"
++            android:layout_height="48dp"
++            android:background="?attr/selectableItemBackgroundBorderless"
++            android:contentDescription="Save"
++            android:padding="11dp"
++            android:scaleType="centerInside"
++            android:src="@drawable/ic_yummy_save"
++            android:tint="@color/yummy_accent_green"
++            tools:ignore="HardcodedText" />
+         <ImageButton
+             android:id="@+id/yummy_btn_run"
+             android:layout_width="48dp"
+             android:layout_height="48dp"
+
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -153,6 +153,15 @@
+             android:exported="true"
+             android:grantUriPermissions="true"
+             android:permission="${TERMUX_PACKAGE_NAME}.permission.RUN_COMMAND" />
++        <provider
++            android:name="androidx.core.content.FileProvider"
++            android:authorities="${applicationId}.fileprovider"
++            android:exported="false"
++            android:grantUriPermissions="true">
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/yummy_file_provider_paths" />
++        </provider>
+ 
+ 
+         <receiver
+
+diff --git a/app/src/main/res/values/yummy_filemanager_ids.xml b/app/src/main/res/values/yummy_filemanager_ids.xml
+deleted file mode 100644
+--- a/app/src/main/res/values/yummy_filemanager_ids.xml
++++ /dev/null
+@@ -1,6 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<resources>
+-    <!-- Resource ID referenced by FileManagerController. The current editor layout
+-         does not yet declare the corresponding visible Save button. -->
+-    <item name="yummy_btn_save" type="id" />
+-</resources>

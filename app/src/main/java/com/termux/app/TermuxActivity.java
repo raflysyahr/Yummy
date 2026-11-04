@@ -28,6 +28,8 @@ import android.widget.Toast;
 
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
+import com.termux.app.editor.EditorController;
+import com.termux.app.filemanager.ui.FileManagerController;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
@@ -216,7 +218,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setContentView(R.layout.activity_termux);
         mEditorLayoutController = new com.termux.app.editor.EditorLayoutController(this);
         mEditorLayoutController.setup();
-        new com.termux.app.editor.EditorController(this).setup();
+
+        // Keep one EditorController instance so File Manager can load and save documents.
+        mEditorController = new EditorController(this);
+        mEditorController.setup();
+
+        // Connect the toolbar buttons and SAF result handling to the File Manager.
+        mFileManagerController = new FileManagerController(this, mEditorController);
+        mFileManagerController.setup();
 
         // Load termux shared preferences
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
@@ -349,6 +358,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     public void onDestroy() {
+        if (mFileManagerController != null) {
+            mFileManagerController.destroy();
+            mFileManagerController = null;
+        }
+
         super.onDestroy();
 
         Logger.logDebug(LOG_TAG, "onDestroy");
@@ -618,6 +632,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private com.termux.app.editor.EditorLayoutController mEditorLayoutController;
+    private EditorController mEditorController;
+    private FileManagerController mFileManagerController;
     private boolean mBootstrapSetupRunning = false;
     private boolean mPendingFailsafeSession = false;
 
@@ -835,6 +851,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: "  + resultCode + ", data: "  + IntentUtils.getIntentString(data));
+        if (mFileManagerController != null) {
+            mFileManagerController.onActivityResult(requestCode, resultCode, data);
+        }
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
         }

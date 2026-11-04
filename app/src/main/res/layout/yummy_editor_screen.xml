@@ -23,7 +23,7 @@
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Menu"
+            android:contentDescription="File Manager"
             android:padding="10dp"
             android:scaleType="centerInside"
             android:src="@drawable/ic_yummy_menu"
@@ -85,6 +85,18 @@
             android:scaleType="centerInside"
             android:src="@drawable/ic_yummy_play"
             android:tint="@color/yummy_accent_green"
+            tools:ignore="HardcodedText" />
+
+        <ImageButton
+            android:id="@+id/yummy_btn_save"
+            android:layout_width="40dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Simpan"
+            android:padding="10dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_save"
+            android:tint="@color/yummy_text"
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
