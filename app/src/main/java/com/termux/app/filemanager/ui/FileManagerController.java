@@ -28,6 +28,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.PopupMenu;
@@ -635,8 +636,7 @@ public final class FileManagerController {
             titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
             header.addView(titleView, new LinearLayout.LayoutParams(0, -1, 1));
 
-            TextView searchButton = textButton("⌕", 30, 0xFFE8EAED);
-            searchButton.setContentDescription("Search files and folders");
+            ImageView searchButton = iconButton(R.drawable.ic_fm_search, "Search files and folders");
             header.addView(searchButton, new LinearLayout.LayoutParams(dp(44), -1));
             searchButton.setOnClickListener(v -> {
                 searchView.setVisibility(searchView.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
@@ -652,8 +652,7 @@ public final class FileManagerController {
                 }
             });
 
-            TextView moreButton = textButton("⋮", 26, 0xFFE8EAED);
-            moreButton.setContentDescription("More file manager actions");
+            ImageView moreButton = iconButton(R.drawable.ic_fm_more, "More file manager actions");
             header.addView(moreButton, new LinearLayout.LayoutParams(dp(38), -1));
             moreButton.setOnClickListener(v -> showMoreMenu());
 
@@ -762,15 +761,14 @@ public final class FileManagerController {
             for (StorageProvider provider : providers) {
                 String id = provider.getId();
                 String label = storageLabel(provider);
-                String glyph = "yummy.home".equals(id) ? "▰" : ("yummy.files".equals(id) ? "▣" : "▤");
-                addRailItem(glyph, label, currentProvider != null && id.equals(currentProvider.getId()),
-                    () -> openStorage(provider));
+                addRailItem(FileManagerIconResolver.storage(provider), label,
+                    currentProvider != null && id.equals(currentProvider.getId()), () -> openStorage(provider));
             }
 
             View spacer = new View(activity);
             storageRail.addView(spacer, new LinearLayout.LayoutParams(1, dp(4)));
-            addRailItem("☷", "Storage", showingLocations, this::refreshHome);
-            addRailItem("＋", "Add", false, this::requestAddStorage);
+            addRailItem(R.drawable.ic_fm_storage_all, "Storage", showingLocations, this::refreshHome);
+            addRailItem(R.drawable.ic_fm_storage_add, "Add", false, this::requestAddStorage);
         }
 
         private int storageOrder(StorageProvider provider) {
@@ -785,7 +783,7 @@ public final class FileManagerController {
             return provider.getLocation().getName();
         }
 
-        private void addRailItem(String glyph, String label, boolean selected, Runnable action) {
+        private void addRailItem(int iconRes, String label, boolean selected, Runnable action) {
             LinearLayout item = new LinearLayout(activity);
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER);
@@ -795,8 +793,9 @@ public final class FileManagerController {
             LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(dp(64), dp(72));
             itemLp.setMargins(0, dp(3), 0, dp(4));
             storageNavContainer.addView(item, itemLp);
-            TextView icon = text(glyph, 24, selected ? 0xFFFFFFFF : 0xFFBFC1C6, true);
-            icon.setGravity(Gravity.CENTER);
+            ImageView icon = new ImageView(activity);
+            icon.setImageResource(iconRes);
+            icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             item.addView(icon, new LinearLayout.LayoutParams(-1, dp(38)));
             TextView name = text(label, 10, selected ? 0xFFFFFFFF : 0xFFD0D1D4, false);
             name.setGravity(Gravity.CENTER);
@@ -839,6 +838,9 @@ public final class FileManagerController {
 
         private void addAction(String label, Runnable action) {
             TextView button = textButton(label, 12, 0xFFD9E0E7);
+            int iconRes = actionIcon(label);
+            if (iconRes != 0) button.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
+            button.setCompoundDrawablePadding(dp(5));
             button.setPadding(dp(9), 0, dp(9), 0);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -1);
             actionBar.addView(button, lp);
@@ -878,6 +880,9 @@ public final class FileManagerController {
 
         private void addFooterAction(String label, Runnable action) {
             TextView button = textButton(label, 12, 0xFFB9C6D3);
+            int iconRes = actionIcon(label);
+            if (iconRes != 0) button.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
+            button.setCompoundDrawablePadding(dp(4));
             button.setPadding(dp(6), 0, dp(6), 0);
             selectionBar.addView(button, new LinearLayout.LayoutParams(-2, -1));
             button.setOnClickListener(v -> action.run());
@@ -1758,30 +1763,30 @@ public final class FileManagerController {
                 }
 
                 LinearLayout container;
-                TextView disclosure;
-                TextView badge;
+                ImageView disclosure;
+                ImageView badge;
                 LinearLayout texts;
                 TextView name;
                 TextView subtitle;
-                TextView check;
+                ImageView check;
                 if (convertView instanceof LinearLayout && "file_tree_row".equals(convertView.getTag())) {
                     container = (LinearLayout) convertView;
-                    disclosure = (TextView) container.getChildAt(0);
-                    badge = (TextView) container.getChildAt(1);
+                    disclosure = (ImageView) container.getChildAt(0);
+                    badge = (ImageView) container.getChildAt(1);
                     texts = (LinearLayout) container.getChildAt(2);
                     name = (TextView) texts.getChildAt(0);
                     subtitle = (TextView) texts.getChildAt(1);
-                    check = (TextView) container.getChildAt(3);
+                    check = (ImageView) container.getChildAt(3);
                 } else {
                     container = new LinearLayout(activity);
                     container.setTag("file_tree_row");
                     container.setGravity(Gravity.CENTER_VERTICAL);
                     container.setPadding(0, dp(2), dp(8), dp(2));
-                    disclosure = text("", 20, 0xFFBFC2C7, false);
-                    disclosure.setGravity(Gravity.CENTER);
+                    disclosure = new ImageView(activity);
+                    disclosure.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     container.addView(disclosure, new LinearLayout.LayoutParams(dp(26), dp(46)));
-                    badge = text("", 19, 0xFFD5A13E, true);
-                    badge.setGravity(Gravity.CENTER);
+                    badge = new ImageView(activity);
+                    badge.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     container.addView(badge, new LinearLayout.LayoutParams(dp(32), dp(46)));
                     texts = new LinearLayout(activity);
                     texts.setOrientation(LinearLayout.VERTICAL);
@@ -1795,21 +1800,20 @@ public final class FileManagerController {
                     subtitle.setSingleLine(true);
                     subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     texts.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
-                    check = text("", 16, 0xFF3DDC84, true);
-                    check.setGravity(Gravity.CENTER);
+                    check = new ImageView(activity);
+                    check.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     container.addView(check, new LinearLayout.LayoutParams(dp(24), dp(46)));
                 }
 
                 if (row.kind == RowKind.LOCATION) {
-                    disclosure.setText("›");
+                    disclosure.setImageResource(R.drawable.ic_fm_chevron_right);
                     disclosure.setVisibility(View.VISIBLE);
-                    badge.setText("▣");
-                    badge.setTextColor(0xFF3DDC84);
+                    badge.setImageResource(FileManagerIconResolver.storage(row.provider));
                     name.setText(storageLabel(row.provider));
                     String description = row.provider.getLocation().getDescription();
                     subtitle.setText(description == null ?
                         (row.provider.isAvailable() ? "Available" : "Unavailable") : description);
-                    check.setText("");
+                    check.setImageDrawable(null);
                     container.setPadding(dp(8), dp(5), dp(8), dp(5));
                     container.setBackgroundColor(Color.TRANSPARENT);
                     return container;
@@ -1821,23 +1825,22 @@ public final class FileManagerController {
                 container.setPadding(indent, dp(1), dp(8), dp(1));
                 if (entry.isDirectory()) {
                     disclosure.setVisibility(View.VISIBLE);
-                    disclosure.setText(row.expanded ? "⌄" : "›");
-                    badge.setText("▰");
-                    badge.setTextColor(0xFFD6A342);
+                    disclosure.setImageResource(row.expanded ? R.drawable.ic_fm_chevron_down : R.drawable.ic_fm_chevron_right);
+                    badge.setImageDrawable(FileManagerIconResolver.file(activity, entry, row.expanded));
                     subtitle.setText(entry.isRoot() ? "Storage root" : "Folder");
                 } else {
                     disclosure.setVisibility(View.VISIBLE);
-                    disclosure.setText("");
+                    disclosure.setImageDrawable(null);
                     FileTypeResolver.Descriptor descriptor = FileTypeResolver.resolve(
                         entry.getName(), false, entry.getMimeType());
-                    badge.setText("▤");
-                    badge.setTextColor(descriptor.getColor());
+                    badge.setImageDrawable(FileManagerIconResolver.file(activity, entry, false));
                     subtitle.setText(descriptor.getLabel() + " · " + humanSize(entry.getSize()));
                 }
                 name.setText(entry.isRoot() ? "/" : entry.getName());
                 boolean selected = selection.contains(entry);
                 boolean current = currentDirectory != null && sameEntry(currentDirectory, entry);
-                check.setText(selected ? "✓" : (selectionMode ? "○" : ""));
+                check.setImageResource(selected ? R.drawable.ic_fm_check_circle :
+                    (selectionMode ? R.drawable.ic_fm_circle_outline : 0));
                 if (selected) container.setBackgroundColor(0xFF26372F);
                 else if (current) container.setBackgroundColor(0xFF34353B);
                 else container.setBackgroundColor(Color.TRANSPARENT);
@@ -1872,6 +1875,33 @@ public final class FileManagerController {
                 return new Row(RowKind.ENTRY, null, provider, entry, depth, expanded);
             }
         }
+    }
+
+    private ImageView iconButton(int drawableRes, String description) {
+        ImageView view = new ImageView(activity);
+        view.setImageResource(drawableRes);
+        view.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        view.setPadding(dp(9), dp(9), dp(9), dp(9));
+        view.setBackgroundResource(android.R.drawable.list_selector_background);
+        view.setContentDescription(description);
+        view.setClickable(true);
+        view.setFocusable(true);
+        return view;
+    }
+
+    private int actionIcon(String label) {
+        if (label.startsWith("＋ File")) return R.drawable.ic_fm_add_file;
+        if (label.startsWith("＋ Folder")) return R.drawable.ic_fm_add_folder;
+        if (label.equals("Sort")) return R.drawable.ic_fm_sort;
+        if (label.equals("Select")) return R.drawable.ic_fm_select;
+        if (label.equals("Done")) return R.drawable.ic_fm_done;
+        if (label.equals("More")) return R.drawable.ic_fm_more;
+        if (label.equals("Copy")) return R.drawable.ic_fm_copy;
+        if (label.equals("Move")) return R.drawable.ic_fm_move;
+        if (label.equals("Delete")) return R.drawable.ic_fm_delete;
+        if (label.equals("Cancel")) return R.drawable.ic_fm_cancel;
+        if (label.equals("Save here")) return R.drawable.ic_fm_save;
+        return 0;
     }
 
     private TextView text(String value, int sizeSp, int color, boolean bold) {
