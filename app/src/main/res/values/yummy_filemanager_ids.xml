@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Resource ID referenced by FileManagerController. The current editor layout
+         does not yet declare the corresponding visible Save button. -->
+    <item name="yummy_btn_save" type="id" />
+</resources>

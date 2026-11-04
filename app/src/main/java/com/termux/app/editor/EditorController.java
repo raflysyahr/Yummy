@@ -14,7 +14,6 @@ import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
-
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -31,13 +30,9 @@ import org.eclipse.tm4e.core.registry.IThemeSource;
 /**
  * Bagian editor kode pada layar Yummy. Sengaja terpisah dari panel terminal
  * (EditorLayoutController): kelas ini tidak menyentuh terminal sama sekali.
- *
- * Tahap 2a: tampilan editor, tema gelap, status bar Ln/Col, tombol Tab dan panah.
- * Buka/simpan file dan tab menyusul di tahap 2b.
  */
 public class EditorController {
     private static boolean sTextMateInitialized;
-
 
     private static final String SAMPLE =
         "import urwid\n\nclass Application:\n    def __init__(self):\n"
@@ -50,6 +45,12 @@ public class EditorController {
     private TextView mStatusPos;
     private TextView mStatusIndent;
 
+    // State dokumen dipakai FileManagerController untuk deteksi perubahan dan penyimpanan.
+    private String mDocumentName = "Main.py";
+    private long mDocumentRevision;
+    private long mSavedRevision;
+    private boolean mSuppressContentChanges;
+
     public EditorController(@NonNull Activity activity) {
         mActivity = activity;
     }
@@ -61,18 +62,78 @@ public class EditorController {
 
         mStatusPos = mActivity.findViewById(R.id.yummy_status_pos);
         mStatusIndent = mActivity.findViewById(R.id.yummy_status_indent);
-
         configureEditor();
         configurePythonLanguage();
         bindKeys();
 
         mEditor.subscribeEvent(SelectionChangeEvent.class, (event, unsubscribe) -> updateStatus());
-        mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> updateStatus());
+        mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
+            if (!mSuppressContentChanges) {
+                mDocumentRevision++;
+            }
+            updateStatus();
+        });
 
-        mEditor.setText(SAMPLE);
+        // Dokumen contoh awal dianggap bersih, sama seperti dokumen yang baru dimuat.
+        setDocumentContent(SAMPLE, "Main.py");
         updateStatus();
 
         mActivity.getApplication().registerActivityLifecycleCallbacks(mLifecycle);
+    }
+
+    /** Mengganti isi dokumen, misalnya ketika File Manager membuka file. */
+    public void setDocumentContent(String content, String name) {
+        if (name != null && !name.trim().isEmpty()) {
+            setDocumentName(name);
+        }
+        if (mEditor == null) return;
+
+        mSuppressContentChanges = true;
+        try {
+            mEditor.setText(content == null ? "" : content);
+        } finally {
+            mSuppressContentChanges = false;
+        }
+
+        // File yang baru dimuat atau dibuat menjadi baseline bersih.
+        mDocumentRevision++;
+        mSavedRevision = mDocumentRevision;
+        updateStatus();
+    }
+
+    /** Mengambil teks terkini dari Sora Editor. */
+    @NonNull
+    public String getDocumentText() {
+        return mEditor == null ? "" : mEditor.getText().toString();
+    }
+
+    /** Nama dokumen aktif, digunakan sebagai nama default pada Save As. */
+    @NonNull
+    public String getDocumentName() {
+        return mDocumentName;
+    }
+
+    /** Memperbarui nama dokumen dan judul editor. */
+    public void setDocumentName(String name) {
+        if (name == null || name.trim().isEmpty()) return;
+        mDocumentName = name;
+        TextView title = mActivity.findViewById(R.id.yummy_title);
+        if (title != null) title.setText(name);
+    }
+
+    /** Nomor revisi konten saat ini. */
+    public long getDocumentRevision() {
+        return mDocumentRevision;
+    }
+
+    /** Menandai revisi yang benar-benar sudah selesai ditulis ke storage. */
+    public void markDocumentSaved(long revision) {
+        mSavedRevision = revision;
+    }
+
+    /** Bernilai true bila editor berubah setelah revisi terakhir yang disimpan. */
+    public boolean isDocumentDirty() {
+        return mDocumentRevision != mSavedRevision;
     }
 
     private void configureEditor() {
@@ -91,7 +152,6 @@ public class EditorController {
         mEditor.getProps().autoIndent = false;
         mEditor.getProps().symbolPairAutoCompletion = true;
         mEditor.setWordwrap(false);
-
         // Backspace pada indentasi: hapus satu spasi per ketukan, bukan seluruh baris.
         mEditor.getProps().deleteEmptyLineFast = false;
         mEditor.getProps().deleteMultiSpaces = 1;
@@ -99,16 +159,12 @@ public class EditorController {
         // Gutter nomor baris yang lebih lega. Memakai refleksi supaya build tidak gagal kalau
         // nama method berbeda di versi pustaka; yang tidak ditemukan dicatat di logcat (YummyEditor).
         applyGutterSpacing();
-
         int bg = ContextCompat.getColor(mActivity, R.color.yummy_bg);
         int text = ContextCompat.getColor(mActivity, R.color.yummy_text);
-        int dim = ContextCompat.getColor(mActivity, R.color.yummy_text_dim);
-        int currentLine = ContextCompat.getColor(mActivity, R.color.yummy_line_current);
 
         mEditor.setColorScheme(TextMateColorScheme.create(ThemeRegistry.getInstance()));
-
         EditorColorScheme scheme = mEditor.getColorScheme();
-        
+
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, bg);
         scheme.setColor(EditorColorScheme.TEXT_NORMAL, text);
 
@@ -116,24 +172,17 @@ public class EditorController {
             EditorColorScheme.LINE_NUMBER_BACKGROUND,
             scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
         );
-
-        
-
         scheme.setColor(EditorColorScheme.LINE_NUMBER, Color.TRANSPARENT);
         scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
         scheme.setColor(
-                EditorColorScheme.CURRENT_LINE, 
+                EditorColorScheme.CURRENT_LINE,
                 scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
         );
         scheme.setColor(
                 EditorColorScheme.LINE_NUMBER_CURRENT,
                 scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
         );
-
-
-
         mEditor.setHighlightCurrentLine(true);
-        
     }
 
     /** Ukuran gutter dalam dp; ubah angkanya kalau masih terasa sempit. */
@@ -142,8 +191,11 @@ public class EditorController {
     private static final float GUTTER_DIVIDER_RIGHT_DP = 5f;
 
     private float dp(float value) {
-        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_DIP,
-            value, mActivity.getResources().getDisplayMetrics());
+        return android.util.TypedValue.applyDimension(
+            android.util.TypedValue.COMPLEX_UNIT_DIP,
+            value,
+            mActivity.getResources().getDisplayMetrics()
+        );
     }
 
     private void applyGutterSpacing() {
@@ -160,7 +212,6 @@ public class EditorController {
         }
     }
 
-
     /**
      * Memuat TextMate Python, tema Yummy, auto-indent dan auto-closing pairs.
      * Registry TextMate bersifat global, sehingga grammar/theme cukup dimuat sekali.
@@ -174,7 +225,6 @@ public class EditorController {
                             mActivity.getApplicationContext().getAssets()
                         )
                     );
-
                     String themePath = "textmate/yummy-dark.json";
                     java.io.InputStream themeStream =
                         FileProviderRegistry.getInstance().tryGetInputStream(themePath);
@@ -184,15 +234,13 @@ public class EditorController {
                             "Theme TextMate tidak ditemukan: " + themePath
                         );
                     }
-
                     IThemeSource themeSource =
                         IThemeSource.fromInputStream(themeStream, themePath, null);
 
                     ThemeModel themeModel = new ThemeModel(themeSource, "yummy-dark");
                     themeModel.setDark(true);
                     ThemeRegistry.getInstance().loadTheme(themeModel);
-//                    ThemeRegistry.getInstance().setTheme("");
-
+                    // ThemeRegistry.getInstance().setTheme("");
                     GrammarRegistry.getInstance().loadGrammars(
                         "textmate/languages.json"
                     );
@@ -205,7 +253,6 @@ public class EditorController {
             mEditor.setColorScheme(
                 TextMateColorScheme.create(ThemeRegistry.getInstance())
             );
-
             // Gutter mengikuti background editor dari theme aktif; garis pembatas dihilangkan.
             EditorColorScheme scheme = mEditor.getColorScheme();
             scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND,
@@ -214,7 +261,6 @@ public class EditorController {
             scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
 
             mEditor.setHighlightCurrentLine(true);
-
             TextMateLanguage language =
                 TextMateLanguage.create("source.python", true);
             language.setTabSize(4);
@@ -223,7 +269,6 @@ public class EditorController {
             mEditor.setEditorLanguage(language);
             mEditor.getProps().autoIndent = true;
             mEditor.getProps().symbolPairAutoCompletion = true;
-
         } catch (Exception e) {
             android.util.Log.e(
                 "YummyEditor",
