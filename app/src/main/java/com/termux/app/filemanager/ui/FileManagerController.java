@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -28,6 +29,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -636,7 +638,7 @@ public final class FileManagerController {
             titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
             header.addView(titleView, new LinearLayout.LayoutParams(0, -1, 1));
 
-            ImageView searchButton = iconButton(R.drawable.ic_fm_search, "Search files and folders");
+            ImageButton searchButton = iconButton(R.drawable.ic_fm_search, "Search files and folders");
             header.addView(searchButton, new LinearLayout.LayoutParams(dp(44), -1));
             searchButton.setOnClickListener(v -> {
                 searchView.setVisibility(searchView.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
@@ -652,7 +654,7 @@ public final class FileManagerController {
                 }
             });
 
-            ImageView moreButton = iconButton(R.drawable.ic_fm_more, "More file manager actions");
+            ImageButton moreButton = iconButton(R.drawable.ic_fm_more, "More file manager actions");
             header.addView(moreButton, new LinearLayout.LayoutParams(dp(38), -1));
             moreButton.setOnClickListener(v -> showMoreMenu());
 
@@ -783,7 +785,7 @@ public final class FileManagerController {
             return provider.getLocation().getName();
         }
 
-        private void addRailItem(int iconRes, String label, boolean selected, Runnable action) {
+        private void addRailItem(int iconResource, String label, boolean selected, Runnable action) {
             LinearLayout item = new LinearLayout(activity);
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER);
@@ -794,9 +796,12 @@ public final class FileManagerController {
             itemLp.setMargins(0, dp(3), 0, dp(4));
             storageNavContainer.addView(item, itemLp);
             ImageView icon = new ImageView(activity);
-            icon.setImageResource(iconRes);
+            icon.setImageResource(iconResource);
             icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-            item.addView(icon, new LinearLayout.LayoutParams(-1, dp(38)));
+            icon.setContentDescription(label);
+            LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(-1, dp(38));
+            icon.setPadding(0, dp(7), 0, dp(7)); // 24dp visible icon inside the 38dp rail slot.
+            item.addView(icon, iconLp);
             TextView name = text(label, 10, selected ? 0xFFFFFFFF : 0xFFD0D1D4, false);
             name.setGravity(Gravity.CENTER);
             name.setMaxLines(2);
@@ -822,24 +827,25 @@ public final class FileManagerController {
 
         private void rebuildActionBar() {
             actionBar.removeAllViews();
-            addAction("＋ File", () -> createNew(false));
-            addAction("＋ Folder", () -> createNew(true));
-            addAction("Sort", this::showSortMenu);
-            addAction(selectionMode ? "Done" : "Select", () -> {
+            addAction("New file", R.drawable.ic_fm_add_file, () -> createNew(false));
+            addAction("New folder", R.drawable.ic_fm_add_folder, () -> createNew(true));
+            addAction("Sort", R.drawable.ic_fm_sort, this::showSortMenu);
+            addAction(selectionMode ? "Done" : "Select",
+                selectionMode ? R.drawable.ic_fm_done : R.drawable.ic_fm_select, () -> {
                 selectionMode = !selectionMode;
                 if (!selectionMode) selection.clear();
                 rebuildActionBar();
                 rebuildSelectionBar();
                 adapter.notifyDataSetChanged();
             });
-            addAction("More", this::showMoreMenu);
-            if (saveAsMode) addAction("Save here", this::saveAsHere);
+            addAction("More", R.drawable.ic_fm_more, this::showMoreMenu);
+            if (saveAsMode) addAction("Save here", R.drawable.ic_fm_save, this::saveAsHere);
         }
 
-        private void addAction(String label, Runnable action) {
+        private void addAction(String label, int iconResource, Runnable action) {
             TextView button = textButton(label, 12, 0xFFD9E0E7);
-            int iconRes = actionIcon(label);
-            if (iconRes != 0) button.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
+            button.setCompoundDrawablesRelativeWithIntrinsicBounds(iconResource, 0, 0, 0);
+            setStartCompoundIconSize(button, 16);
             button.setCompoundDrawablePadding(dp(5));
             button.setPadding(dp(9), 0, dp(9), 0);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -1);
@@ -869,20 +875,20 @@ public final class FileManagerController {
             }
             selectionCountView = text(selection.size() + " selected", 12, 0xFFE8EAED, true);
             selectionBar.addView(selectionCountView, new LinearLayout.LayoutParams(0, -1, 1));
-            addFooterAction("Copy", () -> beginTransfer(PendingTransfer.COPY));
-            addFooterAction("Move", () -> beginTransfer(PendingTransfer.MOVE));
-            addFooterAction("Delete", this::deleteSelection);
-            addFooterAction("Cancel", () -> {
+            addFooterAction("Copy", R.drawable.ic_fm_copy, () -> beginTransfer(PendingTransfer.COPY));
+            addFooterAction("Move", R.drawable.ic_fm_move, () -> beginTransfer(PendingTransfer.MOVE));
+            addFooterAction("Delete", R.drawable.ic_fm_delete, this::deleteSelection);
+            addFooterAction("Cancel", R.drawable.ic_fm_cancel, () -> {
                 selection.clear(); selectionMode = false;
                 rebuildActionBar(); rebuildSelectionBar(); adapter.notifyDataSetChanged();
             });
         }
 
-        private void addFooterAction(String label, Runnable action) {
+        private void addFooterAction(String label, int iconResource, Runnable action) {
             TextView button = textButton(label, 12, 0xFFB9C6D3);
-            int iconRes = actionIcon(label);
-            if (iconRes != 0) button.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
-            button.setCompoundDrawablePadding(dp(4));
+            button.setCompoundDrawablesRelativeWithIntrinsicBounds(iconResource, 0, 0, 0);
+            setStartCompoundIconSize(button, 16);
+            button.setCompoundDrawablePadding(dp(5));
             button.setPadding(dp(6), 0, dp(6), 0);
             selectionBar.addView(button, new LinearLayout.LayoutParams(-2, -1));
             button.setOnClickListener(v -> action.run());
@@ -1784,10 +1790,16 @@ public final class FileManagerController {
                     container.setPadding(0, dp(2), dp(8), dp(2));
                     disclosure = new ImageView(activity);
                     disclosure.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    container.addView(disclosure, new LinearLayout.LayoutParams(dp(26), dp(46)));
+                    LinearLayout.LayoutParams disclosureLp =
+                        new LinearLayout.LayoutParams(dp(16), dp(46));
+                    disclosureLp.setMargins(0, 0, dp(4), 0);
+                    container.addView(disclosure, disclosureLp);
                     badge = new ImageView(activity);
                     badge.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    container.addView(badge, new LinearLayout.LayoutParams(dp(32), dp(46)));
+                    LinearLayout.LayoutParams badgeLp =
+                        new LinearLayout.LayoutParams(dp(16), dp(46));
+                    badgeLp.setMargins(0, 0, dp(6), 0);
+                    container.addView(badge, badgeLp);
                     texts = new LinearLayout(activity);
                     texts.setOrientation(LinearLayout.VERTICAL);
                     texts.setGravity(Gravity.CENTER_VERTICAL);
@@ -1802,18 +1814,20 @@ public final class FileManagerController {
                     texts.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
                     check = new ImageView(activity);
                     check.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    container.addView(check, new LinearLayout.LayoutParams(dp(24), dp(46)));
+                    container.addView(check, new LinearLayout.LayoutParams(dp(20), dp(46)));
                 }
 
                 if (row.kind == RowKind.LOCATION) {
                     disclosure.setImageResource(R.drawable.ic_fm_chevron_right);
                     disclosure.setVisibility(View.VISIBLE);
                     badge.setImageResource(FileManagerIconResolver.storage(row.provider));
+                    badge.setVisibility(View.VISIBLE);
                     name.setText(storageLabel(row.provider));
                     String description = row.provider.getLocation().getDescription();
                     subtitle.setText(description == null ?
                         (row.provider.isAvailable() ? "Available" : "Unavailable") : description);
                     check.setImageDrawable(null);
+                    check.setVisibility(View.INVISIBLE);
                     container.setPadding(dp(8), dp(5), dp(8), dp(5));
                     container.setBackgroundColor(Color.TRANSPARENT);
                     return container;
@@ -1825,22 +1839,33 @@ public final class FileManagerController {
                 container.setPadding(indent, dp(1), dp(8), dp(1));
                 if (entry.isDirectory()) {
                     disclosure.setVisibility(View.VISIBLE);
-                    disclosure.setImageResource(row.expanded ? R.drawable.ic_fm_chevron_down : R.drawable.ic_fm_chevron_right);
+                    disclosure.setImageResource(row.expanded
+                        ? R.drawable.ic_fm_chevron_down : R.drawable.ic_fm_chevron_right);
                     badge.setImageDrawable(FileManagerIconResolver.file(activity, entry, row.expanded));
+                    badge.setVisibility(View.VISIBLE);
                     subtitle.setText(entry.isRoot() ? "Storage root" : "Folder");
                 } else {
-                    disclosure.setVisibility(View.VISIBLE);
+                    disclosure.setVisibility(View.INVISIBLE);
                     disclosure.setImageDrawable(null);
                     FileTypeResolver.Descriptor descriptor = FileTypeResolver.resolve(
                         entry.getName(), false, entry.getMimeType());
                     badge.setImageDrawable(FileManagerIconResolver.file(activity, entry, false));
+                    badge.setVisibility(View.VISIBLE);
                     subtitle.setText(descriptor.getLabel() + " · " + humanSize(entry.getSize()));
                 }
                 name.setText(entry.isRoot() ? "/" : entry.getName());
                 boolean selected = selection.contains(entry);
                 boolean current = currentDirectory != null && sameEntry(currentDirectory, entry);
-                check.setImageResource(selected ? R.drawable.ic_fm_check_circle :
-                    (selectionMode ? R.drawable.ic_fm_circle_outline : 0));
+                if (selected) {
+                    check.setImageResource(R.drawable.ic_fm_check_circle);
+                    check.setVisibility(View.VISIBLE);
+                } else if (selectionMode) {
+                    check.setImageResource(R.drawable.ic_fm_circle_outline);
+                    check.setVisibility(View.VISIBLE);
+                } else {
+                    check.setImageDrawable(null);
+                    check.setVisibility(View.INVISIBLE);
+                }
                 if (selected) container.setBackgroundColor(0xFF26372F);
                 else if (current) container.setBackgroundColor(0xFF34353B);
                 else container.setBackgroundColor(Color.TRANSPARENT);
@@ -1877,33 +1902,6 @@ public final class FileManagerController {
         }
     }
 
-    private ImageView iconButton(int drawableRes, String description) {
-        ImageView view = new ImageView(activity);
-        view.setImageResource(drawableRes);
-        view.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        view.setPadding(dp(9), dp(9), dp(9), dp(9));
-        view.setBackgroundResource(android.R.drawable.list_selector_background);
-        view.setContentDescription(description);
-        view.setClickable(true);
-        view.setFocusable(true);
-        return view;
-    }
-
-    private int actionIcon(String label) {
-        if (label.startsWith("＋ File")) return R.drawable.ic_fm_add_file;
-        if (label.startsWith("＋ Folder")) return R.drawable.ic_fm_add_folder;
-        if (label.equals("Sort")) return R.drawable.ic_fm_sort;
-        if (label.equals("Select")) return R.drawable.ic_fm_select;
-        if (label.equals("Done")) return R.drawable.ic_fm_done;
-        if (label.equals("More")) return R.drawable.ic_fm_more;
-        if (label.equals("Copy")) return R.drawable.ic_fm_copy;
-        if (label.equals("Move")) return R.drawable.ic_fm_move;
-        if (label.equals("Delete")) return R.drawable.ic_fm_delete;
-        if (label.equals("Cancel")) return R.drawable.ic_fm_cancel;
-        if (label.equals("Save here")) return R.drawable.ic_fm_save;
-        return 0;
-    }
-
     private TextView text(String value, int sizeSp, int color, boolean bold) {
         TextView view = new TextView(activity);
         view.setText(value);
@@ -1918,6 +1916,24 @@ public final class FileManagerController {
         view.setGravity(Gravity.CENTER);
         view.setBackgroundResource(android.R.drawable.list_selector_background);
         return view;
+    }
+
+    private void setStartCompoundIconSize(TextView view, int sizeDp) {
+        Drawable[] drawables = view.getCompoundDrawablesRelative();
+        Drawable start = drawables[0];
+        if (start == null) return;
+        start.setBounds(0, 0, dp(sizeDp), dp(sizeDp));
+        view.setCompoundDrawablesRelative(start, drawables[1], drawables[2], drawables[3]);
+    }
+
+    private ImageButton iconButton(int iconResource, String description) {
+        ImageButton button = new ImageButton(activity);
+        button.setImageResource(iconResource);
+        button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        button.setPadding(dp(13), dp(13), dp(13), dp(13)); // 18dp icon; touch target remains unchanged.
+        button.setBackgroundResource(android.R.drawable.list_selector_background);
+        button.setContentDescription(description);
+        return button;
     }
 
     private Button button(String value) {
