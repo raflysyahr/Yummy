@@ -32,6 +32,7 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.PopupMenu;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -74,6 +75,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -82,8 +85,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * First usable File Manager UI for Yummy. The UI talks only to StorageProvider APIs;
- * it never converts SAF document IDs into File paths.
+ * Sidebar File Explorer for Yummy. The storage rail selects a provider while the
+ * adjacent directory tree lazily loads child directories through StorageProvider.
+ * The UI never converts SAF document IDs into File paths.
  */
 public final class FileManagerController {
 
@@ -158,7 +162,7 @@ public final class FileManagerController {
             StorageProvider provider = StorageTreePicker.acceptResult(registry, resultCode, data);
             if (provider != null) {
                 toast("Storage ditambahkan: " + provider.getLocation().getName());
-                if (managerDialog != null) managerDialog.refreshHome();
+                if (managerDialog != null) managerDialog.onStorageAdded(provider);
             }
         } catch (IOException | RuntimeException error) {
             showError("Tidak dapat menambahkan storage", error);
@@ -496,7 +500,12 @@ public final class FileManagerController {
         private final List<Row> rows = new ArrayList<>();
         private final FileRowAdapter adapter = new FileRowAdapter();
 
-        private LinearLayout root;
+        private FrameLayout root;
+        private View scrim;
+        private LinearLayout drawerPanel;
+        private LinearLayout storageRail;
+        private LinearLayout storageNavContainer;
+        private LinearLayout rightPane;
         private TextView titleView;
         private TextView breadcrumbView;
         private TextView emptyView;
@@ -510,7 +519,12 @@ public final class FileManagerController {
 
         private StorageProvider currentProvider;
         private StorageEntry currentDirectory;
+        private StorageEntry treeRootDirectory;
         private List<StorageEntry> currentEntries = new ArrayList<>();
+        private final Set<String> expandedTreeKeys = new HashSet<>();
+        private final Map<String, List<StorageEntry>> treeChildren = new HashMap<>();
+        private final Map<String, StorageEntry> treeEntries = new HashMap<>();
+        private boolean showingLocations;
         private SortMode sortMode = SortMode.NAME;
         private PendingTransfer pendingTransfer = PendingTransfer.NONE;
         private boolean selectionMode;
@@ -553,7 +567,18 @@ public final class FileManagerController {
                 window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
                 window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
             }
-            refreshHome();
+            drawerPanel.animate().translationX(0f).setDuration(190L).start();
+            StorageProvider initialProvider = findDefaultProvider();
+            if (initialProvider != null) openStorage(initialProvider);
+            else refreshHome();
+        }
+
+        private StorageProvider findDefaultProvider() {
+            for (StorageProvider provider : registry.getProviders()) {
+                if ("yummy.home".equals(provider.getId())) return provider;
+            }
+            List<StorageProvider> providers = registry.getProviders();
+            return providers.isEmpty() ? null : providers.get(0);
         }
 
         void dismiss() {
@@ -566,52 +591,84 @@ public final class FileManagerController {
         }
 
         private void buildView() {
-            root = new LinearLayout(activity);
-            root.setOrientation(LinearLayout.VERTICAL);
-            root.setBackgroundColor(0xFF080A0D);
+            root = new FrameLayout(activity);
+            root.setBackgroundColor(Color.TRANSPARENT);
 
-            // Header
+            // Tap outside the drawer to close it, like a standard navigation drawer.
+            scrim = new View(activity);
+            scrim.setBackgroundColor(0x66000000);
+            scrim.setOnClickListener(v -> dismiss());
+            root.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+
+            drawerPanel = new LinearLayout(activity);
+            drawerPanel.setOrientation(LinearLayout.HORIZONTAL);
+            drawerPanel.setBackgroundColor(0xFF292A2F);
+            int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+            int panelWidth = Math.min(screenWidth, Math.max(dp(280), Math.round(screenWidth * 0.88f)));
+            drawerPanel.setTranslationX(-panelWidth);
+            FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
+                panelWidth, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START | Gravity.TOP);
+            root.addView(drawerPanel, panelParams);
+
+            // Narrow storage rail on the left, matching the reference layout.
+            storageRail = new LinearLayout(activity);
+            storageRail.setOrientation(LinearLayout.VERTICAL);
+            storageRail.setGravity(Gravity.CENTER_HORIZONTAL);
+            storageRail.setBackgroundColor(0xFF1D1E22);
+            drawerPanel.addView(storageRail, new LinearLayout.LayoutParams(dp(76), -1));
+
+            rightPane = new LinearLayout(activity);
+            rightPane.setOrientation(LinearLayout.VERTICAL);
+            rightPane.setBackgroundColor(0xFF292A2F);
+            drawerPanel.addView(rightPane, new LinearLayout.LayoutParams(0, -1, 1));
+
+            // Toolbar: current location + search + overflow.
             LinearLayout header = new LinearLayout(activity);
             header.setGravity(Gravity.CENTER_VERTICAL);
-            header.setPadding(dp(12), 0, dp(10), 0);
-            header.setBackgroundColor(0xFF111419);
-            root.addView(header, new LinearLayout.LayoutParams(-1, dp(56)));
+            header.setPadding(dp(12), 0, dp(8), 0);
+            header.setBackgroundColor(0xFF292A2F);
+            rightPane.addView(header, new LinearLayout.LayoutParams(-1, dp(58)));
 
-            TextView back = textButton("‹", 30, 0xFFE8EAED);
-            header.addView(back, new LinearLayout.LayoutParams(dp(42), -1));
-            back.setOnClickListener(v -> goBack());
-
-            titleView = text("File Manager", 18, 0xFFF1F3F5, true);
+            titleView = text("Local", 18, 0xFFF1F1F2, true);
             titleView.setGravity(Gravity.CENTER_VERTICAL);
+            titleView.setSingleLine(true);
+            titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
             header.addView(titleView, new LinearLayout.LayoutParams(0, -1, 1));
 
-            TextView addStorage = textButton("＋", 25, 0xFF3DDC84);
-            addStorage.setContentDescription("Add storage");
-            header.addView(addStorage, new LinearLayout.LayoutParams(dp(42), -1));
-            addStorage.setOnClickListener(v -> {
-                try {
-                    activity.startActivityForResult(StorageTreePicker.createOpenTreeIntent(), REQUEST_ADD_STORAGE);
-                } catch (RuntimeException error) {
-                    showError("Folder picker tidak tersedia", error);
+            TextView searchButton = textButton("⌕", 30, 0xFFE8EAED);
+            searchButton.setContentDescription("Search files and folders");
+            header.addView(searchButton, new LinearLayout.LayoutParams(dp(44), -1));
+            searchButton.setOnClickListener(v -> {
+                searchView.setVisibility(searchView.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                if (searchView.getVisibility() == View.VISIBLE) {
+                    searchView.requestFocus();
+                    searchView.post(() -> {
+                        android.view.inputmethod.InputMethodManager imm =
+                            (android.view.inputmethod.InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+                        if (imm != null) imm.showSoftInput(searchView, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+                    });
+                } else {
+                    searchView.setText("");
                 }
             });
 
-            TextView close = textButton("×", 27, 0xFFADB5BD);
-            header.addView(close, new LinearLayout.LayoutParams(dp(38), -1));
-            close.setOnClickListener(v -> dismiss());
+            TextView moreButton = textButton("⋮", 26, 0xFFE8EAED);
+            moreButton.setContentDescription("More file manager actions");
+            header.addView(moreButton, new LinearLayout.LayoutParams(dp(38), -1));
+            moreButton.setOnClickListener(v -> showMoreMenu());
 
-            // Search field
             searchView = new EditText(activity);
             searchView.setSingleLine(true);
             searchView.setTextColor(0xFFE8EAED);
-            searchView.setHintTextColor(0xFF717983);
+            searchView.setHintTextColor(0xFF9A9DA3);
             searchView.setHint("Search files and folders");
             searchView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
             searchView.setPadding(dp(14), 0, dp(14), 0);
-            searchView.setBackground(roundRect(0xFF171C22, dp(10)));
-            LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, dp(44));
-            searchLp.setMargins(dp(14), dp(12), dp(14), dp(8));
-            root.addView(searchView, searchLp);
+            searchView.setBackground(roundRect(0xFF38393F, dp(9)));
+            searchView.setVisibility(View.GONE);
+            LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, dp(42));
+            searchLp.setMargins(dp(12), dp(2), dp(12), dp(8));
+            rightPane.addView(searchView, searchLp);
             searchView.addTextChangedListener(new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -619,7 +676,7 @@ public final class FileManagerController {
                     if (pendingSearch != null) mainHandler.removeCallbacks(pendingSearch);
                     pendingSearch = () -> {
                         if (destroyed || !dialog.isShowing()) return;
-                        if (currentProvider != null && currentDirectory != null) loadDirectory();
+                        if (currentProvider != null && treeRootDirectory != null) loadDirectory();
                         else refreshHome();
                     };
                     mainHandler.postDelayed(pendingSearch, 250L);
@@ -627,33 +684,33 @@ public final class FileManagerController {
                 @Override public void afterTextChanged(Editable s) { }
             });
 
-            breadcrumbView = text("Storage locations", 12, 0xFF89939E, false);
+            breadcrumbView = text("/", 12, 0xFFB7B8BC, false);
             breadcrumbView.setSingleLine(true);
             breadcrumbView.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-            breadcrumbView.setPadding(dp(16), 0, dp(16), 0);
-            root.addView(breadcrumbView, new LinearLayout.LayoutParams(-1, dp(32)));
+            breadcrumbView.setPadding(dp(14), 0, dp(12), 0);
+            rightPane.addView(breadcrumbView, new LinearLayout.LayoutParams(-1, dp(32)));
 
             actionBar = new LinearLayout(activity);
             actionBar.setGravity(Gravity.CENTER_VERTICAL);
-            actionBar.setPadding(dp(8), 0, dp(8), 0);
-            actionBar.setBackgroundColor(0xFF101419);
+            actionBar.setPadding(dp(6), 0, dp(6), 0);
+            actionBar.setBackgroundColor(0xFF25262B);
             HorizontalScrollView actionScroll = new HorizontalScrollView(activity);
             actionScroll.setHorizontalScrollBarEnabled(false);
             actionScroll.setFillViewport(false);
             actionScroll.addView(actionBar, new HorizontalScrollView.LayoutParams(-2, -1));
-            root.addView(actionScroll, new LinearLayout.LayoutParams(-1, dp(46)));
-            rebuildActionBar();
+            rightPane.addView(actionScroll, new LinearLayout.LayoutParams(-1, dp(42)));
 
             FrameLayout listFrame = new FrameLayout(activity);
-            root.addView(listFrame, new LinearLayout.LayoutParams(-1, 0, 1));
+            rightPane.addView(listFrame, new LinearLayout.LayoutParams(-1, 0, 1));
             listView = new ListView(activity);
-            listView.setDivider(new ColorDrawable(0xFF1B2027));
+            listView.setDivider(new ColorDrawable(0xFF393A40));
             listView.setDividerHeight(dp(1));
             listView.setCacheColorHint(Color.TRANSPARENT);
-            listView.setBackgroundColor(Color.TRANSPARENT);
+            listView.setBackgroundColor(0xFF292A2F);
             listView.setAdapter(adapter);
+            listView.setSelector(android.R.color.transparent);
             listFrame.addView(listView, new FrameLayout.LayoutParams(-1, -1));
-            emptyView = text("No files", 14, 0xFF7F8994, false);
+            emptyView = text("No files", 14, 0xFF9A9DA3, false);
             emptyView.setGravity(Gravity.CENTER);
             emptyView.setVisibility(View.GONE);
             listFrame.addView(emptyView, new FrameLayout.LayoutParams(-1, -1));
@@ -674,11 +731,94 @@ public final class FileManagerController {
             selectionBar = new LinearLayout(activity);
             selectionBar.setGravity(Gravity.CENTER_VERTICAL);
             selectionBar.setPadding(dp(10), dp(6), dp(10), dp(6));
-            selectionBar.setBackgroundColor(0xFF111820);
-            root.addView(selectionBar, new LinearLayout.LayoutParams(-1, dp(58)));
+            selectionBar.setBackgroundColor(0xFF202126);
+            rightPane.addView(selectionBar, new LinearLayout.LayoutParams(-1, dp(58)));
             rebuildSelectionBar();
-
+            rebuildActionBar();
+            rebuildStorageRail();
             dialog.setContentView(root);
+        }
+
+        private void rebuildStorageRail() {
+            storageRail.removeAllViews();
+            TextView brand = text("Y", 20, 0xFF3DDC84, true);
+            brand.setGravity(Gravity.CENTER);
+            brand.setBackground(roundRect(0xFF303137, dp(18)));
+            LinearLayout.LayoutParams brandLp = new LinearLayout.LayoutParams(dp(48), dp(48));
+            brandLp.setMargins(0, dp(9), 0, dp(12));
+            storageRail.addView(brand, brandLp);
+
+            ScrollView storageScroll = new ScrollView(activity);
+            storageScroll.setFillViewport(false);
+            storageScroll.setVerticalScrollBarEnabled(false);
+            storageNavContainer = new LinearLayout(activity);
+            storageNavContainer.setOrientation(LinearLayout.VERTICAL);
+            storageNavContainer.setGravity(Gravity.CENTER_HORIZONTAL);
+            storageScroll.addView(storageNavContainer, new ScrollView.LayoutParams(-1, -2));
+            storageRail.addView(storageScroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+            List<StorageProvider> providers = new ArrayList<>(registry.getProviders());
+            Collections.sort(providers, (a, b) -> Integer.compare(storageOrder(a), storageOrder(b)));
+            for (StorageProvider provider : providers) {
+                String id = provider.getId();
+                String label = storageLabel(provider);
+                String glyph = "yummy.home".equals(id) ? "▰" : ("yummy.files".equals(id) ? "▣" : "▤");
+                addRailItem(glyph, label, currentProvider != null && id.equals(currentProvider.getId()),
+                    () -> openStorage(provider));
+            }
+
+            View spacer = new View(activity);
+            storageRail.addView(spacer, new LinearLayout.LayoutParams(1, dp(4)));
+            addRailItem("☷", "Storage", showingLocations, this::refreshHome);
+            addRailItem("＋", "Add", false, this::requestAddStorage);
+        }
+
+        private int storageOrder(StorageProvider provider) {
+            if ("yummy.home".equals(provider.getId())) return 0;
+            if ("yummy.files".equals(provider.getId())) return 1;
+            return 2;
+        }
+
+        private String storageLabel(StorageProvider provider) {
+            if ("yummy.home".equals(provider.getId())) return "Local";
+            if ("yummy.files".equals(provider.getId())) return "Private";
+            return provider.getLocation().getName();
+        }
+
+        private void addRailItem(String glyph, String label, boolean selected, Runnable action) {
+            LinearLayout item = new LinearLayout(activity);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setGravity(Gravity.CENTER);
+            item.setPadding(dp(2), dp(5), dp(2), dp(5));
+            item.setBackground(selected ? roundRect(0xFF37383E, dp(24)) :
+                new ColorDrawable(Color.TRANSPARENT));
+            LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(dp(64), dp(72));
+            itemLp.setMargins(0, dp(3), 0, dp(4));
+            storageNavContainer.addView(item, itemLp);
+            TextView icon = text(glyph, 24, selected ? 0xFFFFFFFF : 0xFFBFC1C6, true);
+            icon.setGravity(Gravity.CENTER);
+            item.addView(icon, new LinearLayout.LayoutParams(-1, dp(38)));
+            TextView name = text(label, 10, selected ? 0xFFFFFFFF : 0xFFD0D1D4, false);
+            name.setGravity(Gravity.CENTER);
+            name.setMaxLines(2);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            item.addView(name, new LinearLayout.LayoutParams(-1, dp(25)));
+            item.setOnClickListener(v -> action.run());
+            item.setContentDescription(label);
+        }
+
+        private void requestAddStorage() {
+            try {
+                activity.startActivityForResult(StorageTreePicker.createOpenTreeIntent(), REQUEST_ADD_STORAGE);
+            } catch (RuntimeException error) {
+                showError("Folder picker tidak tersedia", error);
+            }
+        }
+
+        void onStorageAdded(StorageProvider provider) {
+            showingLocations = false;
+            rebuildStorageRail();
+            openStorage(provider);
         }
 
         private void rebuildActionBar() {
@@ -744,6 +884,7 @@ public final class FileManagerController {
         }
 
         private void refreshHome() {
+            showingLocations = true;
             loadGeneration++;
             if (pendingSearch != null) {
                 mainHandler.removeCallbacks(pendingSearch);
@@ -751,14 +892,16 @@ public final class FileManagerController {
             }
             currentProvider = null;
             currentDirectory = null;
+            treeRootDirectory = null;
             backStack.clear();
-            titleView.setText("File Manager");
-            breadcrumbView.setText("Storage locations");
+            expandedTreeKeys.clear();
+            treeChildren.clear();
+            treeEntries.clear();
+            titleView.setText("Storage");
+            breadcrumbView.setText("Connected storage locations");
             rows.clear();
             rows.add(Row.section("STORAGE LOCATIONS"));
-            for (StorageProvider provider : registry.getProviders()) {
-                rows.add(Row.location(provider));
-            }
+            for (StorageProvider provider : registry.getProviders()) rows.add(Row.location(provider));
             List<StorageEntry> favorites = readEntryList(KEY_FAVORITES);
             if (!favorites.isEmpty()) {
                 rows.add(Row.section("FAVORITES"));
@@ -776,6 +919,7 @@ public final class FileManagerController {
                 }
             }
             filterHomeRows();
+            rebuildStorageRail();
             rebuildActionBar();
             rebuildSelectionBar();
             adapter.notifyDataSetChanged();
@@ -808,6 +952,8 @@ public final class FileManagerController {
                 toast("Storage tidak tersedia: " + provider.getLocation().getName());
                 return;
             }
+            showingLocations = false;
+            rebuildStorageRail();
             final int generation = ++loadGeneration;
             ioExecutor.execute(() -> {
                 try {
@@ -815,10 +961,16 @@ public final class FileManagerController {
                     mainHandler.post(() -> {
                         if (destroyed || !dialog.isShowing() || generation != loadGeneration) return;
                         currentProvider = provider;
+                        treeRootDirectory = rootEntry;
                         currentDirectory = rootEntry;
                         backStack.clear();
+                        expandedTreeKeys.clear();
+                        treeChildren.clear();
+                        treeEntries.clear();
+                        treeEntries.put(treeKey(rootEntry), rootEntry);
                         activeQuery = searchView.getText().toString().trim();
                         updateBreadcrumb();
+                        rebuildStorageRail();
                         loadDirectory();
                     });
                 } catch (IOException | RuntimeException error) {
@@ -829,34 +981,34 @@ public final class FileManagerController {
 
         private void navigateTo(StorageEntry directory) {
             if (currentProvider == null || !directory.isDirectory()) return;
-            backStack.push(currentDirectory);
+            if (currentDirectory != null && !sameEntry(currentDirectory, directory)) backStack.push(currentDirectory);
             currentDirectory = directory;
-            searchView.setText("");
-            activeQuery = "";
+            expandedTreeKeys.add(treeKey(directory));
             updateBreadcrumb();
-            loadDirectory();
+            rebuildSelectionBar();
         }
 
         private void goBack() {
+            if (currentProvider != null && currentDirectory != null
+                && treeRootDirectory != null && !sameEntry(currentDirectory, treeRootDirectory)
+                && !backStack.isEmpty()) {
+                expandedTreeKeys.remove(treeKey(currentDirectory));
+                currentDirectory = backStack.pop();
+                updateBreadcrumb();
+                rebuildTreeRows();
+                rebuildSelectionBar();
+                return;
+            }
             if (pendingTransfer != PendingTransfer.NONE || saveAsMode) {
-                if (currentProvider != null && !backStack.isEmpty()) {
-                    currentDirectory = backStack.pop();
-                    updateBreadcrumb(); loadDirectory();
-                    return;
-                }
                 pendingTransfer = PendingTransfer.NONE;
                 saveAsMode = false;
-                rebuildActionBar(); rebuildSelectionBar();
+                selection.clear();
+                rebuildActionBar();
+                rebuildSelectionBar();
+                return;
             }
             if (currentProvider != null) {
-                if (!backStack.isEmpty()) {
-                    currentDirectory = backStack.pop();
-                    updateBreadcrumb(); loadDirectory();
-                } else {
-                    activeQuery = "";
-                    searchView.setText("");
-                    refreshHome();
-                }
+                refreshHome();
             } else {
                 dismiss();
             }
@@ -864,26 +1016,140 @@ public final class FileManagerController {
 
         private void updateBreadcrumb() {
             if (currentProvider == null || currentDirectory == null) {
-                breadcrumbView.setText("Storage locations");
-                titleView.setText("File Manager");
+                breadcrumbView.setText("Connected storage locations");
+                titleView.setText("Storage");
+                return;
+            }
+            List<String> pathParts = new ArrayList<>();
+            StorageEntry cursor = currentDirectory;
+            Set<String> pathGuard = new HashSet<>();
+            while (cursor != null && pathGuard.add(treeKey(cursor))) {
+                if (cursor.isRoot()) break;
+                pathParts.add(cursor.getName());
+                String parentId = cursor.getParentDocumentId();
+                cursor = parentId == null ? null : treeEntries.get(
+                    currentProvider.getId() + '\u0000' + parentId);
+            }
+            Collections.reverse(pathParts);
+            String path = currentProvider.getLocation().getName() + "  /  /";
+            if (!pathParts.isEmpty()) path += android.text.TextUtils.join(" / ", pathParts);
+            breadcrumbView.setText(path);
+            titleView.setText(storageLabel(currentProvider));
+        }
+
+        private String treeKey(StorageEntry entry) {
+            return entry.getProviderId() + '\u0000' + entry.getDocumentId();
+        }
+
+        private void rebuildTreeRows() {
+            rows.clear();
+            if (treeRootDirectory == null || currentProvider == null) {
+                adapter.notifyDataSetChanged();
+                updateEmptyState();
+                return;
+            }
+            if (!activeQuery.isEmpty()) {
+                for (StorageEntry entry : currentEntries) rows.add(Row.tree(currentProvider, entry, 0, false));
             } else {
-                List<String> pathParts = new ArrayList<>();
-                List<StorageEntry> parents = new ArrayList<>(backStack);
-                Collections.reverse(parents);
-                for (StorageEntry parent : parents) pathParts.add(parent.getName());
-                pathParts.add(currentDirectory.getName());
-                String path = currentProvider.getLocation().getName() + "  /  "
-                    + android.text.TextUtils.join(" / ", pathParts);
-                breadcrumbView.setText(path);
-                titleView.setText(currentDirectory.getName());
+                rows.add(Row.tree(currentProvider, treeRootDirectory, 0, true));
+                appendTreeRows(treeRootDirectory, 1, new HashSet<>());
+            }
+            adapter.notifyDataSetChanged();
+            updateEmptyState();
+        }
+
+        private void appendTreeRows(StorageEntry parent, int depth, Set<String> visited) {
+            String parentKey = treeKey(parent);
+            if (!visited.add(parentKey)) return;
+            List<StorageEntry> children = treeChildren.get(parentKey);
+            if (children == null) return;
+            for (StorageEntry entry : children) {
+                String key = treeKey(entry);
+                treeEntries.put(key, entry);
+                boolean expanded = expandedTreeKeys.contains(key);
+                rows.add(Row.tree(currentProvider, entry, depth, expanded));
+                if (entry.isDirectory() && expanded) appendTreeRows(entry, depth + 1, visited);
             }
         }
 
+
+        private boolean isWithinDirectory(StorageEntry candidate, StorageEntry ancestor) {
+            StorageEntry cursor = candidate;
+            Set<String> visited = new HashSet<>();
+            while (cursor != null && visited.add(treeKey(cursor))) {
+                if (sameEntry(cursor, ancestor)) return true;
+                cursor = parentOf(cursor);
+            }
+            return false;
+        }
+
+        private StorageEntry parentOf(StorageEntry entry) {
+            if (entry == null || entry.getParentDocumentId() == null) return null;
+            return treeEntries.get(entry.getProviderId() + '\u0000' + entry.getParentDocumentId());
+        }
+
+        private void toggleTreeDirectory(StorageEntry directory) {
+            if (currentProvider == null || !directory.isDirectory()) return;
+            String key = treeKey(directory);
+            if (expandedTreeKeys.contains(key)) {
+                expandedTreeKeys.remove(key);
+                if (currentDirectory != null && isWithinDirectory(currentDirectory, directory)) {
+                    currentDirectory = parentOf(directory);
+                    if (currentDirectory == null) currentDirectory = treeRootDirectory;
+                    backStack.clear();
+                }
+                updateBreadcrumb();
+                rebuildTreeRows();
+                rebuildSelectionBar();
+                return;
+            }
+
+            expandedTreeKeys.add(key);
+            if (currentDirectory != null && !sameEntry(currentDirectory, directory)) backStack.push(currentDirectory);
+            currentDirectory = directory;
+            updateBreadcrumb();
+            rebuildSelectionBar();
+            if (treeChildren.containsKey(key)) {
+                rebuildTreeRows();
+                return;
+            }
+
+            final int generation = loadGeneration;
+            final StorageProvider provider = currentProvider;
+            showLoading(true);
+            ioExecutor.execute(() -> {
+                try {
+                    List<StorageEntry> children = provider.list(directory);
+                    List<StorageEntry> visible = new ArrayList<>();
+                    for (StorageEntry child : children) {
+                        if (showHidden || !child.getName().startsWith(".")) visible.add(child);
+                    }
+                    sortEntries(visible, sortMode);
+                    mainHandler.post(() -> {
+                        if (destroyed || !dialog.isShowing() || generation != loadGeneration
+                            || currentProvider == null || !provider.getId().equals(currentProvider.getId())) return;
+                        treeChildren.put(key, visible);
+                        for (StorageEntry child : visible) treeEntries.put(treeKey(child), child);
+                        showLoading(false);
+                        rebuildTreeRows();
+                    });
+                } catch (IOException | RuntimeException error) {
+                    mainHandler.post(() -> {
+                        if (generation != loadGeneration) return;
+                        showLoading(false);
+                        expandedTreeKeys.remove(key);
+                        showError("Tidak dapat membaca folder", error);
+                        rebuildTreeRows();
+                    });
+                }
+            });
+        }
+
         private void loadDirectory() {
-            if (currentProvider == null || currentDirectory == null) return;
+            if (currentProvider == null || treeRootDirectory == null) return;
             final int generation = ++loadGeneration;
             final StorageProvider provider = currentProvider;
-            final StorageEntry directory = currentDirectory;
+            final StorageEntry directory = treeRootDirectory;
             final String query = activeQuery;
             final boolean includeHidden = showHidden;
             final SortMode requestedSort = sortMode;
@@ -900,11 +1166,19 @@ public final class FileManagerController {
                     mainHandler.post(() -> {
                         if (destroyed || generation != loadGeneration) return;
                         currentEntries = visible;
+                        treeChildren.put(treeKey(directory), visible);
+                        for (StorageEntry entry : visible) treeEntries.put(treeKey(entry), entry);
                         rows.clear();
-                        for (StorageEntry entry : visible) rows.add(Row.entry(RowKind.ENTRY, provider, entry));
+                        if (query.isEmpty()) {
+                            rows.add(Row.tree(provider, directory, 0, true));
+                            appendTreeRows(directory, 1, new HashSet<>());
+                        } else {
+                            for (StorageEntry entry : visible) rows.add(Row.tree(provider, entry, 0, false));
+                        }
                         showLoading(false);
                         rebuildActionBar();
                         rebuildSelectionBar();
+                        rebuildStorageRail();
                         adapter.notifyDataSetChanged();
                         updateEmptyState();
                     });
@@ -977,20 +1251,34 @@ public final class FileManagerController {
                 return;
             }
             if (row.entry == null || row.provider == null) return;
+            if (row.entry.isRoot() && treeRootDirectory != null
+                && sameEntry(row.entry, treeRootDirectory)) return;
             if (selectionMode) {
                 toggleSelection(row.entry);
                 return;
             }
-            if (pendingTransfer != PendingTransfer.NONE) {
-                if (row.entry.isDirectory()) navigateTo(row.entry);
+            if (pendingTransfer != PendingTransfer.NONE || saveAsMode) {
+                if (row.entry.isDirectory()) {
+                    if (currentProvider == null || !row.provider.getId().equals(currentProvider.getId())) {
+                        openStoredDirectory(row.provider, row.entry);
+                    } else if (!expandedTreeKeys.contains(treeKey(row.entry))) {
+                        toggleTreeDirectory(row.entry);
+                    } else {
+                        if (currentDirectory != null && !sameEntry(currentDirectory, row.entry)) {
+                            backStack.push(currentDirectory);
+                        }
+                        currentDirectory = row.entry;
+                        updateBreadcrumb();
+                        rebuildSelectionBar();
+                    }
+                }
                 return;
             }
             if (row.entry.isDirectory()) {
                 if (currentProvider == null || !currentProvider.getId().equals(row.provider.getId())) {
                     openStoredDirectory(row.provider, row.entry);
                 } else {
-                    currentProvider = row.provider;
-                    navigateTo(row.entry);
+                    toggleTreeDirectory(row.entry);
                 }
             } else {
                 openFile(row.provider, row.entry, null);
@@ -1001,18 +1289,22 @@ public final class FileManagerController {
             final int generation = ++loadGeneration;
             ioExecutor.execute(() -> {
                 try {
-                    StorageEntry rootEntry = provider.getRootEntry();
                     mainHandler.post(() -> {
                         if (destroyed || !dialog.isShowing() || generation != loadGeneration) return;
                         currentProvider = provider;
-                        currentDirectory = rootEntry;
-                        backStack.clear();
-                        if (!sameEntry(rootEntry, entry)) backStack.push(rootEntry);
+                        treeRootDirectory = entry;
                         currentDirectory = entry;
+                        backStack.clear();
+                        expandedTreeKeys.clear();
+                        treeChildren.clear();
+                        treeEntries.clear();
+                        treeEntries.put(treeKey(entry), entry);
+                        showingLocations = false;
+                        rebuildStorageRail();
                         updateBreadcrumb();
                         loadDirectory();
                     });
-                } catch (IOException error) {
+                } catch (RuntimeException error) {
                     mainHandler.post(() -> showError("Folder tidak tersedia", error));
                 }
             });
@@ -1369,7 +1661,10 @@ public final class FileManagerController {
                 sortMode = "Type".equals(value) ? SortMode.TYPE
                     : "Size".equals(value) ? SortMode.SIZE
                     : "Modified".equals(value) ? SortMode.MODIFIED : SortMode.NAME;
-                if (currentProvider != null) loadDirectory();
+                if (currentProvider != null) {
+                    for (List<StorageEntry> children : treeChildren.values()) sortEntries(children, sortMode);
+                    rebuildTreeRows();
+                }
                 return true;
             });
             menu.show();
@@ -1414,14 +1709,22 @@ public final class FileManagerController {
         }
 
         void refreshVisible() {
-            if (currentProvider != null) loadDirectory(); else refreshHome();
+            if (currentProvider != null) {
+                treeChildren.clear();
+                treeEntries.clear();
+                expandedTreeKeys.clear();
+                backStack.clear();
+                currentDirectory = treeRootDirectory;
+                if (treeRootDirectory != null) treeEntries.put(treeKey(treeRootDirectory), treeRootDirectory);
+                loadDirectory();
+            } else refreshHome();
         }
 
         private void updateEmptyState() {
             emptyView.setVisibility(rows.isEmpty() ? View.VISIBLE : View.GONE);
             if (currentProvider != null) {
                 emptyView.setText(activeQuery.isEmpty() ? "Folder ini kosong" : "Tidak ada hasil pencarian");
-            } else emptyView.setText("Belum ada storage atau file yang cocok");
+            } else emptyView.setText("Belum ada storage yang terhubung");
         }
 
         private void showLoading(boolean visible) {
@@ -1446,81 +1749,97 @@ public final class FileManagerController {
             public View getView(int position, View convertView, ViewGroup parent) {
                 Row row = rows.get(position);
                 if (row.kind == RowKind.SECTION) {
-                    TextView section = convertView instanceof TextView ? (TextView) convertView : text("", 11, 0xFF7B8794, true);
-                    section.setPadding(dp(16), dp(12), dp(12), dp(7));
+                    TextView section = convertView instanceof TextView ? (TextView) convertView
+                        : text("", 10, 0xFF9A9DA3, true);
+                    section.setPadding(dp(14), dp(12), dp(12), dp(7));
                     section.setText(row.label);
-                    section.setBackgroundColor(0xFF080A0D);
+                    section.setBackgroundColor(0xFF292A2F);
                     return section;
                 }
 
                 LinearLayout container;
+                TextView disclosure;
                 TextView badge;
                 LinearLayout texts;
                 TextView name;
                 TextView subtitle;
                 TextView check;
-                if (convertView instanceof LinearLayout && "file_row".equals(convertView.getTag())) {
+                if (convertView instanceof LinearLayout && "file_tree_row".equals(convertView.getTag())) {
                     container = (LinearLayout) convertView;
-                    badge = (TextView) container.getChildAt(0);
-                    texts = (LinearLayout) container.getChildAt(1);
+                    disclosure = (TextView) container.getChildAt(0);
+                    badge = (TextView) container.getChildAt(1);
+                    texts = (LinearLayout) container.getChildAt(2);
                     name = (TextView) texts.getChildAt(0);
                     subtitle = (TextView) texts.getChildAt(1);
-                    check = (TextView) container.getChildAt(2);
+                    check = (TextView) container.getChildAt(3);
                 } else {
                     container = new LinearLayout(activity);
-                    container.setTag("file_row");
+                    container.setTag("file_tree_row");
                     container.setGravity(Gravity.CENTER_VERTICAL);
-                    container.setPadding(dp(14), dp(7), dp(14), dp(7));
-                    badge = text("FILE", 10, Color.WHITE, true);
+                    container.setPadding(0, dp(2), dp(8), dp(2));
+                    disclosure = text("", 20, 0xFFBFC2C7, false);
+                    disclosure.setGravity(Gravity.CENTER);
+                    container.addView(disclosure, new LinearLayout.LayoutParams(dp(26), dp(46)));
+                    badge = text("", 19, 0xFFD5A13E, true);
                     badge.setGravity(Gravity.CENTER);
-                    LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(dp(42), dp(42));
-                    badgeLp.setMargins(0, 0, dp(13), 0);
-                    container.addView(badge, badgeLp);
+                    container.addView(badge, new LinearLayout.LayoutParams(dp(32), dp(46)));
                     texts = new LinearLayout(activity);
                     texts.setOrientation(LinearLayout.VERTICAL);
                     texts.setGravity(Gravity.CENTER_VERTICAL);
                     container.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
-                    name = text("", 14, 0xFFE8EAED, true);
+                    name = text("", 14, 0xFFE7E7E9, false);
                     name.setSingleLine(true);
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     texts.addView(name, new LinearLayout.LayoutParams(-1, -2));
-                    subtitle = text("", 11, 0xFF89939E, false);
+                    subtitle = text("", 10, 0xFF96999F, false);
                     subtitle.setSingleLine(true);
                     subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-1, -2);
-                    subLp.topMargin = dp(3);
-                    texts.addView(subtitle, subLp);
-                    check = text("", 18, 0xFF3DDC84, true);
+                    texts.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
+                    check = text("", 16, 0xFF3DDC84, true);
                     check.setGravity(Gravity.CENTER);
-                    container.addView(check, new LinearLayout.LayoutParams(dp(32), dp(42)));
+                    container.addView(check, new LinearLayout.LayoutParams(dp(24), dp(46)));
                 }
 
-                String label;
-                String sub;
-                int badgeColor;
                 if (row.kind == RowKind.LOCATION) {
-                    label = row.provider.getLocation().getName();
-                    sub = row.provider.getLocation().getDescription() == null
-                        ? (row.provider.isAvailable() ? "Available" : "Unavailable")
-                        : row.provider.getLocation().getDescription();
-                    badgeColor = 0xFF256D54;
-                    badge.setText("DRV");
-                } else {
-                    StorageEntry entry = row.entry;
-                    FileTypeResolver.Descriptor descriptor = FileTypeResolver.resolve(
-                        entry.getName(), entry.isDirectory(), entry.getMimeType());
-                    label = entry.getName();
-                    sub = entry.isDirectory() ? "Folder · " + modified(entry)
-                        : descriptor.getLabel() + " · " + humanSize(entry.getSize()) + " · " + modified(entry);
-                    badgeColor = descriptor.getColor();
-                    badge.setText(descriptor.getBadge());
+                    disclosure.setText("›");
+                    disclosure.setVisibility(View.VISIBLE);
+                    badge.setText("▣");
+                    badge.setTextColor(0xFF3DDC84);
+                    name.setText(storageLabel(row.provider));
+                    String description = row.provider.getLocation().getDescription();
+                    subtitle.setText(description == null ?
+                        (row.provider.isAvailable() ? "Available" : "Unavailable") : description);
+                    check.setText("");
+                    container.setPadding(dp(8), dp(5), dp(8), dp(5));
+                    container.setBackgroundColor(Color.TRANSPARENT);
+                    return container;
                 }
-                name.setText(label);
-                subtitle.setText(sub);
-                badge.setBackground(roundRect(badgeColor, dp(10)));
-                boolean selected = row.entry != null && selection.contains(row.entry);
+
+                StorageEntry entry = row.entry;
+                if (entry == null) return container;
+                int indent = Math.min(row.depth, 12) * dp(18);
+                container.setPadding(indent, dp(1), dp(8), dp(1));
+                if (entry.isDirectory()) {
+                    disclosure.setVisibility(View.VISIBLE);
+                    disclosure.setText(row.expanded ? "⌄" : "›");
+                    badge.setText("▰");
+                    badge.setTextColor(0xFFD6A342);
+                    subtitle.setText(entry.isRoot() ? "Storage root" : "Folder");
+                } else {
+                    disclosure.setVisibility(View.VISIBLE);
+                    disclosure.setText("");
+                    FileTypeResolver.Descriptor descriptor = FileTypeResolver.resolve(
+                        entry.getName(), false, entry.getMimeType());
+                    badge.setText("▤");
+                    badge.setTextColor(descriptor.getColor());
+                    subtitle.setText(descriptor.getLabel() + " · " + humanSize(entry.getSize()));
+                }
+                name.setText(entry.isRoot() ? "/" : entry.getName());
+                boolean selected = selection.contains(entry);
+                boolean current = currentDirectory != null && sameEntry(currentDirectory, entry);
                 check.setText(selected ? "✓" : (selectionMode ? "○" : ""));
-                if (selected) container.setBackgroundColor(0xFF15251F);
+                if (selected) container.setBackgroundColor(0xFF26372F);
+                else if (current) container.setBackgroundColor(0xFF34353B);
                 else container.setBackgroundColor(Color.TRANSPARENT);
                 return container;
             }
@@ -1537,13 +1856,20 @@ public final class FileManagerController {
             final String label;
             final StorageProvider provider;
             final StorageEntry entry;
-            private Row(RowKind kind, String label, StorageProvider provider, StorageEntry entry) {
+            final int depth;
+            final boolean expanded;
+            private Row(RowKind kind, String label, StorageProvider provider, StorageEntry entry,
+                        int depth, boolean expanded) {
                 this.kind = kind; this.label = label; this.provider = provider; this.entry = entry;
+                this.depth = depth; this.expanded = expanded;
             }
-            static Row section(String label) { return new Row(RowKind.SECTION, label, null, null); }
-            static Row location(StorageProvider provider) { return new Row(RowKind.LOCATION, null, provider, null); }
+            static Row section(String label) { return new Row(RowKind.SECTION, label, null, null, 0, false); }
+            static Row location(StorageProvider provider) { return new Row(RowKind.LOCATION, null, provider, null, 0, false); }
             static Row entry(RowKind kind, StorageProvider provider, StorageEntry entry) {
-                return new Row(kind, null, provider, entry);
+                return new Row(kind, null, provider, entry, 0, false);
+            }
+            static Row tree(StorageProvider provider, StorageEntry entry, int depth, boolean expanded) {
+                return new Row(RowKind.ENTRY, null, provider, entry, depth, expanded);
             }
         }
     }
