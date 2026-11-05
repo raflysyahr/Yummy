@@ -790,8 +790,7 @@ public final class FileManagerController {
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER);
             item.setPadding(dp(2), dp(5), dp(2), dp(5));
-            item.setBackground(selected ? roundRect(0xFF292C35, dp(24)) :
-                new ColorDrawable(Color.TRANSPARENT));
+            item.setBackgroundColor(Color.TRANSPARENT);
             LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(dp(64), dp(72));
             itemLp.setMargins(0, dp(3), 0, dp(4));
             storageNavContainer.addView(item, itemLp);
@@ -799,8 +798,12 @@ public final class FileManagerController {
             icon.setImageResource(iconResource);
             icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             icon.setContentDescription(label);
-            LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(-1, dp(38));
-            icon.setPadding(0, dp(7), 0, dp(7)); // 24dp visible icon inside the 38dp rail slot.
+            icon.setColorFilter(0xFFE8EAED, android.graphics.PorterDuff.Mode.SRC_IN);
+            icon.setBackground(selected ? roundRect(0xFF292C35, dp(12)) :
+                new ColorDrawable(Color.TRANSPARENT));
+            LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(38), dp(38));
+            iconLp.gravity = Gravity.CENTER_HORIZONTAL;
+            icon.setPadding(dp(7), dp(7), dp(7), dp(7));
             item.addView(icon, iconLp);
             TextView name = text(label, 10, selected ? 0xFFE8EAED : 0xFF969EA7, false);
             name.setGravity(Gravity.CENTER);
