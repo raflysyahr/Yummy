@@ -605,7 +605,7 @@ public final class FileManagerController {
 
             drawerPanel = new LinearLayout(activity);
             drawerPanel.setOrientation(LinearLayout.HORIZONTAL);
-            drawerPanel.setBackgroundColor(0xFF292A2F);
+            drawerPanel.setBackgroundColor(0xFF17191F);
             int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
             int panelWidth = Math.min(screenWidth, Math.max(dp(280), Math.round(screenWidth * 0.88f)));
             drawerPanel.setTranslationX(-panelWidth);
@@ -617,22 +617,22 @@ public final class FileManagerController {
             storageRail = new LinearLayout(activity);
             storageRail.setOrientation(LinearLayout.VERTICAL);
             storageRail.setGravity(Gravity.CENTER_HORIZONTAL);
-            storageRail.setBackgroundColor(0xFF1D1E22);
+            storageRail.setBackgroundColor(0xFF13151B);
             drawerPanel.addView(storageRail, new LinearLayout.LayoutParams(dp(76), -1));
 
             rightPane = new LinearLayout(activity);
             rightPane.setOrientation(LinearLayout.VERTICAL);
-            rightPane.setBackgroundColor(0xFF292A2F);
+            rightPane.setBackgroundColor(0xFF17191F);
             drawerPanel.addView(rightPane, new LinearLayout.LayoutParams(0, -1, 1));
 
             // Toolbar: current location + search + overflow.
             LinearLayout header = new LinearLayout(activity);
             header.setGravity(Gravity.CENTER_VERTICAL);
             header.setPadding(dp(12), 0, dp(8), 0);
-            header.setBackgroundColor(0xFF292A2F);
+            header.setBackgroundColor(0xFF17191F);
             rightPane.addView(header, new LinearLayout.LayoutParams(-1, dp(58)));
 
-            titleView = text("Local", 18, 0xFFF1F1F2, true);
+            titleView = text("Local", 18, 0xFFE8EAED, true);
             titleView.setGravity(Gravity.CENTER_VERTICAL);
             titleView.setSingleLine(true);
             titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -661,11 +661,11 @@ public final class FileManagerController {
             searchView = new EditText(activity);
             searchView.setSingleLine(true);
             searchView.setTextColor(0xFFE8EAED);
-            searchView.setHintTextColor(0xFF9A9DA3);
+            searchView.setHintTextColor(0xFF969EA7);
             searchView.setHint("Search files and folders");
             searchView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
             searchView.setPadding(dp(14), 0, dp(14), 0);
-            searchView.setBackground(roundRect(0xFF38393F, dp(9)));
+            searchView.setBackground(roundRect(0xFF292C35, dp(9)));
             searchView.setVisibility(View.GONE);
             LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, dp(42));
             searchLp.setMargins(dp(12), dp(2), dp(12), dp(8));
@@ -685,7 +685,7 @@ public final class FileManagerController {
                 @Override public void afterTextChanged(Editable s) { }
             });
 
-            breadcrumbView = text("/", 12, 0xFFB7B8BC, false);
+            breadcrumbView = text("/", 12, 0xFF969EA7, false);
             breadcrumbView.setSingleLine(true);
             breadcrumbView.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
             breadcrumbView.setPadding(dp(14), 0, dp(12), 0);
@@ -694,7 +694,7 @@ public final class FileManagerController {
             actionBar = new LinearLayout(activity);
             actionBar.setGravity(Gravity.CENTER_VERTICAL);
             actionBar.setPadding(dp(6), 0, dp(6), 0);
-            actionBar.setBackgroundColor(0xFF25262B);
+            actionBar.setBackgroundColor(0xFF1D1F26);
             HorizontalScrollView actionScroll = new HorizontalScrollView(activity);
             actionScroll.setHorizontalScrollBarEnabled(false);
             actionScroll.setFillViewport(false);
@@ -707,11 +707,11 @@ public final class FileManagerController {
             listView.setDivider(null);
             listView.setDividerHeight(0);
             listView.setCacheColorHint(Color.TRANSPARENT);
-            listView.setBackgroundColor(0xFF292A2F);
+            listView.setBackgroundColor(0xFF17191F);
             listView.setAdapter(adapter);
             listView.setSelector(android.R.color.transparent);
             listFrame.addView(listView, new FrameLayout.LayoutParams(-1, -1));
-            emptyView = text("No files", 14, 0xFF9A9DA3, false);
+            emptyView = text("No files", 14, 0xFF969EA7, false);
             emptyView.setGravity(Gravity.CENTER);
             emptyView.setVisibility(View.GONE);
             listFrame.addView(emptyView, new FrameLayout.LayoutParams(-1, -1));
@@ -732,7 +732,7 @@ public final class FileManagerController {
             selectionBar = new LinearLayout(activity);
             selectionBar.setGravity(Gravity.CENTER_VERTICAL);
             selectionBar.setPadding(dp(10), dp(6), dp(10), dp(6));
-            selectionBar.setBackgroundColor(0xFF202126);
+            selectionBar.setBackgroundColor(0xFF13151B);
             rightPane.addView(selectionBar, new LinearLayout.LayoutParams(-1, dp(58)));
             rebuildSelectionBar();
             rebuildActionBar();
@@ -742,9 +742,9 @@ public final class FileManagerController {
 
         private void rebuildStorageRail() {
             storageRail.removeAllViews();
-            TextView brand = text("Y", 20, 0xFF3DDC84, true);
+            TextView brand = text("Y", 20, 0xFFE8EAED, true);
             brand.setGravity(Gravity.CENTER);
-            brand.setBackground(roundRect(0xFF303137, dp(18)));
+            brand.setBackground(roundRect(0xFF292C35, dp(18)));
             LinearLayout.LayoutParams brandLp = new LinearLayout.LayoutParams(dp(48), dp(48));
             brandLp.setMargins(0, dp(9), 0, dp(12));
             storageRail.addView(brand, brandLp);
@@ -790,7 +790,7 @@ public final class FileManagerController {
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER);
             item.setPadding(dp(2), dp(5), dp(2), dp(5));
-            item.setBackground(selected ? roundRect(0xFF37383E, dp(24)) :
+            item.setBackground(selected ? roundRect(0xFF292C35, dp(24)) :
                 new ColorDrawable(Color.TRANSPARENT));
             LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(dp(64), dp(72));
             itemLp.setMargins(0, dp(3), 0, dp(4));
@@ -802,7 +802,7 @@ public final class FileManagerController {
             LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(-1, dp(38));
             icon.setPadding(0, dp(7), 0, dp(7)); // 24dp visible icon inside the 38dp rail slot.
             item.addView(icon, iconLp);
-            TextView name = text(label, 10, selected ? 0xFFFFFFFF : 0xFFD0D1D4, false);
+            TextView name = text(label, 10, selected ? 0xFFE8EAED : 0xFF969EA7, false);
             name.setGravity(Gravity.CENTER);
             name.setMaxLines(2);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -1761,10 +1761,10 @@ public final class FileManagerController {
                 Row row = rows.get(position);
                 if (row.kind == RowKind.SECTION) {
                     TextView section = convertView instanceof TextView ? (TextView) convertView
-                        : text("", 10, 0xFF9A9DA3, true);
+                        : text("", 10, 0xFF969EA7, true);
                     section.setPadding(dp(14), dp(12), dp(12), dp(7));
                     section.setText(row.label);
-                    section.setBackgroundColor(0xFF292A2F);
+                    section.setBackgroundColor(0xFF17191F);
                     return section;
                 }
 
@@ -1804,11 +1804,11 @@ public final class FileManagerController {
                     texts.setOrientation(LinearLayout.VERTICAL);
                     texts.setGravity(Gravity.CENTER_VERTICAL);
                     container.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
-                    name = text("", 14, 0xFFE7E7E9, false);
+                    name = text("", 14, 0xFFE8EAED, false);
                     name.setSingleLine(true);
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     texts.addView(name, new LinearLayout.LayoutParams(-1, -2));
-                    subtitle = text("", 10, 0xFF96999F, false);
+                    subtitle = text("", 10, 0xFF969EA7, false);
                     subtitle.setSingleLine(true);
                     subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     texts.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
@@ -1869,8 +1869,8 @@ public final class FileManagerController {
                     check.setImageDrawable(null);
                     check.setVisibility(View.INVISIBLE);
                 }
-                if (selected) container.setBackgroundColor(0xFF26372F);
-                else if (current) container.setBackgroundColor(0xFF34353B);
+                if (selected) container.setBackgroundColor(0xFF292C35);
+                else if (current) container.setBackgroundColor(0xFF292C35);
                 else container.setBackgroundColor(Color.TRANSPARENT);
                 return container;
             }
