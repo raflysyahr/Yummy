@@ -38,6 +38,9 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.RippleDrawable;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -1885,9 +1888,22 @@ public final class FileManagerController {
                     check.setImageDrawable(null);
                     check.setVisibility(View.INVISIBLE);
                 }
-                if (selected) container.setBackgroundColor(0xFF292C35);
-                else if (current) container.setBackgroundColor(0xFF292C35);
+                if (selected) container.setBackgroundColor(0xFF13151B);
+                else if (current) container.setBackgroundColor(0xFF13151B);
                 else container.setBackgroundColor(Color.TRANSPARENT);
+
+
+                // Temporary click feedback
+                if (android.os.Build.VERSION.SDK_INT >= 23) {
+                    RippleDrawable ripple = new RippleDrawable(
+                        ColorStateList.valueOf(0x33969EA7),
+                        null,
+                        new ColorDrawable(Color.WHITE)
+                    );
+
+                    container.setForeground(ripple);
+                }
+
                 return container;
             }
         }
