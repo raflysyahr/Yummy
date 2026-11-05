@@ -605,7 +605,7 @@ public final class FileManagerController {
 
             drawerPanel = new LinearLayout(activity);
             drawerPanel.setOrientation(LinearLayout.HORIZONTAL);
-            drawerPanel.setBackgroundColor(0xFF17191F);
+            drawerPanel.setBackgroundColor(0xFF13151B);
             int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
             int panelWidth = Math.min(screenWidth, Math.max(dp(280), Math.round(screenWidth * 0.88f)));
             drawerPanel.setTranslationX(-panelWidth);
@@ -618,18 +618,18 @@ public final class FileManagerController {
             storageRail.setOrientation(LinearLayout.VERTICAL);
             storageRail.setGravity(Gravity.CENTER_HORIZONTAL);
             storageRail.setBackgroundColor(0xFF13151B);
-            drawerPanel.addView(storageRail, new LinearLayout.LayoutParams(dp(76), -1));
+            drawerPanel.addView(storageRail, new LinearLayout.LayoutParams(dp(70), -1));
 
             rightPane = new LinearLayout(activity);
             rightPane.setOrientation(LinearLayout.VERTICAL);
-            rightPane.setBackgroundColor(0xFF17191F);
+            rightPane.setBackgroundColor(0xFF13151B);
             drawerPanel.addView(rightPane, new LinearLayout.LayoutParams(0, -1, 1));
 
             // Toolbar: current location + search + overflow.
             LinearLayout header = new LinearLayout(activity);
             header.setGravity(Gravity.CENTER_VERTICAL);
             header.setPadding(dp(12), 0, dp(8), 0);
-            header.setBackgroundColor(0xFF17191F);
+            header.setBackgroundColor(0xFF13151B);
             rightPane.addView(header, new LinearLayout.LayoutParams(-1, dp(58)));
 
             titleView = text("Local", 18, 0xFFE8EAED, true);
@@ -707,7 +707,7 @@ public final class FileManagerController {
             listView.setDivider(null);
             listView.setDividerHeight(0);
             listView.setCacheColorHint(Color.TRANSPARENT);
-            listView.setBackgroundColor(0xFF17191F);
+            listView.setBackgroundColor(0xFF13151B); //change #13151b
             listView.setAdapter(adapter);
             listView.setSelector(android.R.color.transparent);
             listFrame.addView(listView, new FrameLayout.LayoutParams(-1, -1));
@@ -742,9 +742,22 @@ public final class FileManagerController {
 
         private void rebuildStorageRail() {
             storageRail.removeAllViews();
-            TextView brand = text("Y", 20, 0xFFE8EAED, true);
-            brand.setGravity(Gravity.CENTER);
-            brand.setBackground(roundRect(0xFF292C35, dp(18)));
+
+            ImageView brand = new ImageView(activity);
+            brand.setImageResource(R.drawable.ic_yummy_logo);
+            brand.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            brand.setBackgroundColor(Color.TRANSPARENT);
+
+            LinearLayout.LayoutParams brandLp =
+            new LinearLayout.LayoutParams(dp(40), dp(40));
+
+            brandLp.setMargins(0, dp(13), 0, dp(16));
+    
+            storageRail.addView(brand, brandLp);
+
+
+
+
             LinearLayout.LayoutParams brandLp = new LinearLayout.LayoutParams(dp(48), dp(48));
             brandLp.setMargins(0, dp(9), 0, dp(12));
             storageRail.addView(brand, brandLp);
@@ -1767,7 +1780,7 @@ public final class FileManagerController {
                         : text("", 10, 0xFF969EA7, true);
                     section.setPadding(dp(14), dp(12), dp(12), dp(7));
                     section.setText(row.label);
-                    section.setBackgroundColor(0xFF17191F);
+                    section.setBackgroundColor(0xFF13151B);
                     return section;
                 }
 
