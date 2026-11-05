@@ -704,8 +704,8 @@ public final class FileManagerController {
             FrameLayout listFrame = new FrameLayout(activity);
             rightPane.addView(listFrame, new LinearLayout.LayoutParams(-1, 0, 1));
             listView = new ListView(activity);
-            listView.setDivider(new ColorDrawable(0xFF393A40));
-            listView.setDividerHeight(dp(1));
+            listView.setDivider(null);
+            listView.setDividerHeight(0);
             listView.setCacheColorHint(Color.TRANSPARENT);
             listView.setBackgroundColor(0xFF292A2F);
             listView.setAdapter(adapter);
@@ -1787,17 +1787,17 @@ public final class FileManagerController {
                     container = new LinearLayout(activity);
                     container.setTag("file_tree_row");
                     container.setGravity(Gravity.CENTER_VERTICAL);
-                    container.setPadding(0, dp(2), dp(8), dp(2));
+                    container.setPadding(0, 0, dp(8), 0);
                     disclosure = new ImageView(activity);
                     disclosure.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     LinearLayout.LayoutParams disclosureLp =
-                        new LinearLayout.LayoutParams(dp(16), dp(46));
+                        new LinearLayout.LayoutParams(dp(16), dp(38));
                     disclosureLp.setMargins(0, 0, dp(4), 0);
                     container.addView(disclosure, disclosureLp);
                     badge = new ImageView(activity);
                     badge.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     LinearLayout.LayoutParams badgeLp =
-                        new LinearLayout.LayoutParams(dp(16), dp(46));
+                        new LinearLayout.LayoutParams(dp(16), dp(38));
                     badgeLp.setMargins(0, 0, dp(6), 0);
                     container.addView(badge, badgeLp);
                     texts = new LinearLayout(activity);
@@ -1814,7 +1814,7 @@ public final class FileManagerController {
                     texts.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
                     check = new ImageView(activity);
                     check.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    container.addView(check, new LinearLayout.LayoutParams(dp(20), dp(46)));
+                    container.addView(check, new LinearLayout.LayoutParams(dp(20), dp(38)));
                 }
 
                 if (row.kind == RowKind.LOCATION) {
@@ -1823,6 +1823,7 @@ public final class FileManagerController {
                     badge.setImageResource(FileManagerIconResolver.storage(row.provider));
                     badge.setVisibility(View.VISIBLE);
                     name.setText(storageLabel(row.provider));
+                    subtitle.setVisibility(View.VISIBLE);
                     String description = row.provider.getLocation().getDescription();
                     subtitle.setText(description == null ?
                         (row.provider.isAvailable() ? "Available" : "Unavailable") : description);
@@ -1836,14 +1837,15 @@ public final class FileManagerController {
                 StorageEntry entry = row.entry;
                 if (entry == null) return container;
                 int indent = Math.min(row.depth, 12) * dp(18);
-                container.setPadding(indent, dp(1), dp(8), dp(1));
+                container.setPadding(indent, 0, dp(8), 0);
                 if (entry.isDirectory()) {
                     disclosure.setVisibility(View.VISIBLE);
                     disclosure.setImageResource(row.expanded
                         ? R.drawable.ic_fm_chevron_down : R.drawable.ic_fm_chevron_right);
                     badge.setImageDrawable(FileManagerIconResolver.file(activity, entry, row.expanded));
                     badge.setVisibility(View.VISIBLE);
-                    subtitle.setText(entry.isRoot() ? "Storage root" : "Folder");
+                    subtitle.setText("");
+                    subtitle.setVisibility(View.GONE);
                 } else {
                     disclosure.setVisibility(View.INVISIBLE);
                     disclosure.setImageDrawable(null);
@@ -1851,7 +1853,8 @@ public final class FileManagerController {
                         entry.getName(), false, entry.getMimeType());
                     badge.setImageDrawable(FileManagerIconResolver.file(activity, entry, false));
                     badge.setVisibility(View.VISIBLE);
-                    subtitle.setText(descriptor.getLabel() + " · " + humanSize(entry.getSize()));
+                    subtitle.setText("");
+                    subtitle.setVisibility(View.GONE);
                 }
                 name.setText(entry.isRoot() ? "/" : entry.getName());
                 boolean selected = selection.contains(entry);
