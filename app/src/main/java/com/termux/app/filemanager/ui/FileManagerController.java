@@ -758,9 +758,9 @@ public final class FileManagerController {
 
 
 
-            LinearLayout.LayoutParams brandLp = new LinearLayout.LayoutParams(dp(48), dp(48));
-            brandLp.setMargins(0, dp(9), 0, dp(12));
-            storageRail.addView(brand, brandLp);
+
+
+
 
             ScrollView storageScroll = new ScrollView(activity);
             storageScroll.setFillViewport(false);
