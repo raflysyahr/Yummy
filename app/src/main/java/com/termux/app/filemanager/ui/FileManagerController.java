@@ -744,7 +744,7 @@ public final class FileManagerController {
             storageRail.removeAllViews();
 
             ImageView brand = new ImageView(activity);
-            brand.setImageResource(R.drawable.ic_yummy_logo);
+            brand.setImageResource(R.mipmap.ic_yummy_logo);
             brand.setScaleType(ImageView.ScaleType.FIT_CENTER);
             brand.setBackgroundColor(Color.TRANSPARENT);
 
