@@ -216,6 +216,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_termux);
+        hideStatusBar();
         mEditorLayoutController = new com.termux.app.editor.EditorLayoutController(this);
         mEditorLayoutController.setup();
 
@@ -502,6 +503,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
+    private void hideStatusBar() {
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        );
+    }
 
     private void setTermuxTerminalViewAndClients() {
         // Set termux terminal view and session clients
