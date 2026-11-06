@@ -80,9 +80,19 @@ public final class WorkspaceSessionManager {
                 try {
                     JSONObject restored = new JSONObject(stored.toString());
                     String contentFile = restored.optString("contentFile", "");
-                    String text = contentFile.isEmpty()
-                        ? restored.optString("text", "")
-                        : readText(new File(documentsDirectory, contentFile));
+                    String text = restored.optString("text", "");
+                    if (!contentFile.isEmpty()) {
+                        try {
+                            text = readText(new File(documentsDirectory, contentFile));
+                        } catch (IOException error) {
+                            // Keep the tab metadata even if its cached content cannot be read.
+                            // This prevents one damaged/missing document cache from aborting
+                            // restoration of every other open tab.
+                            android.util.Log.e("YummySession",
+                                "Could not restore cached content for document "
+                                    + restored.optString("id", ""), error);
+                        }
+                    }
                     restored.put("text", text);
                     restoredDocuments.put(restored);
                 } catch (JSONException error) {
