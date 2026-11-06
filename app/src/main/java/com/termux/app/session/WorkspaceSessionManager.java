@@ -20,6 +20,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -113,6 +116,40 @@ public final class WorkspaceSessionManager {
     public void saveEditorSession(@NonNull JSONObject snapshot) {
         final JSONObject detached = copy(snapshot);
         submitWrite(() -> writeEditorSession(detached));
+    }
+
+    /**
+     * Enqueues a final editor checkpoint behind all earlier writes and waits until
+     * it is durably committed. Use only at Activity stop/destroy, never while typing.
+     * This closes the window where Android kills the process before the async writer
+     * has had a chance to persist the last unsaved edits.
+     */
+    public boolean saveEditorSessionBlocking(@NonNull JSONObject snapshot) {
+        final JSONObject detached = copy(snapshot);
+        final CountDownLatch completed = new CountDownLatch(1);
+        final AtomicBoolean success = new AtomicBoolean(false);
+        submitWrite(() -> {
+            try {
+                writeEditorSession(detached);
+                success.set(true);
+            } finally {
+                completed.countDown();
+            }
+        });
+        try {
+            // Editor documents are bounded by the File Manager's text-file limit.
+            // Wait for the serial queue so an older queued snapshot cannot overwrite
+            // this final, newest snapshot after the Activity has stopped.
+            if (!completed.await(15, TimeUnit.SECONDS)) {
+                android.util.Log.e("YummySession", "Timed out waiting for final editor session write");
+                return false;
+            }
+            return success.get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            android.util.Log.e("YummySession", "Interrupted while committing final editor session", error);
+            return false;
+        }
     }
 
     @Nullable

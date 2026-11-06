@@ -209,8 +209,28 @@ public class EditorController {
 
     /** Capture and enqueue the complete in-memory editor state immediately. */
     public void persistEditorSessionNow() {
+        JSONObject session = createEditorSessionSnapshot();
+        if (session != null && mWorkspaceSessionManager != null) {
+            mWorkspaceSessionManager.saveEditorSession(session);
+        }
+    }
+
+    /**
+     * Final lifecycle checkpoint. Unlike normal autosaves, this waits for the
+     * background writer to finish so a task removed from Recents cannot lose the
+     * last edits that were still inside the debounce window.
+     */
+    private void persistEditorSessionForShutdown() {
         mSessionHandler.removeCallbacks(mPendingSessionSave);
-        if (mWorkspaceSessionManager == null) return;
+        JSONObject session = createEditorSessionSnapshot();
+        if (session != null && mWorkspaceSessionManager != null) {
+            mWorkspaceSessionManager.saveEditorSessionBlocking(session);
+        }
+    }
+
+    @Nullable
+    private JSONObject createEditorSessionSnapshot() {
+        if (mWorkspaceSessionManager == null) return null;
         if (mEditor != null && mActiveDocument != null) {
             mActiveDocument.text = mEditor.getText().toString();
         }
@@ -229,11 +249,11 @@ public class EditorController {
                 documents.put(item);
             }
             session.put("documents", documents);
+            return session;
         } catch (JSONException error) {
             android.util.Log.e("YummyEditor", "Could not create editor session snapshot", error);
-            return;
+            return null;
         }
-        mWorkspaceSessionManager.saveEditorSession(session);
     }
 
     private void updateSessionSavingIndicator(boolean saving, boolean failed) {
@@ -726,7 +746,7 @@ public class EditorController {
             @Override
             public void onActivityDestroyed(@NonNull Activity activity) {
                 if (activity != mActivity) return;
-                persistEditorSessionNow();
+                persistEditorSessionForShutdown();
                 activity.getApplication().unregisterActivityLifecycleCallbacks(this);
                 if (mEditor != null) {
                     mEditor.release();
@@ -752,12 +772,12 @@ public class EditorController {
 
             @Override
             public void onActivityStopped(@NonNull Activity activity) {
-                if (activity == mActivity) persistEditorSessionNow();
+                if (activity == mActivity) persistEditorSessionForShutdown();
             }
 
             @Override
             public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle outState) {
-                if (activity == mActivity) persistEditorSessionNow();
+                if (activity == mActivity) persistEditorSessionForShutdown();
             }
         };
 }
