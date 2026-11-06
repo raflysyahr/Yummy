@@ -124,8 +124,20 @@ public final class FileManagerController {
 
     private StorageProvider activeFileProvider;
     private StorageEntry activeFileEntry;
+    // Dokumen yang terbuka dipetakan ke Storage Provider asalnya agar setiap tab
+    // dapat disimpan tanpa bergantung pada tab yang sedang aktif.
+    private final Map<String, OpenFileReference> openFiles = new HashMap<>();
     private ManagerDialog managerDialog;
     private boolean destroyed;
+
+    private static final class OpenFileReference {
+        final StorageProvider provider;
+        final StorageEntry entry;
+        OpenFileReference(StorageProvider provider, StorageEntry entry) {
+            this.provider = provider;
+            this.entry = entry;
+        }
+    }
 
     public FileManagerController(@NonNull Activity activity,
                                  @NonNull EditorController editorController) {
@@ -134,6 +146,70 @@ public final class FileManagerController {
         this.registry = new StorageRegistry(activity.getApplicationContext());
         this.fileOperations = new FileOperationService(registry);
         this.preferences = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        this.editorController.setDocumentActionListener(new EditorController.DocumentActionListener() {
+            @Override public void onActiveDocumentChanged(@Nullable String documentId) {
+                syncActiveFile(documentId);
+            }
+            @Override public void onDocumentClosed(@NonNull String documentId) {
+                openFiles.remove(documentId);
+            }
+            @Override public void onSaveRequested(@NonNull String documentId, @NonNull Runnable onSaved) {
+                if (!editorController.activateDocument(documentId)) return;
+                if (openFiles.containsKey(documentId)) {
+                    saveActiveFile(onSaved);
+                } else {
+                    show(true);
+                    if (managerDialog != null) managerDialog.pendingOpenAfterSave = onSaved;
+                }
+            }
+        });
+    }
+
+    private void syncActiveFile(@Nullable String documentId) {
+        OpenFileReference reference = documentId == null ? null : openFiles.get(documentId);
+        activeFileProvider = reference == null ? null : reference.provider;
+        activeFileEntry = reference == null ? null : reference.entry;
+    }
+
+    @Nullable
+    private String findOpenDocumentId(StorageProvider provider, StorageEntry entry) {
+        for (Map.Entry<String, OpenFileReference> item : openFiles.entrySet()) {
+            OpenFileReference reference = item.getValue();
+            if (reference.provider.getId().equals(provider.getId()) && sameEntry(reference.entry, entry)) {
+                return item.getKey();
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private String findDirtyOpenDocumentId(StorageEntry entry) {
+        for (Map.Entry<String, OpenFileReference> item : openFiles.entrySet()) {
+            if (sameEntry(item.getValue().entry, entry) && editorController.isDocumentDirty(item.getKey())) {
+                return item.getKey();
+            }
+        }
+        return null;
+    }
+
+    private void updateOpenFileEntry(StorageEntry oldEntry, StorageEntry newEntry, StorageProvider provider) {
+        List<String> ids = new ArrayList<>(openFiles.keySet());
+        for (String id : ids) {
+            OpenFileReference reference = openFiles.get(id);
+            if (reference != null && sameEntry(reference.entry, oldEntry)) {
+                openFiles.put(id, new OpenFileReference(provider, newEntry));
+                editorController.setDocumentName(id, newEntry.getName());
+            }
+        }
+        syncActiveFile(editorController.getActiveDocumentId());
+    }
+
+    private void closeOpenTabsForEntry(StorageEntry entry) {
+        List<String> ids = new ArrayList<>();
+        for (Map.Entry<String, OpenFileReference> item : openFiles.entrySet()) {
+            if (sameEntry(item.getValue().entry, entry)) ids.add(item.getKey());
+        }
+        for (String id : ids) editorController.closeDocumentWithoutPrompt(id);
     }
 
     /** Bind the folder button and editor save button after setContentView(). */
@@ -158,10 +234,8 @@ public final class FileManagerController {
     private void show(boolean saveAsMode) {
         if (destroyed || activity.isFinishing()) return;
 
-        if (managerDialog == null) {
-            managerDialog = new ManagerDialog(saveAsMode);
-        }
-
+        if (managerDialog == null) managerDialog = new ManagerDialog(saveAsMode);
+        else managerDialog.setSaveAsMode(saveAsMode);
         managerDialog.show();
     }
 
@@ -194,6 +268,8 @@ public final class FileManagerController {
             managerDialog.dismiss();
             managerDialog = null;
         }
+        editorController.setDocumentActionListener(null);
+        openFiles.clear();
         ioExecutor.shutdownNow();
     }
 
@@ -207,31 +283,15 @@ public final class FileManagerController {
             return;
         }
 
-        if (editorController.isDocumentDirty()) {
-            if (activeFileProvider == null || activeFileEntry == null) {
-                new AlertDialog.Builder(activity)
-                    .setTitle("Perubahan belum disimpan")
-                    .setMessage("Dokumen editor memiliki perubahan. Simpan sebagai file terlebih dahulu atau buang perubahan untuk membuka file lain.")
-                    .setPositiveButton("Save As", (dialog, which) -> {
-                        show(true);
-                        if (managerDialog != null) {
-                            managerDialog.pendingOpenAfterSave = () -> loadFileNow(provider, entry, afterOpen);
-                        }
-                    })
-                    .setNegativeButton("Buang", (dialog, which) -> loadFileNow(provider, entry, afterOpen))
-                    .setNeutralButton("Batal", null)
-                    .show();
-                return;
-            }
-            new AlertDialog.Builder(activity)
-                .setTitle("Perubahan belum disimpan")
-                .setMessage("Simpan perubahan pada " + activeFileEntry.getName() + " sebelum membuka file lain?")
-                .setPositiveButton("Simpan", (dialog, which) -> saveActiveFile(() -> loadFileNow(provider, entry, afterOpen)))
-                .setNegativeButton("Buang", (dialog, which) -> loadFileNow(provider, entry, afterOpen))
-                .setNeutralButton("Batal", null)
-                .show();
+        String existingDocumentId = findOpenDocumentId(provider, entry);
+        if (existingDocumentId != null && editorController.activateDocument(existingDocumentId)) {
+            if (managerDialog != null) managerDialog.dismiss();
+            if (afterOpen != null) afterOpen.run();
+            toast("Tab aktif: " + entry.getName());
             return;
         }
+        // Dokumen yang sedang diedit tetap berada di tab sebelumnya; membuka file lain
+        // tidak memaksa penyimpanan atau membuang perubahan.
         loadFileNow(provider, entry, afterOpen);
     }
 
@@ -242,10 +302,11 @@ public final class FileManagerController {
                 String content = readUtf8Text(provider, entry);
                 mainHandler.post(() -> {
                     if (destroyed) return;
-                    activeFileProvider = provider;
-                    activeFileEntry = entry;
-                    editorController.setDocumentContent(content, entry.getName());
+                    String documentId = provider.getId() + "::" + entry.getDocumentId();
+                    openFiles.put(documentId, new OpenFileReference(provider, entry));
+                    editorController.openDocument(documentId, content, entry.getName());
                     rememberRecent(entry);
+                    syncActiveFile(documentId);
                     if (managerDialog != null) managerDialog.dismiss();
                     if (afterOpen != null) afterOpen.run();
                     toast("Dibuka: " + entry.getName());
@@ -283,29 +344,31 @@ public final class FileManagerController {
     }
 
     private void saveActiveFile(@Nullable Runnable afterSave) {
-        if (activeFileProvider == null || activeFileEntry == null) {
+        String documentId = editorController.getActiveDocumentId();
+        OpenFileReference reference = documentId == null ? null : openFiles.get(documentId);
+        if (reference == null) {
             show(true);
+            if (afterSave != null && managerDialog != null) managerDialog.pendingOpenAfterSave = afterSave;
             return;
         }
-        final long savedRevision = editorController.getDocumentRevision();
-        final String content = editorController.getDocumentText();
-        final StorageProvider provider = activeFileProvider;
-        final StorageEntry entry = activeFileEntry;
+        final String targetDocumentId = documentId;
+        final long savedRevision = editorController.getDocumentRevision(targetDocumentId);
+        final String content = editorController.getDocumentText(targetDocumentId);
+        final StorageProvider provider = reference.provider;
+        final StorageEntry entry = reference.entry;
         ioExecutor.execute(() -> {
             try (OutputStream output = provider.openWrite(entry, false)) {
                 output.write(content.getBytes(StandardCharsets.UTF_8));
                 output.flush();
                 mainHandler.post(() -> {
                     if (destroyed) return;
-                    editorController.markDocumentSaved(savedRevision);
+                    editorController.markDocumentSaved(targetDocumentId, savedRevision);
                     toast("Disimpan: " + entry.getName());
                     if (afterSave != null) {
-                        if (editorController.isDocumentDirty()) {
+                        if (editorController.isDocumentDirty(targetDocumentId)) {
                             showError("Dokumen berubah saat disimpan",
-                                new IOException("Perubahan terbaru belum tersimpan. Simpan lagi sebelum membuka file lain."));
-                        } else {
-                            afterSave.run();
-                        }
+                                new IOException("Perubahan terbaru belum tersimpan. Simpan lagi sebelum menutup tab."));
+                        } else afterSave.run();
                     }
                 });
             } catch (IOException | RuntimeException error) {
@@ -316,8 +379,10 @@ public final class FileManagerController {
 
     private void saveAs(StorageProvider provider, StorageEntry parent, String name,
                         @Nullable Runnable afterSave) {
-        final long savedRevision = editorController.getDocumentRevision();
-        final String content = editorController.getDocumentText();
+        final String targetDocumentId = editorController.getActiveDocumentId();
+        if (targetDocumentId == null) { toast("Tidak ada dokumen yang aktif"); return; }
+        final long savedRevision = editorController.getDocumentRevision(targetDocumentId);
+        final String content = editorController.getDocumentText(targetDocumentId);
         ioExecutor.execute(() -> {
             StorageEntry created = null;
             try {
@@ -331,19 +396,17 @@ public final class FileManagerController {
                 StorageEntry savedEntry = created;
                 mainHandler.post(() -> {
                     if (destroyed) return;
-                    activeFileProvider = provider;
-                    activeFileEntry = savedEntry;
-                    editorController.setDocumentName(savedEntry.getName());
-                    editorController.markDocumentSaved(savedRevision);
+                    openFiles.put(targetDocumentId, new OpenFileReference(provider, savedEntry));
+                    editorController.setDocumentName(targetDocumentId, savedEntry.getName());
+                    editorController.markDocumentSaved(targetDocumentId, savedRevision);
+                    if (targetDocumentId.equals(editorController.getActiveDocumentId())) syncActiveFile(targetDocumentId);
                     toast("Disimpan sebagai " + savedEntry.getName());
                     if (managerDialog != null) managerDialog.dismiss();
                     if (afterSave != null) {
-                        if (editorController.isDocumentDirty()) {
+                        if (editorController.isDocumentDirty(targetDocumentId)) {
                             showError("Dokumen berubah saat disimpan",
-                                new IOException("Perubahan terbaru belum tersimpan. Simpan lagi sebelum membuka file lain."));
-                        } else {
-                            afterSave.run();
-                        }
+                                new IOException("Perubahan terbaru belum tersimpan. Simpan lagi sebelum menutup tab."));
+                        } else afterSave.run();
                     }
                 });
             } catch (IOException | RuntimeException error) {
@@ -515,7 +578,7 @@ public final class FileManagerController {
         private boolean initialized;
         
         private final Dialog dialog;
-        private final boolean initialSaveAsMode;
+        private boolean initialSaveAsMode;
         private final StorageSelection selection = new StorageSelection();
         private final Deque<StorageEntry> backStack = new ArrayDeque<>();
         private final List<Row> rows = new ArrayList<>();
@@ -578,6 +641,14 @@ public final class FileManagerController {
                 return true;
             });
             buildView();
+        }
+
+        void setSaveAsMode(boolean enabled) {
+            if (saveAsMode == enabled) return;
+            saveAsMode = enabled;
+            initialSaveAsMode = enabled;
+            if (actionBar != null) rebuildActionBar();
+            if (selectionBar != null) rebuildSelectionBar();
         }
 
         void show() {
@@ -1466,10 +1537,7 @@ public final class FileManagerController {
                         try {
                             StorageEntry renamed = fileOperations.rename(provider.getId(), entry, newName);
                             mainHandler.post(() -> {
-                                if (activeFileEntry != null && sameEntry(activeFileEntry, entry)) {
-                                    activeFileEntry = renamed;
-                                    editorController.setDocumentName(renamed.getName());
-                                }
+                                updateOpenFileEntry(entry, renamed, provider);
                                 replaceStoredEntry(KEY_FAVORITES, entry, renamed);
                                 replaceStoredEntry(KEY_RECENTS, entry, renamed);
                                 refreshVisible();
@@ -1496,9 +1564,8 @@ public final class FileManagerController {
                 : "Hapus file " + entry.getName() + "?";
             new AlertDialog.Builder(activity).setTitle("Delete").setMessage(message)
                 .setPositiveButton("Hapus", (dialog, which) -> {
-                    if (activeFileEntry != null && sameEntry(activeFileEntry, entry)
-                        && editorController.isDocumentDirty()) {
-                        toast("Simpan dokumen aktif sebelum menghapus file ini");
+                    if (findDirtyOpenDocumentId(entry) != null) {
+                        toast("Simpan atau tutup tab yang masih memiliki perubahan sebelum menghapus file ini");
                         return;
                     }
                     final StorageProvider activeProviderSnapshot = activeFileProvider;
@@ -1509,8 +1576,9 @@ public final class FileManagerController {
                         final boolean activeStillExists = activeProviderSnapshot == null
                             || activeEntrySnapshot == null || activeProviderSnapshot.exists(activeEntrySnapshot);
                         mainHandler.post(() -> {
-                            if (!activeStillExists) {
-                                activeFileEntry = null; activeFileProvider = null;
+                            if (!activeStillExists) syncActiveFile(editorController.getActiveDocumentId());
+                            if (result != null && result.getDeletedEntries() > 0 && !entry.isDirectory()) {
+                                closeOpenTabsForEntry(entry);
                             }
                             showDeleteResult(result);
                             refreshVisible();
@@ -1526,12 +1594,10 @@ public final class FileManagerController {
                 .setPositiveButton("Hapus", (dialog, which) -> {
                     StorageSelection snapshot = new StorageSelection();
                     for (StorageEntry entry : selection.getEntries()) snapshot.add(entry);
-                    if (editorController.isDocumentDirty() && activeFileEntry != null) {
-                        for (StorageEntry entry : snapshot.getEntries()) {
-                            if (sameEntry(activeFileEntry, entry)) {
-                                toast("Simpan dokumen aktif sebelum menghapusnya");
-                                return;
-                            }
+                    for (StorageEntry entry : snapshot.getEntries()) {
+                        if (findDirtyOpenDocumentId(entry) != null) {
+                            toast("Simpan atau tutup tab yang masih memiliki perubahan sebelum menghapusnya");
+                            return;
                         }
                     }
                     final StorageProvider activeProviderSnapshot = activeFileProvider;
@@ -1542,8 +1608,11 @@ public final class FileManagerController {
                         final boolean activeStillExists = activeProviderSnapshot == null
                             || activeEntrySnapshot == null || activeProviderSnapshot.exists(activeEntrySnapshot);
                         mainHandler.post(() -> {
-                            if (!activeStillExists) {
-                                activeFileEntry = null; activeFileProvider = null;
+                            if (!activeStillExists) syncActiveFile(editorController.getActiveDocumentId());
+                            if (result != null && result.getDeletedEntries() > 0) {
+                                for (StorageEntry entry : snapshot.getEntries()) {
+                                    if (!entry.isDirectory()) closeOpenTabsForEntry(entry);
+                                }
                             }
                             selection.clear(); selectionMode = false;
                             rebuildActionBar(); rebuildSelectionBar();
@@ -1611,9 +1680,10 @@ public final class FileManagerController {
                             mainHandler.post(() -> {
                                 if (destroyed) return;
                                 if (!directory) {
-                                    activeFileProvider = targetProvider;
-                                    activeFileEntry = created;
-                                    editorController.setDocumentContent("", created.getName());
+                                    String documentId = targetProvider.getId() + "::" + created.getDocumentId();
+                                    openFiles.put(documentId, new OpenFileReference(targetProvider, created));
+                                    editorController.openDocument(documentId, "", created.getName());
+                                    syncActiveFile(documentId);
                                     dismiss();
                                 } else refreshVisible();
                                 toast((directory ? "Folder" : "File") + " dibuat: " + name);
@@ -1646,11 +1716,10 @@ public final class FileManagerController {
             final StorageProvider activeProviderSnapshot = activeFileProvider;
             final StorageEntry activeEntrySnapshot = activeFileEntry;
             if (selected.isEmpty()) { toast("Tidak ada item yang dipilih"); return; }
-            if (operation == PendingTransfer.MOVE && editorController.isDocumentDirty()
-                && activeEntrySnapshot != null) {
+            if (operation == PendingTransfer.MOVE) {
                 for (StorageEntry source : selected) {
-                    if (sameEntry(source, activeEntrySnapshot)) {
-                        toast("Simpan dokumen aktif sebelum memindahkannya");
+                    if (findDirtyOpenDocumentId(source) != null) {
+                        toast("Simpan dokumen yang masih memiliki perubahan sebelum memindahkannya");
                         return;
                     }
                 }
@@ -1688,11 +1757,13 @@ public final class FileManagerController {
                 mainHandler.post(() -> {
                     showLoading(false);
                     if (movedActive != null) {
-                        activeFileProvider = destinationProvider;
-                        activeFileEntry = movedActive;
+                        String activeDocumentId = editorController.getActiveDocumentId();
+                        if (activeDocumentId != null) {
+                            openFiles.put(activeDocumentId, new OpenFileReference(destinationProvider, movedActive));
+                            syncActiveFile(activeDocumentId);
+                        }
                     } else if (operation == PendingTransfer.MOVE && !activeSourceStillExists) {
-                        activeFileProvider = null;
-                        activeFileEntry = null;
+                        syncActiveFile(editorController.getActiveDocumentId());
                     }
                     pendingTransfer = PendingTransfer.NONE;
                     selection.clear(); selectionMode = false;

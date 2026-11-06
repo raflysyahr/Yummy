@@ -1,6 +1,7 @@
 package com.termux.app.editor;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Application;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -9,8 +10,12 @@ import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.HorizontalScrollView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
@@ -26,6 +31,10 @@ import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry;
 import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel;
 import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver;
 import org.eclipse.tm4e.core.registry.IThemeSource;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Bagian editor kode pada layar Yummy. Sengaja terpisah dari panel terminal
@@ -44,12 +53,37 @@ public class EditorController {
     private CodeEditor mEditor;
     private TextView mStatusPos;
     private TextView mStatusIndent;
+    private LinearLayout mTabsContainer;
+    private HorizontalScrollView mTabsScroll;
 
-    // State dokumen dipakai FileManagerController untuk deteksi perubahan dan penyimpanan.
-    private String mDocumentName = "Main.py";
-    private long mDocumentRevision;
-    private long mSavedRevision;
+    private final List<EditorDocument> mDocuments = new ArrayList<>();
+    private EditorDocument mActiveDocument;
     private boolean mSuppressContentChanges;
+    private DocumentActionListener mDocumentActionListener;
+
+    /** Bridge ke FileManager agar aksi Save pada dialog close bisa menulis ke storage. */
+    public interface DocumentActionListener {
+        void onActiveDocumentChanged(@Nullable String documentId);
+        void onDocumentClosed(@NonNull String documentId);
+        void onSaveRequested(@NonNull String documentId, @NonNull Runnable onSaved);
+    }
+
+    private static final class EditorDocument {
+        final String id;
+        String name;
+        String text;
+        long revision;
+        long savedRevision;
+        boolean closePending;
+
+        EditorDocument(String id, String name, String text) {
+            this.id = id;
+            this.name = name;
+            this.text = text == null ? "" : text;
+        }
+
+        boolean isDirty() { return revision != savedRevision; }
+    }
 
     public EditorController(@NonNull Activity activity) {
         mActivity = activity;
@@ -62,78 +96,307 @@ public class EditorController {
 
         mStatusPos = mActivity.findViewById(R.id.yummy_status_pos);
         mStatusIndent = mActivity.findViewById(R.id.yummy_status_indent);
+        mTabsContainer = mActivity.findViewById(R.id.yummy_tabs_container);
+        mTabsScroll = mActivity.findViewById(R.id.yummy_tabs_scroll);
+
         configureEditor();
         configurePythonLanguage();
         bindKeys();
 
         mEditor.subscribeEvent(SelectionChangeEvent.class, (event, unsubscribe) -> updateStatus());
         mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
-            if (!mSuppressContentChanges) {
-                mDocumentRevision++;
+            if (!mSuppressContentChanges && mActiveDocument != null) {
+                mActiveDocument.revision++;
+                mActiveDocument.text = mEditor.getText().toString();
+                renderTabs();
             }
             updateStatus();
         });
 
-        // Dokumen contoh awal dianggap bersih, sama seperti dokumen yang baru dimuat.
-        setDocumentContent(SAMPLE, "Main.py");
+        // Dokumen awal tetap tersedia sebagai tab awal, tetapi belum terhubung ke file storage.
+        EditorDocument initial = new EditorDocument("yummy:initial:" + UUID.randomUUID(), "Main.py", SAMPLE);
+        initial.revision = 1;
+        initial.savedRevision = 1;
+        mDocuments.add(initial);
+        activateDocumentInternal(initial, false);
+        renderTabs();
         updateStatus();
 
         mActivity.getApplication().registerActivityLifecycleCallbacks(mLifecycle);
     }
 
-    /** Mengganti isi dokumen, misalnya ketika File Manager membuka file. */
+    public void setDocumentActionListener(@Nullable DocumentActionListener listener) {
+        mDocumentActionListener = listener;
+        notifyActiveDocumentChanged();
+    }
+
+    /** Membuka dokumen sebagai tab baru; file yang sudah terbuka cukup diaktifkan kembali. */
+    public void openDocument(@NonNull String documentId, String content, @NonNull String name) {
+        EditorDocument document = findDocument(documentId);
+        if (document != null) {
+            activateDocumentInternal(document, true);
+            return;
+        }
+        document = new EditorDocument(documentId, name, content);
+        document.revision = 1;
+        document.savedRevision = 1;
+        mDocuments.add(document);
+        activateDocumentInternal(document, true);
+    }
+
+    /** Mengaktifkan tab yang sudah ada. Mengembalikan false bila ID tidak ditemukan. */
+    public boolean activateDocument(@NonNull String documentId) {
+        EditorDocument document = findDocument(documentId);
+        if (document == null) return false;
+        if (document != mActiveDocument) activateDocumentInternal(document, true);
+        return true;
+    }
+
+    public boolean hasDocument(@NonNull String documentId) {
+        return findDocument(documentId) != null;
+    }
+
+    @Nullable
+    public String getActiveDocumentId() {
+        return mActiveDocument == null ? null : mActiveDocument.id;
+    }
+
+    /** Kompatibilitas dengan pemanggil lama: ganti isi tab aktif, bukan membuat tab baru. */
     public void setDocumentContent(String content, String name) {
-        if (name != null && !name.trim().isEmpty()) {
-            setDocumentName(name);
+        if (mActiveDocument == null) {
+            EditorDocument document = new EditorDocument(
+                "yummy:untitled:" + UUID.randomUUID(),
+                name == null || name.trim().isEmpty() ? "Untitled" : name,
+                content
+            );
+            mDocuments.add(document);
+            activateDocumentInternal(document, false);
+        } else {
+            if (name != null && !name.trim().isEmpty()) mActiveDocument.name = name;
+            mActiveDocument.text = content == null ? "" : content;
+            mActiveDocument.revision++;
+            mActiveDocument.savedRevision = mActiveDocument.revision;
+            applyActiveDocumentText();
         }
-        if (mEditor == null) return;
-
-        mSuppressContentChanges = true;
-        try {
-            mEditor.setText(content == null ? "" : content);
-        } finally {
-            mSuppressContentChanges = false;
-        }
-
-        // File yang baru dimuat atau dibuat menjadi baseline bersih.
-        mDocumentRevision++;
-        mSavedRevision = mDocumentRevision;
+        renderTabs();
         updateStatus();
     }
 
-    /** Mengambil teks terkini dari Sora Editor. */
     @NonNull
     public String getDocumentText() {
-        return mEditor == null ? "" : mEditor.getText().toString();
+        if (mActiveDocument == null) return "";
+        if (mEditor != null) mActiveDocument.text = mEditor.getText().toString();
+        return mActiveDocument.text;
     }
 
-    /** Nama dokumen aktif, digunakan sebagai nama default pada Save As. */
+    @NonNull
+    public String getDocumentText(@NonNull String documentId) {
+        EditorDocument document = findDocument(documentId);
+        if (document == null) return "";
+        if (document == mActiveDocument && mEditor != null) {
+            document.text = mEditor.getText().toString();
+        }
+        return document.text;
+    }
+
     @NonNull
     public String getDocumentName() {
-        return mDocumentName;
+        return mActiveDocument == null ? "Untitled" : mActiveDocument.name;
     }
 
-    /** Memperbarui nama dokumen dan judul editor. */
     public void setDocumentName(String name) {
-        if (name == null || name.trim().isEmpty()) return;
-        mDocumentName = name;
-        TextView title = mActivity.findViewById(R.id.yummy_title);
-        if (title != null) title.setText(name);
+        if (mActiveDocument == null || name == null || name.trim().isEmpty()) return;
+        setDocumentName(mActiveDocument.id, name);
     }
 
-    /** Nomor revisi konten saat ini. */
+    public void setDocumentName(@NonNull String documentId, String name) {
+        EditorDocument document = findDocument(documentId);
+        if (document == null || name == null || name.trim().isEmpty()) return;
+        document.name = name;
+        if (document == mActiveDocument) updateTitle();
+        renderTabs();
+    }
+
     public long getDocumentRevision() {
-        return mDocumentRevision;
+        return mActiveDocument == null ? 0 : mActiveDocument.revision;
     }
 
-    /** Menandai revisi yang benar-benar sudah selesai ditulis ke storage. */
+    public long getDocumentRevision(@NonNull String documentId) {
+        EditorDocument document = findDocument(documentId);
+        return document == null ? 0 : document.revision;
+    }
+
     public void markDocumentSaved(long revision) {
-        mSavedRevision = revision;
+        if (mActiveDocument != null) markDocumentSaved(mActiveDocument.id, revision);
     }
 
-    /** Bernilai true bila editor berubah setelah revisi terakhir yang disimpan. */
+    public void markDocumentSaved(@NonNull String documentId, long revision) {
+        EditorDocument document = findDocument(documentId);
+        if (document == null) return;
+        document.savedRevision = revision;
+        renderTabs();
+    }
+
     public boolean isDocumentDirty() {
-        return mDocumentRevision != mSavedRevision;
+        return mActiveDocument != null && mActiveDocument.isDirty();
+    }
+
+    public boolean isDocumentDirty(@NonNull String documentId) {
+        EditorDocument document = findDocument(documentId);
+        return document != null && document.isDirty();
+    }
+
+    /** Meminta tutup tab; dokumen kotor menawarkan Simpan, Jangan Simpan, atau Batal. */
+    public void closeDocument(@NonNull String documentId) {
+        EditorDocument document = findDocument(documentId);
+        if (document == null || document.closePending) return;
+        if (document != mActiveDocument) activateDocumentInternal(document, true);
+        if (!document.isDirty()) {
+            closeDocumentNow(documentId);
+            return;
+        }
+        document.closePending = true;
+        new AlertDialog.Builder(mActivity)
+            .setTitle("Perubahan belum disimpan")
+            .setMessage("Simpan perubahan pada " + document.name + " sebelum menutup tab?")
+            .setPositiveButton("Simpan", (dialog, which) -> {
+                document.closePending = false;
+                if (mDocumentActionListener == null) return;
+                mDocumentActionListener.onSaveRequested(documentId, () -> closeDocumentNow(documentId));
+            })
+            .setNegativeButton("Jangan Simpan", (dialog, which) -> {
+                document.closePending = false;
+                closeDocumentNow(documentId);
+            })
+            .setNeutralButton("Batal", (dialog, which) -> document.closePending = false)
+            .setOnCancelListener(dialog -> document.closePending = false)
+            .show();
+    }
+
+    /** Dipakai FileManager saat file dihapus; tidak menampilkan konfirmasi kedua. */
+    public void closeDocumentWithoutPrompt(@NonNull String documentId) {
+        closeDocumentNow(documentId);
+    }
+
+    private EditorDocument findDocument(String id) {
+        for (EditorDocument document : mDocuments) {
+            if (document.id.equals(id)) return document;
+        }
+        return null;
+    }
+
+    private void activateDocumentInternal(EditorDocument document, boolean notify) {
+        if (mActiveDocument != null && mEditor != null) {
+            mActiveDocument.text = mEditor.getText().toString();
+        }
+        mActiveDocument = document;
+        applyActiveDocumentText();
+        updateTitle();
+        updateStatus();
+        renderTabs();
+        if (notify) notifyActiveDocumentChanged();
+    }
+
+    private void applyActiveDocumentText() {
+        if (mEditor == null) return;
+        mSuppressContentChanges = true;
+        try {
+            mEditor.setText(mActiveDocument == null ? "" : mActiveDocument.text);
+        } finally {
+            mSuppressContentChanges = false;
+        }
+    }
+
+    private void updateTitle() {
+        TextView title = mActivity.findViewById(R.id.yummy_title);
+        if (title != null) title.setText(mActiveDocument == null ? "Yummy" : mActiveDocument.name);
+    }
+
+    private void notifyActiveDocumentChanged() {
+        if (mDocumentActionListener != null) {
+            mDocumentActionListener.onActiveDocumentChanged(getActiveDocumentId());
+        }
+    }
+
+    private void closeDocumentNow(String documentId) {
+        EditorDocument document = findDocument(documentId);
+        if (document == null) return;
+        int index = mDocuments.indexOf(document);
+        boolean wasActive = document == mActiveDocument;
+        mDocuments.remove(document);
+        if (mDocumentActionListener != null) mDocumentActionListener.onDocumentClosed(documentId);
+        if (wasActive) {
+            EditorDocument next = mDocuments.isEmpty()
+                ? null : mDocuments.get(Math.min(index, mDocuments.size() - 1));
+            mActiveDocument = next;
+            applyActiveDocumentText();
+            updateTitle();
+            updateStatus();
+            notifyActiveDocumentChanged();
+        }
+        renderTabs();
+    }
+
+    private void renderTabs() {
+        if (mTabsContainer == null) return;
+        mTabsContainer.removeAllViews();
+        for (EditorDocument document : mDocuments) {
+            final boolean active = document == mActiveDocument;
+            LinearLayout tab = new LinearLayout(mActivity);
+            tab.setOrientation(LinearLayout.HORIZONTAL);
+            tab.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            tab.setPadding(dpInt(10), 0, dpInt(6), 0);
+            tab.setBackgroundResource(active ? R.drawable.yummy_bg_tab_active : android.R.color.transparent);
+            tab.setClickable(true);
+            tab.setFocusable(true);
+
+            ImageView icon = new ImageView(mActivity);
+            icon.setImageResource(R.drawable.ic_yummy_file);
+            icon.setColorFilter(ContextCompat.getColor(mActivity,
+                active ? R.color.yummy_accent_green : R.color.yummy_text_dim));
+            tab.addView(icon, new LinearLayout.LayoutParams(dpInt(17), dpInt(17)));
+
+            TextView name = new TextView(mActivity);
+            name.setText(document.name);
+            name.setTextColor(ContextCompat.getColor(mActivity,
+                active ? R.color.yummy_text : R.color.yummy_text_dim));
+            name.setTextSize(14f);
+            name.setSingleLine(true);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            nameParams.setMargins(dpInt(8), 0, dpInt(5), 0);
+            tab.addView(name, nameParams);
+
+            if (document.isDirty()) {
+                TextView dirty = new TextView(mActivity);
+                dirty.setText("•");
+                dirty.setTextColor(ContextCompat.getColor(mActivity, R.color.yummy_text));
+                dirty.setTextSize(16f);
+                tab.addView(dirty, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
+
+            TextView close = new TextView(mActivity);
+            close.setText("×");
+            close.setTextColor(ContextCompat.getColor(mActivity, R.color.yummy_text_dim));
+            close.setTextSize(20f);
+            close.setGravity(android.view.Gravity.CENTER);
+            close.setContentDescription("Tutup " + document.name);
+            LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dpInt(27), -1);
+            closeParams.setMargins(dpInt(4), 0, 0, 0);
+            tab.addView(close, closeParams);
+            close.setOnClickListener(view -> closeDocument(document.id));
+            tab.setOnClickListener(view -> activateDocument(document.id));
+
+            LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT);
+            mTabsContainer.addView(tab, tabParams);
+        }
+    }
+
+    private int dpInt(float value) {
+        return Math.round(value * mActivity.getResources().getDisplayMetrics().density);
     }
 
     private void configureEditor() {
