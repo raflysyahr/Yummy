@@ -19,17 +19,23 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Persists editor documents and File Manager navigation independently from the
- * Activity lifecycle. Writes run on one background thread and use AtomicFile so
- * a process kill cannot leave a half-written session manifest.
+ * Persists workspace metadata and text-only recovery patches.
+ *
+ * Clean, storage-backed documents only persist their tab metadata. Dirty documents persist
+ * a line patch relative to the exact source-file fingerprint captured when editing began.
+ * The original file is never modified by session recovery.
  */
 public final class WorkspaceSessionManager {
 
@@ -39,9 +45,12 @@ public final class WorkspaceSessionManager {
 
     private static final String EDITOR_FILE = "editor.json";
     private static final String FILE_MANAGER_FILE = "filemanager.json";
+    private static final String RECOVERY_DIRECTORY = "recovery";
+    private static final int MAX_TRACE_CELLS = 4_000_000;
 
     private final File sessionDirectory;
-    private final File documentsDirectory;
+    private final File legacyDocumentsDirectory;
+    private final File recoveryDirectory;
     private final File editorManifest;
     private final File fileManagerManifest;
     private final ExecutorService ioExecutor;
@@ -58,7 +67,8 @@ public final class WorkspaceSessionManager {
         Context appContext = context.getApplicationContext();
         this.listener = listener;
         sessionDirectory = new File(appContext.getFilesDir(), "yummy-session");
-        documentsDirectory = new File(sessionDirectory, "documents");
+        legacyDocumentsDirectory = new File(sessionDirectory, "documents");
+        recoveryDirectory = new File(sessionDirectory, RECOVERY_DIRECTORY);
         editorManifest = new File(sessionDirectory, EDITOR_FILE);
         fileManagerManifest = new File(sessionDirectory, FILE_MANAGER_FILE);
         ioExecutor = Executors.newSingleThreadExecutor(runnable -> {
@@ -82,21 +92,47 @@ public final class WorkspaceSessionManager {
                 if (stored == null) continue;
                 try {
                     JSONObject restored = new JSONObject(stored.toString());
-                    String contentFile = restored.optString("contentFile", "");
-                    String text = restored.optString("text", "");
-                    if (!contentFile.isEmpty()) {
+                    String id = restored.optString("id", "");
+                    boolean storageBacked = restored.optBoolean(
+                        "storageBacked", id.contains("::")
+                    );
+                    restored.put("storageBacked", storageBacked);
+
+                    String recoveryFile = restored.optString("recoveryFile", "");
+                    if (!recoveryFile.isEmpty()) {
                         try {
-                            text = readText(new File(documentsDirectory, contentFile));
-                        } catch (IOException error) {
-                            // Keep the tab metadata even if its cached content cannot be read.
-                            // This prevents one damaged/missing document cache from aborting
-                            // restoration of every other open tab.
+                            JSONObject patch = readJson(new File(recoveryDirectory, recoveryFile));
+                            if (patch != null) restored.put("recoveryPatch", patch);
+                        } catch (RuntimeException error) {
                             android.util.Log.e("YummySession",
-                                "Could not restore cached content for document "
-                                    + restored.optString("id", ""), error);
+                                "Could not load recovery patch for " + id, error);
                         }
                     }
-                    restored.put("text", text);
+
+                    // Backward compatibility with the earlier full-document cache format.
+                    // Storage-backed legacy text is not automatically replayed because the
+                    // old format did not record a source fingerprint and therefore cannot
+                    // prove that the underlying file is unchanged.
+                    String legacyContentFile = restored.optString("contentFile", "");
+                    if (!legacyContentFile.isEmpty()) {
+                        try {
+                            String legacyText = readText(
+                                new File(legacyDocumentsDirectory, legacyContentFile)
+                            );
+                            if (storageBacked) {
+                                if (restored.optLong("revision", 0L)
+                                    != restored.optLong("savedRevision", 0L)) {
+                                    restored.put("legacyRecoveryText", legacyText);
+                                    restored.put("legacyRecoveryUnverified", true);
+                                }
+                            } else if (!restored.has("baseText")) {
+                                restored.put("baseText", legacyText);
+                            }
+                        } catch (IOException error) {
+                            android.util.Log.e("YummySession",
+                                "Could not read legacy document cache for " + id, error);
+                        }
+                    }
                     restoredDocuments.put(restored);
                 } catch (JSONException error) {
                     android.util.Log.e("YummySession", "Invalid editor document metadata", error);
@@ -112,44 +148,17 @@ public final class WorkspaceSessionManager {
         return manifest;
     }
 
-    /** A detached JSON snapshot is captured by the caller before this async write. */
+    /** A detached JSON snapshot is captured by the caller before this asynchronous write. */
     public void saveEditorSession(@NonNull JSONObject snapshot) {
         final JSONObject detached = copy(snapshot);
         submitWrite(() -> writeEditorSession(detached));
     }
 
-    /**
-     * Enqueues a final editor checkpoint behind all earlier writes and waits until
-     * it is durably committed. Use only at Activity stop/destroy, never while typing.
-     * This closes the window where Android kills the process before the async writer
-     * has had a chance to persist the last unsaved edits.
-     */
+    /** Final editor checkpoint; waits behind all earlier writes. */
     public boolean saveEditorSessionBlocking(@NonNull JSONObject snapshot) {
         final JSONObject detached = copy(snapshot);
-        final CountDownLatch completed = new CountDownLatch(1);
-        final AtomicBoolean success = new AtomicBoolean(false);
-        submitWrite(() -> {
-            try {
-                writeEditorSession(detached);
-                success.set(true);
-            } finally {
-                completed.countDown();
-            }
-        });
-        try {
-            // Editor documents are bounded by the File Manager's text-file limit.
-            // Wait for the serial queue so an older queued snapshot cannot overwrite
-            // this final, newest snapshot after the Activity has stopped.
-            if (!completed.await(15, TimeUnit.SECONDS)) {
-                android.util.Log.e("YummySession", "Timed out waiting for final editor session write");
-                return false;
-            }
-            return success.get();
-        } catch (InterruptedException error) {
-            Thread.currentThread().interrupt();
-            android.util.Log.e("YummySession", "Interrupted while committing final editor session", error);
-            return false;
-        }
+        return submitWriteBlocking(() -> writeEditorSession(detached),
+            "Timed out waiting for final editor session write");
     }
 
     @Nullable
@@ -162,16 +171,49 @@ public final class WorkspaceSessionManager {
         submitWrite(() -> writeJsonAtomically(fileManagerManifest, detached));
     }
 
+    /** Final File Manager checkpoint so tab-to-provider references cannot lag behind editor.json. */
+    public boolean saveFileManagerSessionBlocking(@NonNull JSONObject snapshot) {
+        final JSONObject detached = copy(snapshot);
+        return submitWriteBlocking(() -> writeJsonAtomically(fileManagerManifest, detached),
+            "Timed out waiting for final File Manager session write");
+    }
+
+    private boolean submitWriteBlocking(@NonNull IoWrite write, @NonNull String timeoutMessage) {
+        final CountDownLatch completed = new CountDownLatch(1);
+        final AtomicBoolean success = new AtomicBoolean(false);
+        submitWrite(() -> {
+            try {
+                write.run();
+                success.set(true);
+            } finally {
+                completed.countDown();
+            }
+        });
+        try {
+            if (!completed.await(15, TimeUnit.SECONDS)) {
+                android.util.Log.e("YummySession", timeoutMessage);
+                return false;
+            }
+            return success.get();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            android.util.Log.e("YummySession", "Interrupted while committing workspace session", error);
+            return false;
+        }
+    }
+
+    /**
+     * Converts in-memory document text into a compact patch before writing the manifest.
+     * For storage-backed documents, neither the base text nor current full text is persisted.
+     */
     private void writeEditorSession(JSONObject snapshot) throws IOException {
-        if (!sessionDirectory.exists() && !sessionDirectory.mkdirs()) {
-            throw new IOException("Could not create workspace session directory");
-        }
-        if (!documentsDirectory.exists() && !documentsDirectory.mkdirs()) {
-            throw new IOException("Could not create workspace documents directory");
-        }
+        ensureDirectory(sessionDirectory);
+        ensureDirectory(recoveryDirectory);
 
         JSONArray documents = snapshot.optJSONArray("documents");
         JSONArray manifestDocuments = new JSONArray();
+        List<String> keepRecoveryFiles = new ArrayList<>();
+
         if (documents != null) {
             for (int i = 0; i < documents.length(); i++) {
                 JSONObject source = documents.optJSONObject(i);
@@ -186,20 +228,68 @@ public final class WorkspaceSessionManager {
 
                 String id = metadata.optString("id", "");
                 if (id.isEmpty()) continue;
-                String content = metadata.optString("text", "");
-                String contentFile = UUID.nameUUIDFromBytes(
-                    id.getBytes(StandardCharsets.UTF_8)
-                ).toString() + ".txt";
-                writeAtomically(new File(documentsDirectory, contentFile),
-                    content.getBytes(StandardCharsets.UTF_8));
 
+                boolean storageBacked = metadata.optBoolean("storageBacked", id.contains("::"));
+                long revision = metadata.optLong("revision", 0L);
+                long savedRevision = metadata.optLong("savedRevision", revision);
+                boolean dirty = revision != savedRevision;
+                String currentText = metadata.optString("text", "");
+                String baseText = metadata.optString("baseText", "");
+                String baseSha256 = metadata.optString("baseSha256", "");
+
+                JSONObject recoveryPatch = null;
+                if (dirty && metadata.optBoolean("preserveRecoveryPatch", false)) {
+                    recoveryPatch = metadata.optJSONObject("recoveryPatch");
+                }
+                if (dirty && recoveryPatch == null) {
+                    recoveryPatch = createTextPatch(baseText, currentText);
+                }
+
+                if (dirty && recoveryPatch != null) {
+                    if (baseSha256.isEmpty()) {
+                        baseSha256 = sha256(baseText.getBytes(StandardCharsets.UTF_8));
+                    }
+                    String recoveryName = recoveryFileName(id);
+                    recoveryName = recoveryName.substring(0, recoveryName.length() - 5)
+                        + "_" + UUID.randomUUID() + ".json";
+                    File recoveryFile = new File(recoveryDirectory, recoveryName);
+                    try {
+                        recoveryPatch.put("baseSha256", baseSha256);
+                        recoveryPatch.put("version", 1);
+                    } catch (JSONException error) {
+                        throw new IOException("Could not attach patch fingerprint", error);
+                    }
+                    writeJsonAtomically(recoveryFile, recoveryPatch);
+                    try {
+                        metadata.put("recoveryFile", recoveryName);
+                    } catch (JSONException error) {
+                        throw new IOException("Could not reference recovery patch", error);
+                    }
+                    keepRecoveryFiles.add(recoveryName);
+                } else {
+                    metadata.remove("recoveryFile");
+                }
+
+                metadata.remove("recoveryPatch");
+                metadata.remove("preserveRecoveryPatch");
+                metadata.remove("legacyRecoveryText");
+                metadata.remove("legacyRecoveryUnverified");
+                metadata.remove("contentFile");
                 metadata.remove("text");
                 try {
-                    metadata.put("contentFile", contentFile);
+                    metadata.put("storageBacked", storageBacked);
+                    metadata.put("baseSha256", baseSha256);
+                    if (storageBacked) {
+                        metadata.remove("baseText");
+                    } else {
+                        // Non-storage-backed starter/untitled documents have no external source
+                        // to reload; retain their baseline, while still storing only a patch.
+                        metadata.put("baseText", baseText);
+                    }
+                    manifestDocuments.put(metadata);
                 } catch (JSONException error) {
-                    throw new IOException("Could not write editor document metadata", error);
+                    throw new IOException("Could not write document session metadata", error);
                 }
-                manifestDocuments.put(metadata);
             }
         }
 
@@ -209,7 +299,26 @@ public final class WorkspaceSessionManager {
         } catch (JSONException error) {
             throw new IOException("Could not build editor session manifest", error);
         }
+
+        // Commit the manifest before pruning old patch generations. If the process stops
+        // before the manifest commit, its previously referenced patch files remain intact.
         writeJsonAtomically(editorManifest, snapshot);
+        pruneRecoveryFiles(keepRecoveryFiles);
+    }
+
+    private void pruneRecoveryFiles(List<String> keepFiles) {
+        File[] files = recoveryDirectory.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isFile() && !keepFiles.contains(file.getName())) {
+                //noinspection ResultOfMethodCallIgnored
+                file.delete();
+            }
+        }
+    }
+
+    private String recoveryFileName(String documentId) {
+        return sha256(documentId.getBytes(StandardCharsets.UTF_8)) + ".json";
     }
 
     private void submitWrite(@NonNull IoWrite write) {
@@ -258,8 +367,6 @@ public final class WorkspaceSessionManager {
         }
         if (listener == null || !finished) return;
 
-        // Keep the green rotating state visible briefly even when a small session
-        // finishes in a few milliseconds. A later write cancels this idle transition.
         mainHandler.postDelayed(() -> {
             synchronized (stateLock) {
                 if (pendingWrites != 0 || completedGeneration != writeGeneration) return;
@@ -323,6 +430,12 @@ public final class WorkspaceSessionManager {
         }
     }
 
+    private void ensureDirectory(File directory) throws IOException {
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw new IOException("Could not create " + directory.getAbsolutePath());
+        }
+    }
+
     private JSONObject copy(JSONObject source) {
         try {
             return new JSONObject(source.toString());
@@ -332,7 +445,241 @@ public final class WorkspaceSessionManager {
         }
     }
 
+    /** SHA-256 helper shared with File Manager when a source file is opened or saved. */
+    @NonNull
+    public static String sha256(@NonNull byte[] bytes) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+            char[] hex = new char[digest.length * 2];
+            final char[] digits = "0123456789abcdef".toCharArray();
+            for (int i = 0; i < digest.length; i++) {
+                int value = digest[i] & 0xff;
+                hex[i * 2] = digits[value >>> 4];
+                hex[i * 2 + 1] = digits[value & 0x0f];
+            }
+            return new String(hex);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is not available", impossible);
+        }
+    }
+
+    /** Applies a patch only to a base whose SHA-256 has already been validated by the caller. */
+    @Nullable
+    public static String applyTextPatch(@NonNull String baseText, @NonNull JSONObject patch) {
+        if (!"yummy-line-patch-v1".equals(patch.optString("format", ""))) return null;
+        JSONArray hunks = patch.optJSONArray("hunks");
+        if (hunks == null) return null;
+        List<String> baseLines = splitLines(baseText);
+        StringBuilder result = new StringBuilder(baseText.length());
+        int cursor = 0;
+        for (int i = 0; i < hunks.length(); i++) {
+            JSONObject hunk = hunks.optJSONObject(i);
+            if (hunk == null) return null;
+            int start = hunk.optInt("start", -1);
+            int deleteCount = hunk.optInt("delete", -1);
+            JSONArray insert = hunk.optJSONArray("insert");
+            if (start < cursor || deleteCount < 0 || start > baseLines.size()
+                || start + deleteCount > baseLines.size() || insert == null) return null;
+            for (int line = cursor; line < start; line++) result.append(baseLines.get(line));
+            for (int line = 0; line < insert.length(); line++) {
+                Object value = insert.opt(line);
+                if (!(value instanceof String)) return null;
+                result.append((String) value);
+            }
+            cursor = start + deleteCount;
+        }
+        for (int line = cursor; line < baseLines.size(); line++) result.append(baseLines.get(line));
+        return result.toString();
+    }
+
+    private JSONObject createTextPatch(String baseText, String currentText) throws IOException {
+        List<String> baseLines = splitLines(baseText);
+        List<String> currentLines = splitLines(currentText);
+        List<LineEdit> edits = myersDiff(baseLines, currentLines);
+        JSONArray hunks = new JSONArray();
+        int baseIndex = 0;
+        JSONObject activeHunk = null;
+        JSONArray insertedLines = null;
+        int deleteCount = 0;
+
+        for (LineEdit edit : edits) {
+            if (edit.type == LineEdit.EQUAL) {
+                if (activeHunk != null) {
+                    finishHunk(activeHunk, insertedLines, deleteCount, hunks);
+                    activeHunk = null;
+                    insertedLines = null;
+                    deleteCount = 0;
+                }
+                baseIndex++;
+            } else {
+                if (activeHunk == null) {
+                    activeHunk = new JSONObject();
+                    insertedLines = new JSONArray();
+                    try { activeHunk.put("start", baseIndex); }
+                    catch (JSONException error) { throw new IOException("Could not create patch hunk", error); }
+                }
+                if (edit.type == LineEdit.DELETE) {
+                    deleteCount++;
+                    baseIndex++;
+                } else if (edit.type == LineEdit.INSERT) {
+                    insertedLines.put(edit.line);
+                }
+            }
+        }
+        if (activeHunk != null) finishHunk(activeHunk, insertedLines, deleteCount, hunks);
+
+        JSONObject patch = new JSONObject();
+        try {
+            patch.put("format", "yummy-line-patch-v1");
+            patch.put("hunks", hunks);
+        } catch (JSONException error) {
+            throw new IOException("Could not serialize text patch", error);
+        }
+        return patch;
+    }
+
+    private void finishHunk(JSONObject hunk, JSONArray inserted, int deleted, JSONArray target)
+        throws IOException {
+        try {
+            hunk.put("delete", deleted);
+            hunk.put("insert", inserted);
+            target.put(hunk);
+        } catch (JSONException error) {
+            throw new IOException("Could not finish patch hunk", error);
+        }
+    }
+
+    private static final class LineEdit {
+        static final int EQUAL = 0;
+        static final int DELETE = 1;
+        static final int INSERT = 2;
+        final int type;
+        final String line;
+        LineEdit(int type, String line) { this.type = type; this.line = line; }
+    }
+
+    private static List<String> splitLines(String text) {
+        List<String> lines = new ArrayList<>();
+        if (text == null || text.isEmpty()) return lines;
+        int start = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                lines.add(text.substring(start, i + 1));
+                start = i + 1;
+            }
+        }
+        if (start < text.length()) lines.add(text.substring(start));
+        return lines;
+    }
+
+    /** Myers line diff with a bounded trace; huge/highly divergent files use one safe hunk. */
+    private List<LineEdit> myersDiff(List<String> before, List<String> after) {
+        int n = before.size();
+        int m = after.size();
+        int max = n + m;
+        if (max == 0) return new ArrayList<>();
+        int offset = max + 1;
+        int[] v = new int[(2 * max) + 3];
+        v[offset + 1] = 0;
+        List<int[]> trace = new ArrayList<>();
+        int endD = -1;
+
+        for (int d = 0; d <= max; d++) {
+            if ((long) (d + 1) * v.length > MAX_TRACE_CELLS) {
+                return singleHunkDiff(before, after);
+            }
+            for (int k = -d; k <= d; k += 2) {
+                int index = offset + k;
+                int x;
+                if (k == -d || (k != d && v[index - 1] < v[index + 1])) {
+                    x = v[index + 1];
+                } else {
+                    x = v[index - 1] + 1;
+                }
+                int y = x - k;
+                while (x < n && y < m && before.get(x).equals(after.get(y))) {
+                    x++;
+                    y++;
+                }
+                v[index] = x;
+                if (x >= n && y >= m) {
+                    endD = d;
+                    break;
+                }
+            }
+            trace.add(v.clone());
+            if (endD >= 0) break;
+        }
+        if (endD < 0) return singleHunkDiff(before, after);
+
+        List<LineEdit> reversed = new ArrayList<>();
+        int x = n;
+        int y = m;
+        for (int d = endD; d > 0; d--) {
+            int[] previous = trace.get(d - 1);
+            int k = x - y;
+            int previousK;
+            if (k == -d || (k != d && previous[offset + k - 1] < previous[offset + k + 1])) {
+                previousK = k + 1;
+            } else {
+                previousK = k - 1;
+            }
+            int previousX = previous[offset + previousK];
+            int previousY = previousX - previousK;
+            while (x > previousX && y > previousY) {
+                reversed.add(new LineEdit(LineEdit.EQUAL, before.get(x - 1)));
+                x--;
+                y--;
+            }
+            if (x == previousX) {
+                reversed.add(new LineEdit(LineEdit.INSERT, after.get(y - 1)));
+                y--;
+            } else {
+                reversed.add(new LineEdit(LineEdit.DELETE, before.get(x - 1)));
+                x--;
+            }
+        }
+        while (x > 0 && y > 0) {
+            reversed.add(new LineEdit(LineEdit.EQUAL, before.get(x - 1)));
+            x--;
+            y--;
+        }
+        while (x > 0) {
+            reversed.add(new LineEdit(LineEdit.DELETE, before.get(x - 1)));
+            x--;
+        }
+        while (y > 0) {
+            reversed.add(new LineEdit(LineEdit.INSERT, after.get(y - 1)));
+            y--;
+        }
+        List<LineEdit> result = new ArrayList<>(reversed.size());
+        for (int i = reversed.size() - 1; i >= 0; i--) result.add(reversed.get(i));
+        return result;
+    }
+
     private interface IoWrite {
         void run() throws IOException;
+    }
+
+    private List<LineEdit> singleHunkDiff(List<String> before, List<String> after) {
+        int prefix = 0;
+        while (prefix < before.size() && prefix < after.size()
+            && before.get(prefix).equals(after.get(prefix))) prefix++;
+        int suffix = 0;
+        while (suffix < before.size() - prefix && suffix < after.size() - prefix
+            && before.get(before.size() - 1 - suffix)
+                .equals(after.get(after.size() - 1 - suffix))) suffix++;
+        List<LineEdit> result = new ArrayList<>();
+        for (int i = 0; i < prefix; i++) result.add(new LineEdit(LineEdit.EQUAL, before.get(i)));
+        for (int i = prefix; i < before.size() - suffix; i++) {
+            result.add(new LineEdit(LineEdit.DELETE, before.get(i)));
+        }
+        for (int i = prefix; i < after.size() - suffix; i++) {
+            result.add(new LineEdit(LineEdit.INSERT, after.get(i)));
+        }
+        for (int i = suffix; i > 0; i--) {
+            result.add(new LineEdit(LineEdit.EQUAL, before.get(before.size() - i)));
+        }
+        return result;
     }
 }

@@ -1,6 +1,7 @@
 package com.termux.app.filemanager.ui;
 
 import android.app.Activity;
+import android.app.Application;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
@@ -132,6 +133,8 @@ public final class FileManagerController {
     private ManagerDialog managerDialog;
     private boolean preserveUnavailableSession;
     private boolean destroyed;
+    private boolean restoreInProgress;
+    private final Application.ActivityLifecycleCallbacks lifecycleCallbacks;
 
     private static final class OpenFileReference {
         final StorageProvider provider;
@@ -170,6 +173,29 @@ public final class FileManagerController {
                 }
             }
         });
+        restoreDocumentsFromStorage();
+
+        lifecycleCallbacks = new Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityCreated(@NonNull Activity activity, @Nullable android.os.Bundle state) { }
+            @Override public void onActivityStarted(@NonNull Activity activity) { }
+            @Override public void onActivityResumed(@NonNull Activity activity) {
+                if (activity == FileManagerController.this.activity) restoreDocumentsFromStorage();
+            }
+            @Override public void onActivityPaused(@NonNull Activity activity) { }
+            @Override public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull android.os.Bundle state) {
+                if (activity == FileManagerController.this.activity) persistFileManagerSessionBlocking();
+            }
+            @Override public void onActivityStopped(@NonNull Activity activity) {
+                if (activity == FileManagerController.this.activity) persistFileManagerSessionBlocking();
+            }
+            @Override public void onActivityDestroyed(@NonNull Activity activity) {
+                if (activity == FileManagerController.this.activity) {
+                    persistFileManagerSessionBlocking();
+                    activity.getApplication().unregisterActivityLifecycleCallbacks(this);
+                }
+            }
+        };
+        activity.getApplication().registerActivityLifecycleCallbacks(lifecycleCallbacks);
     }
 
     private void restoreOpenFileReferences(@Nullable JSONObject session) {
@@ -188,6 +214,70 @@ public final class FileManagerController {
             // unavailable; save will report the access problem without losing the tab.
             openFiles.put(documentId, new OpenFileReference(provider, entry));
         }
+    }
+
+    private static final class TextFileSnapshot {
+        final String text;
+        final String sha256;
+        TextFileSnapshot(String text, String sha256) {
+            this.text = text;
+            this.sha256 = sha256;
+        }
+    }
+
+    private static final class RestoredDocumentSnapshot {
+        final String documentId;
+        final TextFileSnapshot snapshot;
+        RestoredDocumentSnapshot(String documentId, TextFileSnapshot snapshot) {
+            this.documentId = documentId;
+            this.snapshot = snapshot;
+        }
+    }
+
+    /**
+     * Reopens every persisted source file, fingerprints its raw bytes, and only then lets
+     * EditorController decide whether a saved dirty patch is safe to replay.
+     */
+    private void restoreDocumentsFromStorage() {
+        if (destroyed || restoreInProgress || openFiles.isEmpty()) return;
+        final List<Map.Entry<String, OpenFileReference>> references = new ArrayList<>();
+        for (Map.Entry<String, OpenFileReference> item : openFiles.entrySet()) {
+            if (editorController.isAwaitingStorageRestore(item.getKey())) references.add(item);
+        }
+        if (references.isEmpty()) return;
+        restoreInProgress = true;
+        ioExecutor.execute(() -> {
+            List<RestoredDocumentSnapshot> restored = new ArrayList<>();
+            for (Map.Entry<String, OpenFileReference> item : references) {
+                if (Thread.currentThread().isInterrupted()) return;
+                String documentId = item.getKey();
+                OpenFileReference reference = item.getValue();
+                if (reference.provider == null || !reference.provider.isAvailable()) continue;
+                try {
+                    TextFileSnapshot file = readUtf8TextSnapshot(reference.provider, reference.entry);
+                    restored.add(new RestoredDocumentSnapshot(documentId, file));
+                } catch (IOException | RuntimeException error) {
+                    android.util.Log.w("YummySession",
+                        "Could not restore source file for tab " + documentId, error);
+                }
+            }
+            mainHandler.post(() -> {
+                restoreInProgress = false;
+                if (destroyed) return;
+                int conflicts = 0;
+                for (RestoredDocumentSnapshot item : restored) {
+                    if (editorController.restoreDocumentFromStorage(
+                        item.documentId, item.snapshot.text, item.snapshot.sha256
+                    )) conflicts++;
+                }
+                if (conflicts > 0) {
+                    toast(conflicts == 1
+                        ? "File berubah sejak terakhir diedit. Recovery lama tidak diterapkan."
+                        : conflicts + " file berubah. Recovery lama tidak diterapkan.");
+                }
+                syncActiveFile(editorController.getActiveDocumentId());
+            });
+        });
     }
 
     private JSONArray buildOpenFilesSnapshot() {
@@ -225,6 +315,24 @@ public final class FileManagerController {
             sessionManager.saveFileManagerSession(snapshot);
         } catch (JSONException error) {
             android.util.Log.e("YummySession", "Could not persist open file references", error);
+        }
+    }
+
+    /** Final synchronous checkpoint for lifecycle stop/destroy callbacks. */
+    private void persistFileManagerSessionBlocking() {
+        if (sessionManager == null) return;
+        persistFileManagerSession();
+        JSONObject snapshot = new JSONObject();
+        if (savedSession != null) {
+            try { snapshot = new JSONObject(savedSession.toString()); }
+            catch (JSONException ignored) { snapshot = new JSONObject(); }
+        }
+        try {
+            snapshot.put("openFiles", buildOpenFilesSnapshot());
+            savedSession = new JSONObject(snapshot.toString());
+            sessionManager.saveFileManagerSessionBlocking(snapshot);
+        } catch (JSONException error) {
+            android.util.Log.e("YummySession", "Could not create final File Manager checkpoint", error);
         }
     }
 
@@ -327,9 +435,10 @@ public final class FileManagerController {
     }
 
     public void destroy() {
-        persistFileManagerSession();
+        persistFileManagerSessionBlocking();
         editorController.persistEditorSessionNow();
         destroyed = true;
+        activity.getApplication().unregisterActivityLifecycleCallbacks(lifecycleCallbacks);
         if (managerDialog != null) {
             managerDialog.dismiss();
             managerDialog = null;
@@ -365,13 +474,15 @@ public final class FileManagerController {
         toast("Membuka " + entry.getName() + "…");
         ioExecutor.execute(() -> {
             try {
-                String content = readUtf8Text(provider, entry);
+                TextFileSnapshot fileSnapshot = readUtf8TextSnapshot(provider, entry);
                 mainHandler.post(() -> {
                     if (destroyed) return;
                     String documentId = provider.getId() + "::" + entry.getDocumentId();
                     openFiles.put(documentId, new OpenFileReference(provider, entry));
                     persistFileManagerSession();
-                    editorController.openDocument(documentId, content, entry.getName());
+                    editorController.openStorageDocument(
+                        documentId, fileSnapshot.text, entry.getName(), fileSnapshot.sha256
+                    );
                     rememberRecent(entry);
                     syncActiveFile(documentId);
                     if (managerDialog != null) managerDialog.dismiss();
@@ -384,7 +495,8 @@ public final class FileManagerController {
         });
     }
 
-    private static String readUtf8Text(StorageProvider provider, StorageEntry entry) throws IOException {
+    private static TextFileSnapshot readUtf8TextSnapshot(StorageProvider provider,
+                                                             StorageEntry entry) throws IOException {
         if (!provider.isAvailable()) throw new IOException("Storage sedang tidak tersedia");
         try (InputStream input = provider.openRead(entry);
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
@@ -402,11 +514,13 @@ public final class FileManagerController {
             for (byte value : bytes) {
                 if (value == 0) throw new IOException("File tampaknya berisi data biner");
             }
+            String fingerprint = WorkspaceSessionManager.sha256(bytes);
             int offset = bytes.length >= 3
                 && (bytes[0] & 0xFF) == 0xEF
                 && (bytes[1] & 0xFF) == 0xBB
                 && (bytes[2] & 0xFF) == 0xBF ? 3 : 0;
-            return new String(bytes, offset, bytes.length - offset, StandardCharsets.UTF_8);
+            String text = new String(bytes, offset, bytes.length - offset, StandardCharsets.UTF_8);
+            return new TextFileSnapshot(text, fingerprint);
         }
     }
 
@@ -429,7 +543,10 @@ public final class FileManagerController {
                 output.flush();
                 mainHandler.post(() -> {
                     if (destroyed) return;
-                    editorController.markDocumentSaved(targetDocumentId, savedRevision);
+                    editorController.markDocumentSaved(
+                        targetDocumentId, savedRevision, content,
+                        WorkspaceSessionManager.sha256(content.getBytes(StandardCharsets.UTF_8))
+                    );
                     toast("Disimpan: " + entry.getName());
                     if (afterSave != null) {
                         if (editorController.isDocumentDirty(targetDocumentId)) {
@@ -466,7 +583,10 @@ public final class FileManagerController {
                     openFiles.put(targetDocumentId, new OpenFileReference(provider, savedEntry));
                     persistFileManagerSession();
                     editorController.setDocumentName(targetDocumentId, savedEntry.getName());
-                    editorController.markDocumentSaved(targetDocumentId, savedRevision);
+                    editorController.markDocumentSaved(
+                        targetDocumentId, savedRevision, content,
+                        WorkspaceSessionManager.sha256(content.getBytes(StandardCharsets.UTF_8))
+                    );
                     if (targetDocumentId.equals(editorController.getActiveDocumentId())) syncActiveFile(targetDocumentId);
                     toast("Disimpan sebagai " + savedEntry.getName());
                     if (managerDialog != null) managerDialog.dismiss();
@@ -1958,7 +2078,8 @@ public final class FileManagerController {
                                 if (!directory) {
                                     String documentId = targetProvider.getId() + "::" + created.getDocumentId();
                                     openFiles.put(documentId, new OpenFileReference(targetProvider, created));
-                                    editorController.openDocument(documentId, "", created.getName());
+                                    editorController.openStorageDocument(documentId, "", created.getName(),
+                                        WorkspaceSessionManager.sha256(new byte[0]));
                                     syncActiveFile(documentId);
                                     dismiss();
                                 } else refreshVisible();

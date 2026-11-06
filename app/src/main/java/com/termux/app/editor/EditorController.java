@@ -89,6 +89,12 @@ public class EditorController {
         final String id;
         String name;
         String text;
+        String baseText;
+        String baseSha256 = "";
+        boolean storageBacked;
+        boolean restorePending;
+        JSONObject recoveryPatch;
+        String legacyRecoveryText;
         long revision;
         long savedRevision;
         boolean closePending;
@@ -97,6 +103,7 @@ public class EditorController {
             this.id = id;
             this.name = name;
             this.text = text == null ? "" : text;
+            this.baseText = this.text;
         }
 
         boolean isDirty() { return revision != savedRevision; }
@@ -145,6 +152,7 @@ public class EditorController {
             EditorDocument initial = new EditorDocument(
                 "yummy:initial:" + UUID.randomUUID(), "Main.py", SAMPLE
             );
+            initial.baseText = SAMPLE;
             initial.revision = 1;
             initial.savedRevision = 1;
             mDocuments.add(initial);
@@ -185,11 +193,37 @@ public class EditorController {
                 if (item == null) continue;
                 String id = item.optString("id", "");
                 if (id.isEmpty()) continue;
+                boolean storageBacked = item.optBoolean("storageBacked", id.contains("::"));
+                String baseText = item.optString("baseText", item.optString("text", ""));
+                String restoredText = storageBacked ? "" : baseText;
                 EditorDocument document = new EditorDocument(
-                    id, item.optString("name", "Untitled"), item.optString("text", "")
+                    id, item.optString("name", "Untitled"), restoredText
                 );
+                document.storageBacked = storageBacked;
+                document.baseText = storageBacked ? "" : baseText;
+                document.recoveryPatch = item.optJSONObject("recoveryPatch");
+                document.baseSha256 = item.optString("baseSha256",
+                    document.recoveryPatch == null ? ""
+                        : document.recoveryPatch.optString("baseSha256", ""));
+                document.legacyRecoveryText = item.optString("legacyRecoveryText", null);
                 document.revision = item.optLong("revision", 0L);
                 document.savedRevision = item.optLong("savedRevision", document.revision);
+
+                if (storageBacked) {
+                    // File Manager must reload and fingerprint the real source before
+                    // a dirty patch can be applied. Until then, never guess the base.
+                    document.restorePending = true;
+                } else if (document.recoveryPatch != null) {
+                    String patched = WorkspaceSessionManager.applyTextPatch(
+                        document.baseText, document.recoveryPatch
+                    );
+                    if (patched != null) document.text = patched;
+                    else {
+                        document.text = document.baseText;
+                        document.revision = document.savedRevision;
+                        document.recoveryPatch = null;
+                    }
+                }
                 mDocuments.add(document);
             }
         }
@@ -244,8 +278,15 @@ public class EditorController {
                 item.put("id", document.id);
                 item.put("name", document.name);
                 item.put("text", document.text == null ? "" : document.text);
+                item.put("baseText", document.baseText == null ? "" : document.baseText);
+                item.put("baseSha256", document.baseSha256 == null ? "" : document.baseSha256);
+                item.put("storageBacked", document.storageBacked);
                 item.put("revision", document.revision);
                 item.put("savedRevision", document.savedRevision);
+                if (document.restorePending && document.recoveryPatch != null) {
+                    item.put("preserveRecoveryPatch", true);
+                    item.put("recoveryPatch", document.recoveryPatch);
+                }
                 documents.put(item);
             }
             session.put("documents", documents);
@@ -291,7 +332,7 @@ public class EditorController {
         notifyActiveDocumentChanged();
     }
 
-    /** Membuka dokumen sebagai tab baru; file yang sudah terbuka cukup diaktifkan kembali. */
+    /** Membuka dokumen non-storage sebagai tab baru. */
     public void openDocument(@NonNull String documentId, String content, @NonNull String name) {
         EditorDocument document = findDocument(documentId);
         if (document != null) {
@@ -299,11 +340,92 @@ public class EditorController {
             return;
         }
         document = new EditorDocument(documentId, name, content);
+        document.baseText = content == null ? "" : content;
+        document.baseSha256 = WorkspaceSessionManager.sha256(
+            document.baseText.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        document.storageBacked = false;
         document.revision = 1;
         document.savedRevision = 1;
         mDocuments.add(document);
         activateDocumentInternal(document, true);
         scheduleEditorSessionSave();
+    }
+
+    /** Membuka file storage dengan fingerprint byte sumber sebelum ada perubahan editor. */
+    public void openStorageDocument(@NonNull String documentId, String content,
+                                    @NonNull String name, @NonNull String sourceSha256) {
+        EditorDocument document = findDocument(documentId);
+        if (document != null) {
+            activateDocumentInternal(document, true);
+            return;
+        }
+        document = new EditorDocument(documentId, name, content);
+        document.baseText = content == null ? "" : content;
+        document.baseSha256 = sourceSha256;
+        document.storageBacked = true;
+        document.revision = 1;
+        document.savedRevision = 1;
+        mDocuments.add(document);
+        activateDocumentInternal(document, true);
+        scheduleEditorSessionSave();
+    }
+
+    /**
+     * Completes startup restoration after File Manager has read the real source file.
+     * A dirty patch is replayed only when the source fingerprint exactly matches.
+     * Returns true when a stale/unverifiable recovery was deliberately not applied.
+     */
+    public boolean restoreDocumentFromStorage(@NonNull String documentId,
+                                               @NonNull String sourceText,
+                                               @NonNull String sourceSha256) {
+        EditorDocument document = findDocument(documentId);
+        if (document == null || !document.storageBacked || !document.restorePending) return false;
+
+        boolean conflict = false;
+        boolean patchApplied = false;
+        String restoredText = sourceText;
+        if (document.recoveryPatch != null) {
+            String patchBaseSha256 = document.recoveryPatch.optString("baseSha256", "");
+            boolean patchFingerprintConsistent = patchBaseSha256.isEmpty()
+                || patchBaseSha256.equalsIgnoreCase(document.baseSha256);
+            if (patchFingerprintConsistent && !document.baseSha256.isEmpty()
+                && document.baseSha256.equalsIgnoreCase(sourceSha256)) {
+                String patched = WorkspaceSessionManager.applyTextPatch(
+                    sourceText, document.recoveryPatch
+                );
+                if (patched != null) {
+                    restoredText = patched;
+                    patchApplied = true;
+                } else {
+                    conflict = true;
+                }
+            } else {
+                conflict = true;
+            }
+        } else if (document.isDirty()) {
+            // This includes legacy sessions which stored a full text but no source hash.
+            // They cannot be safely replayed, so the latest source is shown instead.
+            conflict = true;
+        }
+
+        document.baseText = sourceText;
+        document.baseSha256 = sourceSha256;
+        document.text = restoredText;
+        document.restorePending = false;
+        document.recoveryPatch = null;
+        document.legacyRecoveryText = null;
+        if (conflict && !patchApplied) {
+            document.revision = document.savedRevision;
+        }
+        if (document == mActiveDocument) {
+            if (mEditor != null) mEditor.setEnabled(true);
+            applyActiveDocumentText();
+            updateTitle();
+            updateStatus();
+        }
+        renderTabs();
+        scheduleEditorSessionSave();
+        return conflict;
     }
 
     /** Mengaktifkan tab yang sudah ada. Mengembalikan false bila ID tidak ditemukan. */
@@ -319,6 +441,11 @@ public class EditorController {
 
     public boolean hasDocument(@NonNull String documentId) {
         return findDocument(documentId) != null;
+    }
+
+    public boolean isAwaitingStorageRestore(@NonNull String documentId) {
+        EditorDocument document = findDocument(documentId);
+        return document != null && document.storageBacked && document.restorePending;
     }
 
     @Nullable
@@ -339,6 +466,12 @@ public class EditorController {
         } else {
             if (name != null && !name.trim().isEmpty()) mActiveDocument.name = name;
             mActiveDocument.text = content == null ? "" : content;
+            mActiveDocument.baseText = mActiveDocument.text;
+            mActiveDocument.baseSha256 = WorkspaceSessionManager.sha256(
+                mActiveDocument.text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            mActiveDocument.storageBacked = false;
+            mActiveDocument.restorePending = false;
+            mActiveDocument.recoveryPatch = null;
             mActiveDocument.revision++;
             mActiveDocument.savedRevision = mActiveDocument.revision;
             applyActiveDocumentText();
@@ -405,6 +538,22 @@ public class EditorController {
         scheduleEditorSessionSave();
     }
 
+    /** Advances the recovery baseline to the exact content successfully written to storage. */
+    public void markDocumentSaved(@NonNull String documentId, long revision,
+                                  @NonNull String savedText, @NonNull String sourceSha256) {
+        EditorDocument document = findDocument(documentId);
+        if (document == null) return;
+        document.savedRevision = revision;
+        document.baseText = savedText;
+        document.baseSha256 = sourceSha256;
+        document.storageBacked = true;
+        document.restorePending = false;
+        document.recoveryPatch = null;
+        if (document.revision == revision) document.text = savedText;
+        renderTabs();
+        scheduleEditorSessionSave();
+    }
+
     public boolean isDocumentDirty() {
         return mActiveDocument != null && mActiveDocument.isDirty();
     }
@@ -458,6 +607,7 @@ public class EditorController {
             mActiveDocument.text = mEditor.getText().toString();
         }
         mActiveDocument = document;
+        if (mEditor != null) mEditor.setEnabled(document == null || !document.restorePending);
         applyActiveDocumentText();
         updateTitle();
         updateStatus();
