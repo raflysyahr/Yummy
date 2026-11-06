@@ -10,7 +10,6 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Handler;
@@ -51,6 +50,7 @@ import androidx.core.content.FileProvider;
 
 import com.termux.R;
 import com.termux.app.editor.EditorController;
+import com.termux.app.session.WorkspaceSessionManager;
 import com.termux.app.filemanager.storage.StorageRegistry;
 import com.termux.app.filemanager.storage.StorageTreePicker;
 import com.termux.app.filemanager.storage.model.StorageCapability;
@@ -115,6 +115,8 @@ public final class FileManagerController {
     private final FileOperationService fileOperations;
     private final StorageTransferService transferService = new StorageTransferService();
     private final SharedPreferences preferences;
+    private final WorkspaceSessionManager sessionManager;
+    private JSONObject savedSession;
     private final ExecutorService ioExecutor = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "YummyFileManagerIO");
         thread.setDaemon(true);
@@ -128,6 +130,7 @@ public final class FileManagerController {
     // dapat disimpan tanpa bergantung pada tab yang sedang aktif.
     private final Map<String, OpenFileReference> openFiles = new HashMap<>();
     private ManagerDialog managerDialog;
+    private boolean preserveUnavailableSession;
     private boolean destroyed;
 
     private static final class OpenFileReference {
@@ -146,12 +149,16 @@ public final class FileManagerController {
         this.registry = new StorageRegistry(activity.getApplicationContext());
         this.fileOperations = new FileOperationService(registry);
         this.preferences = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        this.sessionManager = editorController.getWorkspaceSessionManager();
+        this.savedSession = sessionManager.loadFileManagerSession();
+        restoreOpenFileReferences(savedSession);
         this.editorController.setDocumentActionListener(new EditorController.DocumentActionListener() {
             @Override public void onActiveDocumentChanged(@Nullable String documentId) {
                 syncActiveFile(documentId);
             }
             @Override public void onDocumentClosed(@NonNull String documentId) {
                 openFiles.remove(documentId);
+                persistFileManagerSession();
             }
             @Override public void onSaveRequested(@NonNull String documentId, @NonNull Runnable onSaved) {
                 if (!editorController.activateDocument(documentId)) return;
@@ -163,6 +170,62 @@ public final class FileManagerController {
                 }
             }
         });
+    }
+
+    private void restoreOpenFileReferences(@Nullable JSONObject session) {
+        if (session == null) return;
+        JSONArray open = session.optJSONArray("openFiles");
+        if (open == null) return;
+        for (int i = 0; i < open.length(); i++) {
+            JSONObject item = open.optJSONObject(i);
+            if (item == null) continue;
+            String documentId = item.optString("documentId", "");
+            String providerId = item.optString("providerId", "");
+            StorageProvider provider = registry.getProvider(providerId);
+            StorageEntry entry = entryFromJson(item.optJSONObject("entry"));
+            if (documentId.isEmpty() || provider == null || entry == null) continue;
+            // Keep the reference even when a removable/SAF provider is temporarily
+            // unavailable; save will report the access problem without losing the tab.
+            openFiles.put(documentId, new OpenFileReference(provider, entry));
+        }
+    }
+
+    private JSONArray buildOpenFilesSnapshot() {
+        JSONArray result = new JSONArray();
+        for (Map.Entry<String, OpenFileReference> item : openFiles.entrySet()) {
+            OpenFileReference reference = item.getValue();
+            JSONObject value = new JSONObject();
+            try {
+                value.put("documentId", item.getKey());
+                value.put("providerId", reference.provider.getId());
+                value.put("entry", entryToJson(reference.entry));
+                result.put(value);
+            } catch (JSONException error) {
+                android.util.Log.e("YummySession", "Could not snapshot open file reference", error);
+            }
+        }
+        return result;
+    }
+
+    private void persistFileManagerSession() {
+        if (sessionManager == null) return;
+        if (managerDialog == null && savedSession == null && openFiles.isEmpty()) return;
+        if (managerDialog != null && managerDialog.initialized) {
+            managerDialog.persistSession();
+            return;
+        }
+        JSONObject snapshot = new JSONObject();
+        if (savedSession != null) {
+            try { snapshot = new JSONObject(savedSession.toString()); }
+            catch (JSONException ignored) { snapshot = new JSONObject(); }
+        }
+        try {
+            snapshot.put("openFiles", buildOpenFilesSnapshot());
+            savedSession = new JSONObject(snapshot.toString());
+            sessionManager.saveFileManagerSession(snapshot);
+        } catch (JSONException error) {
+            android.util.Log.e("YummySession", "Could not persist open file references", error);
+        }
     }
 
     private void syncActiveFile(@Nullable String documentId) {
@@ -202,6 +265,7 @@ public final class FileManagerController {
             }
         }
         syncActiveFile(editorController.getActiveDocumentId());
+        persistFileManagerSession();
     }
 
     private void closeOpenTabsForEntry(StorageEntry entry) {
@@ -263,6 +327,8 @@ public final class FileManagerController {
     }
 
     public void destroy() {
+        persistFileManagerSession();
+        editorController.persistEditorSessionNow();
         destroyed = true;
         if (managerDialog != null) {
             managerDialog.dismiss();
@@ -304,6 +370,7 @@ public final class FileManagerController {
                     if (destroyed) return;
                     String documentId = provider.getId() + "::" + entry.getDocumentId();
                     openFiles.put(documentId, new OpenFileReference(provider, entry));
+                    persistFileManagerSession();
                     editorController.openDocument(documentId, content, entry.getName());
                     rememberRecent(entry);
                     syncActiveFile(documentId);
@@ -397,6 +464,7 @@ public final class FileManagerController {
                 mainHandler.post(() -> {
                     if (destroyed) return;
                     openFiles.put(targetDocumentId, new OpenFileReference(provider, savedEntry));
+                    persistFileManagerSession();
                     editorController.setDocumentName(targetDocumentId, savedEntry.getName());
                     editorController.markDocumentSaved(targetDocumentId, savedRevision);
                     if (targetDocumentId.equals(editorController.getActiveDocumentId())) syncActiveFile(targetDocumentId);
@@ -505,7 +573,8 @@ public final class FileManagerController {
     }
 
     @Nullable
-    private static JSONObject entryToJson(StorageEntry entry) {
+    private static JSONObject entryToJson(@Nullable StorageEntry entry) {
+        if (entry == null) return null;
         try {
             JSONObject object = new JSONObject();
             object.put("provider", entry.getProviderId());
@@ -628,6 +697,7 @@ public final class FileManagerController {
             dialog.setCancelable(true);
             dialog.setCanceledOnTouchOutside(false);
             dialog.setOnDismissListener(ignored -> {
+                if (initialized) persistSession();
                 loadGeneration++;
                 if (pendingSearch != null) {
                     mainHandler.removeCallbacks(pendingSearch);
@@ -684,18 +754,206 @@ public final class FileManagerController {
 //            StorageProvider initialProvider = findDefaultProvider();
             if (!initialized) {
                 initialized = true;
-
-                StorageProvider initialProvider = findDefaultProvider();
-
-                if (initialProvider != null) {
-                    openStorage(initialProvider);
-                } else {
-                    refreshHome();
+                if (!restoreSavedSession()) {
+                    StorageProvider initialProvider = findDefaultProvider();
+                    if (initialProvider != null) openStorage(initialProvider);
+                    else refreshHome();
                 }
             }
 
    //         if (initialProvider != null) openStorage(initialProvider);
 //            else refreshHome();
+        }
+
+        private boolean restoreSavedSession() {
+            JSONObject saved = savedSession;
+            if (saved == null) return false;
+            if (saved.optBoolean("showingLocations", false)) {
+                preserveUnavailableSession = false;
+                refreshHome(false);
+                return true;
+            }
+
+            String providerId = saved.optString("providerId", "");
+            StorageProvider provider = registry.getProvider(providerId);
+            StorageEntry restoredRoot = entryFromJson(saved.optJSONObject("treeRoot"));
+            StorageEntry restoredCurrent = entryFromJson(saved.optJSONObject("currentDirectory"));
+            if (providerId.isEmpty() || restoredRoot == null) {
+                preserveUnavailableSession = false;
+                refreshHome(false);
+                return true;
+            }
+            if (provider == null || !provider.isAvailable()) {
+                // Show the locations screen, but keep the last selected provider/path
+                // on disk so a temporarily unavailable OTG/SAF location is not forgotten.
+                preserveUnavailableSession = true;
+                refreshHome(false);
+                return true;
+            }
+            if (restoredCurrent == null) restoredCurrent = restoredRoot;
+
+            currentProvider = provider;
+            treeRootDirectory = restoredRoot;
+            currentDirectory = restoredCurrent;
+            showingLocations = false;
+            sortMode = parseSortMode(saved.optString("sortMode", "NAME"));
+            showHidden = saved.optBoolean("showHidden", showHidden);
+            activeQuery = "";
+            backStack.clear();
+            expandedTreeKeys.clear();
+            treeChildren.clear();
+            treeEntries.clear();
+            treeEntries.put(treeKey(restoredRoot), restoredRoot);
+
+            JSONArray cachedEntries = saved.optJSONArray("treeEntries");
+            if (cachedEntries != null) {
+                for (int i = 0; i < cachedEntries.length(); i++) {
+                    StorageEntry entry = entryFromJson(cachedEntries.optJSONObject(i));
+                    if (entry != null) treeEntries.put(treeKey(entry), entry);
+                }
+            }
+            treeEntries.put(treeKey(restoredCurrent), restoredCurrent);
+
+            JSONArray stack = saved.optJSONArray("backStack");
+            if (stack != null) {
+                for (int i = stack.length() - 1; i >= 0; i--) {
+                    StorageEntry entry = entryFromJson(stack.optJSONObject(i));
+                    if (entry != null) {
+                        backStack.push(entry);
+                        treeEntries.put(treeKey(entry), entry);
+                    }
+                }
+            }
+
+            List<StorageEntry> expandedEntries = new ArrayList<>();
+            JSONArray expanded = saved.optJSONArray("expandedDirectories");
+            if (expanded != null) {
+                for (int i = 0; i < expanded.length(); i++) {
+                    StorageEntry entry = entryFromJson(expanded.optJSONObject(i));
+                    if (entry != null && entry.isDirectory()) {
+                        expandedEntries.add(entry);
+                        expandedTreeKeys.add(treeKey(entry));
+                        treeEntries.put(treeKey(entry), entry);
+                    }
+                }
+            }
+
+            if (restoredCurrent.isDirectory()) expandedTreeKeys.add(treeKey(restoredCurrent));
+            rebuildStorageRail();
+            updateBreadcrumb();
+            rebuildActionBar();
+            rebuildSelectionBar();
+            final int generation = ++loadGeneration;
+            showLoading(true);
+            final StorageEntry rootEntry = restoredRoot;
+            final StorageEntry currentEntry = restoredCurrent;
+            final boolean includeHidden = showHidden;
+            final SortMode restoredSortMode = sortMode;
+            final List<StorageEntry> directoriesToLoad = new ArrayList<>();
+            directoriesToLoad.add(rootEntry);
+            for (StorageEntry entry : expandedEntries) {
+                if (!sameEntry(entry, rootEntry)) directoriesToLoad.add(entry);
+            }
+            ioExecutor.execute(() -> {
+                Map<String, List<StorageEntry>> restoredChildren = new HashMap<>();
+                boolean currentStillExists = true;
+                try { currentStillExists = provider.exists(currentEntry); }
+                catch (RuntimeException ignored) { currentStillExists = false; }
+                for (StorageEntry directory : directoriesToLoad) {
+                    try {
+                        List<StorageEntry> children = provider.list(directory);
+                        List<StorageEntry> visible = new ArrayList<>();
+                        for (StorageEntry child : children) {
+                            if (includeHidden || !child.getName().startsWith(".")) visible.add(child);
+                        }
+                        sortEntries(visible, restoredSortMode);
+                        restoredChildren.put(treeKey(directory), visible);
+                    } catch (IOException | RuntimeException error) {
+                        android.util.Log.w("YummySession", "Could not restore expanded directory "
+                            + directory.getName(), error);
+                    }
+                }
+                final boolean finalCurrentExists = currentStillExists;
+                mainHandler.post(() -> {
+                    if (destroyed || !dialog.isShowing() || generation != loadGeneration) return;
+                    treeChildren.clear();
+                    treeChildren.putAll(restoredChildren);
+                    currentEntries = restoredChildren.containsKey(treeKey(rootEntry))
+                        ? restoredChildren.get(treeKey(rootEntry)) : new ArrayList<>();
+                    for (List<StorageEntry> children : restoredChildren.values()) {
+                        for (StorageEntry child : children) treeEntries.put(treeKey(child), child);
+                    }
+                    if (!finalCurrentExists) {
+                        currentDirectory = treeRootDirectory;
+                        backStack.clear();
+                    }
+                    updateBreadcrumb();
+                    rebuildTreeRows();
+                    rebuildSelectionBar();
+                    showLoading(false);
+                    persistSession();
+                });
+            });
+            return true;
+        }
+
+        private SortMode parseSortMode(String value) {
+            try { return SortMode.valueOf(value); }
+            catch (RuntimeException ignored) { return SortMode.NAME; }
+        }
+
+        private void persistSession() {
+            if (preserveUnavailableSession && currentProvider == null && savedSession != null) {
+                try {
+                    JSONObject preserved = new JSONObject(savedSession.toString());
+                    preserved.put("openFiles", buildOpenFilesSnapshot());
+                    savedSession = new JSONObject(preserved.toString());
+                    sessionManager.saveFileManagerSession(preserved);
+                } catch (JSONException error) {
+                    android.util.Log.e("YummySession", "Could not preserve unavailable storage session", error);
+                }
+                return;
+            }
+            JSONObject snapshot = new JSONObject();
+            try {
+                snapshot.put("version", 1);
+                snapshot.put("showingLocations", showingLocations);
+                snapshot.put("providerId", currentProvider == null
+                    ? JSONObject.NULL : currentProvider.getId());
+                snapshot.put("treeRoot", entryToJson(treeRootDirectory));
+                snapshot.put("currentDirectory", entryToJson(currentDirectory));
+                snapshot.put("sortMode", sortMode.name());
+                snapshot.put("showHidden", showHidden);
+
+                JSONArray stack = new JSONArray();
+                for (StorageEntry entry : backStack) {
+                    JSONObject serialized = entryToJson(entry);
+                    if (serialized != null) stack.put(serialized);
+                }
+                snapshot.put("backStack", stack);
+
+                JSONArray expanded = new JSONArray();
+                for (String key : expandedTreeKeys) {
+                    StorageEntry entry = treeEntries.get(key);
+                    if (entry == null && currentDirectory != null
+                        && key.equals(treeKey(currentDirectory))) entry = currentDirectory;
+                    JSONObject serialized = entryToJson(entry);
+                    if (serialized != null && entry.isDirectory()) expanded.put(serialized);
+                }
+                snapshot.put("expandedDirectories", expanded);
+
+                JSONArray entries = new JSONArray();
+                for (StorageEntry entry : treeEntries.values()) {
+                    JSONObject serialized = entryToJson(entry);
+                    if (serialized != null) entries.put(serialized);
+                }
+                snapshot.put("treeEntries", entries);
+                snapshot.put("openFiles", buildOpenFilesSnapshot());
+                savedSession = new JSONObject(snapshot.toString());
+                sessionManager.saveFileManagerSession(snapshot);
+            } catch (JSONException error) {
+                android.util.Log.e("YummySession", "Could not create File Manager session", error);
+            }
         }
 
         private StorageProvider findDefaultProvider() {
@@ -707,6 +965,7 @@ public final class FileManagerController {
         }
 
         void dismiss() {
+            if (initialized) persistSession();
             loadGeneration++;
             if (pendingSearch != null) {
                 mainHandler.removeCallbacks(pendingSearch);
@@ -1033,6 +1292,11 @@ public final class FileManagerController {
         }
 
         private void refreshHome() {
+            refreshHome(true);
+        }
+
+        private void refreshHome(boolean persist) {
+            if (persist) preserveUnavailableSession = false;
             showingLocations = true;
             loadGeneration++;
             if (pendingSearch != null) {
@@ -1073,6 +1337,7 @@ public final class FileManagerController {
             rebuildSelectionBar();
             adapter.notifyDataSetChanged();
             updateEmptyState();
+            if (persist) persistSession();
         }
 
         private void filterHomeRows() {
@@ -1097,6 +1362,7 @@ public final class FileManagerController {
         }
 
         private void openStorage(StorageProvider provider) {
+            preserveUnavailableSession = false;
             if (!provider.isAvailable()) {
                 toast("Storage tidak tersedia: " + provider.getLocation().getName());
                 return;
@@ -1121,6 +1387,7 @@ public final class FileManagerController {
                         updateBreadcrumb();
                         rebuildStorageRail();
                         loadDirectory();
+                        persistSession();
                     });
                 } catch (IOException | RuntimeException error) {
                     mainHandler.post(() -> showError("Tidak dapat membuka storage", error));
@@ -1135,6 +1402,7 @@ public final class FileManagerController {
             expandedTreeKeys.add(treeKey(directory));
             updateBreadcrumb();
             rebuildSelectionBar();
+            persistSession();
         }
 
         private void goBack() {
@@ -1146,6 +1414,7 @@ public final class FileManagerController {
                 updateBreadcrumb();
                 rebuildTreeRows();
                 rebuildSelectionBar();
+                persistSession();
                 return;
             }
             if (pendingTransfer != PendingTransfer.NONE || saveAsMode) {
@@ -1250,6 +1519,7 @@ public final class FileManagerController {
                 updateBreadcrumb();
                 rebuildTreeRows();
                 rebuildSelectionBar();
+                persistSession();
                 return;
             }
 
@@ -1258,6 +1528,7 @@ public final class FileManagerController {
             currentDirectory = directory;
             updateBreadcrumb();
             rebuildSelectionBar();
+            persistSession();
             if (treeChildren.containsKey(key)) {
                 rebuildTreeRows();
                 return;
@@ -1281,6 +1552,7 @@ public final class FileManagerController {
                         for (StorageEntry child : visible) treeEntries.put(treeKey(child), child);
                         showLoading(false);
                         rebuildTreeRows();
+                        persistSession();
                     });
                 } catch (IOException | RuntimeException error) {
                     mainHandler.post(() -> {
@@ -1289,6 +1561,7 @@ public final class FileManagerController {
                         expandedTreeKeys.remove(key);
                         showError("Tidak dapat membaca folder", error);
                         rebuildTreeRows();
+                        persistSession();
                     });
                 }
             });
@@ -1330,6 +1603,7 @@ public final class FileManagerController {
                         rebuildStorageRail();
                         adapter.notifyDataSetChanged();
                         updateEmptyState();
+                        persistSession();
                     });
                 } catch (IOException | RuntimeException error) {
                     mainHandler.post(() -> {
@@ -1419,6 +1693,7 @@ public final class FileManagerController {
                         currentDirectory = row.entry;
                         updateBreadcrumb();
                         rebuildSelectionBar();
+                        persistSession();
                     }
                 }
                 return;
@@ -1452,6 +1727,7 @@ public final class FileManagerController {
                         rebuildStorageRail();
                         updateBreadcrumb();
                         loadDirectory();
+                        persistSession();
                     });
                 } catch (RuntimeException error) {
                     mainHandler.post(() -> showError("Folder tidak tersedia", error));
@@ -1760,6 +2036,7 @@ public final class FileManagerController {
                         String activeDocumentId = editorController.getActiveDocumentId();
                         if (activeDocumentId != null) {
                             openFiles.put(activeDocumentId, new OpenFileReference(destinationProvider, movedActive));
+                            persistFileManagerSession();
                             syncActiveFile(activeDocumentId);
                         }
                     } else if (operation == PendingTransfer.MOVE && !activeSourceStillExists) {
@@ -1814,6 +2091,7 @@ public final class FileManagerController {
                     for (List<StorageEntry> children : treeChildren.values()) sortEntries(children, sortMode);
                     rebuildTreeRows();
                 }
+                persistSession();
                 return true;
             });
             menu.show();
@@ -1832,6 +2110,7 @@ public final class FileManagerController {
                 if (action.startsWith("Show hidden") || action.startsWith("Hide hidden")) {
                     showHidden = !showHidden;
                     preferences.edit().putBoolean(KEY_SHOW_HIDDEN, showHidden).apply();
+                    persistSession();
                     refreshVisible();
                 } else if ("Refresh".equals(action)) refreshVisible();
                 else if ("Locations".equals(action)) refreshHome();

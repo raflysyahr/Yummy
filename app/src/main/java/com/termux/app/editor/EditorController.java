@@ -6,6 +6,12 @@ import android.app.Application;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.graphics.drawable.GradientDrawable;
+import android.view.animation.Animation;
+import android.view.animation.LinearInterpolator;
+import android.view.animation.RotateAnimation;
 import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.View;
@@ -31,6 +37,10 @@ import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry;
 import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel;
 import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver;
 import org.eclipse.tm4e.core.registry.IThemeSource;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import com.termux.app.session.WorkspaceSessionManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +65,13 @@ public class EditorController {
     private TextView mStatusIndent;
     private LinearLayout mTabsContainer;
     private HorizontalScrollView mTabsScroll;
+    private View mSessionSavingPill;
+    private ImageView mSessionSavingIcon;
+    private Animation mSessionSavingAnimation;
+
+    private final Handler mSessionHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mPendingSessionSave = this::persistEditorSessionNow;
+    private WorkspaceSessionManager mWorkspaceSessionManager;
 
     private final List<EditorDocument> mDocuments = new ArrayList<>();
     private EditorDocument mActiveDocument;
@@ -98,6 +115,14 @@ public class EditorController {
         mStatusIndent = mActivity.findViewById(R.id.yummy_status_indent);
         mTabsContainer = mActivity.findViewById(R.id.yummy_tabs_container);
         mTabsScroll = mActivity.findViewById(R.id.yummy_tabs_scroll);
+        mSessionSavingPill = mActivity.findViewById(R.id.yummy_session_save_pill);
+        mSessionSavingIcon = mActivity.findViewById(R.id.yummy_session_save_icon);
+
+        mWorkspaceSessionManager = new WorkspaceSessionManager(
+            mActivity.getApplicationContext(),
+            (saving, failed) -> updateSessionSavingIndicator(saving, failed)
+        );
+        updateSessionSavingIndicator(false, false);
 
         configureEditor();
         configurePythonLanguage();
@@ -109,20 +134,136 @@ public class EditorController {
                 mActiveDocument.revision++;
                 mActiveDocument.text = mEditor.getText().toString();
                 renderTabs();
+                scheduleEditorSessionSave();
             }
             updateStatus();
         });
 
-        // Dokumen awal tetap tersedia sebagai tab awal, tetapi belum terhubung ke file storage.
-        EditorDocument initial = new EditorDocument("yummy:initial:" + UUID.randomUUID(), "Main.py", SAMPLE);
-        initial.revision = 1;
-        initial.savedRevision = 1;
-        mDocuments.add(initial);
-        activateDocumentInternal(initial, false);
+        boolean restored = restoreEditorSession();
+        if (!restored) {
+            // Dokumen awal hanya dibuat pada instalasi/sesi pertama.
+            EditorDocument initial = new EditorDocument(
+                "yummy:initial:" + UUID.randomUUID(), "Main.py", SAMPLE
+            );
+            initial.revision = 1;
+            initial.savedRevision = 1;
+            mDocuments.add(initial);
+            mActiveDocument = initial;
+            activateDocumentInternal(initial, false);
+        } else if (mActiveDocument != null) {
+            activateDocumentInternal(mActiveDocument, false);
+        } else {
+            mEditor.setText("");
+            updateTitle();
+        }
         renderTabs();
         updateStatus();
+        scheduleEditorSessionSave();
 
         mActivity.getApplication().registerActivityLifecycleCallbacks(mLifecycle);
+    }
+
+
+    @NonNull
+    public WorkspaceSessionManager getWorkspaceSessionManager() {
+        if (mWorkspaceSessionManager == null) {
+            mWorkspaceSessionManager = new WorkspaceSessionManager(
+                mActivity.getApplicationContext(),
+                (saving, failed) -> updateSessionSavingIndicator(saving, failed)
+            );
+        }
+        return mWorkspaceSessionManager;
+    }
+
+    private boolean restoreEditorSession() {
+        JSONObject session = getWorkspaceSessionManager().loadEditorSession();
+        if (session == null || !session.has("documents")) return false;
+        JSONArray documents = session.optJSONArray("documents");
+        if (documents != null) {
+            for (int i = 0; i < documents.length(); i++) {
+                JSONObject item = documents.optJSONObject(i);
+                if (item == null) continue;
+                String id = item.optString("id", "");
+                if (id.isEmpty()) continue;
+                EditorDocument document = new EditorDocument(
+                    id, item.optString("name", "Untitled"), item.optString("text", "")
+                );
+                document.revision = item.optLong("revision", 0L);
+                document.savedRevision = item.optLong("savedRevision", document.revision);
+                mDocuments.add(document);
+            }
+        }
+        String activeId = session.optString("activeDocumentId", "");
+        mActiveDocument = findDocument(activeId);
+        if (mActiveDocument == null && !mDocuments.isEmpty()) {
+            mActiveDocument = mDocuments.get(0);
+        }
+        return true;
+    }
+
+    private void scheduleEditorSessionSave() {
+        if (mWorkspaceSessionManager == null) return;
+        mSessionHandler.removeCallbacks(mPendingSessionSave);
+        mSessionHandler.postDelayed(mPendingSessionSave, 350L);
+    }
+
+    /** Capture and enqueue the complete in-memory editor state immediately. */
+    public void persistEditorSessionNow() {
+        mSessionHandler.removeCallbacks(mPendingSessionSave);
+        if (mWorkspaceSessionManager == null) return;
+        if (mEditor != null && mActiveDocument != null) {
+            mActiveDocument.text = mEditor.getText().toString();
+        }
+        JSONObject session = new JSONObject();
+        JSONArray documents = new JSONArray();
+        try {
+            session.put("version", 1);
+            session.put("activeDocumentId", mActiveDocument == null ? JSONObject.NULL : mActiveDocument.id);
+            for (EditorDocument document : mDocuments) {
+                JSONObject item = new JSONObject();
+                item.put("id", document.id);
+                item.put("name", document.name);
+                item.put("text", document.text == null ? "" : document.text);
+                item.put("revision", document.revision);
+                item.put("savedRevision", document.savedRevision);
+                documents.put(item);
+            }
+            session.put("documents", documents);
+        } catch (JSONException error) {
+            android.util.Log.e("YummyEditor", "Could not create editor session snapshot", error);
+            return;
+        }
+        mWorkspaceSessionManager.saveEditorSession(session);
+    }
+
+    private void updateSessionSavingIndicator(boolean saving, boolean failed) {
+        if (mSessionSavingPill == null || mSessionSavingIcon == null) return;
+        if (mSessionSavingAnimation != null) {
+            mSessionSavingIcon.clearAnimation();
+            mSessionSavingAnimation = null;
+        }
+        int backgroundColor = saving ? 0xFF16A34A : (failed ? 0xFFDC2626 : Color.TRANSPARENT);
+        int iconColor = (saving || failed) ? Color.WHITE : 0xFF89919B;
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(backgroundColor);
+        background.setCornerRadius(dpInt(999));
+        mSessionSavingPill.setBackground(background);
+        mSessionSavingIcon.setColorFilter(iconColor);
+        mSessionSavingIcon.setContentDescription(
+            saving ? "Menyimpan sesi" : (failed ? "Gagal menyimpan sesi" : "Sesi tersimpan")
+        );
+        if (saving) {
+            RotateAnimation rotation = new RotateAnimation(
+                0f, 360f, Animation.RELATIVE_TO_SELF, 0.5f,
+                Animation.RELATIVE_TO_SELF, 0.5f
+            );
+            rotation.setDuration(850L);
+            rotation.setInterpolator(new LinearInterpolator());
+            rotation.setRepeatCount(Animation.INFINITE);
+            rotation.setFillAfter(false);
+            mSessionSavingAnimation = rotation;
+            mSessionSavingIcon.startAnimation(rotation);
+        }
     }
 
     public void setDocumentActionListener(@Nullable DocumentActionListener listener) {
@@ -142,13 +283,17 @@ public class EditorController {
         document.savedRevision = 1;
         mDocuments.add(document);
         activateDocumentInternal(document, true);
+        scheduleEditorSessionSave();
     }
 
     /** Mengaktifkan tab yang sudah ada. Mengembalikan false bila ID tidak ditemukan. */
     public boolean activateDocument(@NonNull String documentId) {
         EditorDocument document = findDocument(documentId);
         if (document == null) return false;
-        if (document != mActiveDocument) activateDocumentInternal(document, true);
+        if (document != mActiveDocument) {
+            activateDocumentInternal(document, true);
+            scheduleEditorSessionSave();
+        }
         return true;
     }
 
@@ -180,6 +325,7 @@ public class EditorController {
         }
         renderTabs();
         updateStatus();
+        scheduleEditorSessionSave();
     }
 
     @NonNull
@@ -215,6 +361,7 @@ public class EditorController {
         document.name = name;
         if (document == mActiveDocument) updateTitle();
         renderTabs();
+        scheduleEditorSessionSave();
     }
 
     public long getDocumentRevision() {
@@ -235,6 +382,7 @@ public class EditorController {
         if (document == null) return;
         document.savedRevision = revision;
         renderTabs();
+        scheduleEditorSessionSave();
     }
 
     public boolean isDocumentDirty() {
@@ -335,6 +483,7 @@ public class EditorController {
             notifyActiveDocumentChanged();
         }
         renderTabs();
+        scheduleEditorSessionSave();
     }
 
     private void renderTabs() {
@@ -577,6 +726,7 @@ public class EditorController {
             @Override
             public void onActivityDestroyed(@NonNull Activity activity) {
                 if (activity != mActivity) return;
+                persistEditorSessionNow();
                 activity.getApplication().unregisterActivityLifecycleCallbacks(this);
                 if (mEditor != null) {
                     mEditor.release();
@@ -602,10 +752,12 @@ public class EditorController {
 
             @Override
             public void onActivityStopped(@NonNull Activity activity) {
+                if (activity == mActivity) persistEditorSessionNow();
             }
 
             @Override
             public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle outState) {
+                if (activity == mActivity) persistEditorSessionNow();
             }
         };
 }

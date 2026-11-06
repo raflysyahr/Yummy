@@ -215,6 +215,25 @@
             android:textColor="@color/yummy_text_dim"
             android:textSize="15sp"
             tools:ignore="HardcodedText" />
+
+        <!-- Session save status: refresh icon spins only while the workspace is being written. -->
+        <FrameLayout
+            android:id="@+id/yummy_session_save_pill"
+            android:layout_width="30dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/yummy_bg_session_save_idle"
+            android:foregroundGravity="center">
+
+            <ImageView
+                android:id="@+id/yummy_session_save_icon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:contentDescription="Sesi tersimpan"
+                android:src="@drawable/ic_yummy_session_sync"
+                tools:ignore="ContentDescription" />
+        </FrameLayout>
     </LinearLayout>
 
     <View
