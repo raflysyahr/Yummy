@@ -157,12 +157,22 @@ public final class FileManagerController {
 
     private void show(boolean saveAsMode) {
         if (destroyed || activity.isFinishing()) return;
-        if (managerDialog != null && managerDialog.dialog.isShowing()) {
-            managerDialog.dialog.dismiss();
+
+        if (managerDialog == null) {
+            managerDialog = new ManagerDialog(saveAsMode);
         }
-        managerDialog = new ManagerDialog(saveAsMode);
+
         managerDialog.show();
     }
+
+//    private void show(boolean saveAsMode) {
+//        if (destroyed || activity.isFinishing()) return;
+//        if (managerDialog != null && managerDialog.dialog.isShowing()) {
+//            managerDialog.dialog.dismiss();
+//        }
+//        managerDialog = new ManagerDialog(saveAsMode);
+//        managerDialog.show();
+//    }
 
     /** Delegate from TermuxActivity.onActivityResult(). */
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
@@ -502,6 +512,8 @@ public final class FileManagerController {
         private enum RowKind { SECTION, LOCATION, ENTRY, FAVORITE, RECENT }
         private enum PendingTransfer { NONE, COPY, MOVE }
 
+        private boolean initialized;
+        
         private final Dialog dialog;
         private final boolean initialSaveAsMode;
         private final StorageSelection selection = new StorageSelection();
@@ -598,8 +610,20 @@ public final class FileManagerController {
             }
             drawerPanel.animate().translationX(0f).setDuration(190L).start();
             StorageProvider initialProvider = findDefaultProvider();
-            if (initialProvider != null) openStorage(initialProvider);
-            else refreshHome();
+            if (!initialized) {
+                initialized = true;
+
+                StorageProvider initialProvider = findDefaultProvider();
+
+                if (initialProvider != null) {
+                    openStorage(initialProvider);
+                } else {
+                    refreshHome();
+                }
+            }
+
+   //         if (initialProvider != null) openStorage(initialProvider);
+//            else refreshHome();
         }
 
         private StorageProvider findDefaultProvider() {
