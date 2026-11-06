@@ -609,7 +609,8 @@ public final class FileManagerController {
                 }
             }
             drawerPanel.animate().translationX(0f).setDuration(190L).start();
-            StorageProvider initialProvider = findDefaultProvider();
+
+//            StorageProvider initialProvider = findDefaultProvider();
             if (!initialized) {
                 initialized = true;
 
