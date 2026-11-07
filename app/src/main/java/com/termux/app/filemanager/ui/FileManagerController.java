@@ -789,7 +789,8 @@ public final class FileManagerController {
 
     private void applyNunitoToDialog(@NonNull AlertDialog dialog) {
         Typeface typeface = nunitoTypeface(true);
-        TextView title = dialog.findViewById(android.R.id.alertTitle);
+        int titleId = activity.getResources().getIdentifier("alertTitle", "id", "android");
+        TextView title = titleId != 0 ? dialog.findViewById(titleId) : null;
         TextView message = dialog.findViewById(android.R.id.message);
         if (title != null) title.setTypeface(typeface);
         if (message != null) message.setTypeface(nunitoTypeface(false));

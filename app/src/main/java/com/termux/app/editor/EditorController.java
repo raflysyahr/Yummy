@@ -640,7 +640,8 @@ public class EditorController {
             .setOnCancelListener(dialog -> document.closePending = false)
             .create();
         closeDialog.setOnShowListener(ignored -> {
-            TextView title = closeDialog.findViewById(android.R.id.alertTitle);
+            int titleId = mActivity.getResources().getIdentifier("alertTitle", "id", "android");
+            TextView title = titleId != 0 ? closeDialog.findViewById(titleId) : null;
             TextView message = closeDialog.findViewById(android.R.id.message);
             if (title != null) title.setTypeface(nunitoTypeface(true));
             if (message != null) message.setTypeface(nunitoTypeface(false));
