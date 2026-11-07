@@ -1794,7 +1794,6 @@ public final class FileManagerController {
                 listView.setLayoutParams(params);
             }
         }
-        
 
         private void appendTreeRows(StorageEntry parent, int depth, Set<String> visited) {
             String parentKey = treeKey(parent);
@@ -2495,7 +2494,10 @@ public final class FileManagerController {
                 progressBar.setIndeterminate(true);
                 progressBar.setVisibility(View.GONE);
                 FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER);
-                ((ViewGroup) listView.getParent()).addView(progressBar, lp);
+                // listView is hosted by HorizontalScrollView, which only accepts one child.
+                // Add the loading overlay to listFrame (the parent of the scroll container).
+                ViewGroup overlayParent = (ViewGroup) treeHorizontalScroll.getParent();
+                if (overlayParent != null) overlayParent.addView(progressBar, lp);
             }
             progressBar.setVisibility(visible ? View.VISIBLE : View.GONE);
             if (visible) emptyView.setVisibility(View.GONE);
