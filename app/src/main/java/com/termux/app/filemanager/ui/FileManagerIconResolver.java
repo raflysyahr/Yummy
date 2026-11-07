@@ -90,6 +90,32 @@ public final class FileManagerIconResolver {
             return folderIcon;
         }
 
+        return resolveFileNameIcon(mapping, name);
+    }
+
+
+    /** Resolves a file icon from its display name, using the same mapping as File Manager rows. */
+    @NonNull
+    public static Drawable file(@NonNull Context context, @Nullable String filename) {
+        String iconId = resolveIconId(context, filename);
+        Bitmap bitmap = loadBitmap(context, iconId);
+        if (bitmap == null && !"file".equals(iconId)) bitmap = loadBitmap(context, "file");
+        if (bitmap != null) return new BitmapDrawable(context.getResources(), bitmap);
+        return context.getDrawable(R.drawable.ic_fm_file_fallback);
+    }
+
+    /** Filename-only variant for editor tabs and other UI that has no StorageEntry instance. */
+    @NonNull
+    public static String resolveIconId(@NonNull Context context, @Nullable String filename) {
+        ThemeMapping mapping = getTheme(context);
+        String name = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
+        int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+        if (slash >= 0) name = name.substring(slash + 1);
+        return resolveFileNameIcon(mapping, name);
+    }
+
+    @NonNull
+    private static String resolveFileNameIcon(@NonNull ThemeMapping mapping, @NonNull String name) {
         String namedIcon = mapping.fileNames.get(name);
         if (namedIcon != null && !namedIcon.isEmpty()) return namedIcon;
 

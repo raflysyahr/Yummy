@@ -200,7 +200,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
             android:fontFamily="serif"
-            android:text="Python"
+            android:text="Plain Text"
             android:textColor="@color/yummy_text_dim"
             android:textSize="15sp"
             tools:ignore="HardcodedText" />

@@ -41,6 +41,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import com.termux.app.session.WorkspaceSessionManager;
+import com.termux.app.filemanager.ui.FileManagerIconResolver;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,6 +64,7 @@ public class EditorController {
     private CodeEditor mEditor;
     private TextView mStatusPos;
     private TextView mStatusIndent;
+    private TextView mStatusLang;
     private LinearLayout mTabsContainer;
     private HorizontalScrollView mTabsScroll;
     private View mSessionSavingPill;
@@ -76,6 +78,7 @@ public class EditorController {
     private final List<EditorDocument> mDocuments = new ArrayList<>();
     private EditorDocument mActiveDocument;
     private boolean mSuppressContentChanges;
+    private boolean mTextMateReady;
     private DocumentActionListener mDocumentActionListener;
 
     /** Bridge ke FileManager agar aksi Save pada dialog close bisa menulis ke storage. */
@@ -120,6 +123,7 @@ public class EditorController {
 
         mStatusPos = mActivity.findViewById(R.id.yummy_status_pos);
         mStatusIndent = mActivity.findViewById(R.id.yummy_status_indent);
+        mStatusLang = mActivity.findViewById(R.id.yummy_status_lang);
         mTabsContainer = mActivity.findViewById(R.id.yummy_tabs_container);
         mTabsScroll = mActivity.findViewById(R.id.yummy_tabs_scroll);
         mSessionSavingPill = mActivity.findViewById(R.id.yummy_session_save_pill);
@@ -132,7 +136,7 @@ public class EditorController {
         updateSessionSavingIndicator(false, false);
 
         configureEditor();
-        configurePythonLanguage();
+        initializeTextMateSupport();
         bindKeys();
 
         mEditor.subscribeEvent(SelectionChangeEvent.class, (event, unsubscribe) -> updateStatus());
@@ -162,6 +166,7 @@ public class EditorController {
             activateDocumentInternal(mActiveDocument, false);
         } else {
             mEditor.setText("");
+            applyLanguageForActiveDocument();
             updateTitle();
         }
         renderTabs();
@@ -420,6 +425,7 @@ public class EditorController {
         if (document == mActiveDocument) {
             if (mEditor != null) mEditor.setEnabled(true);
             applyActiveDocumentText();
+            applyLanguageForActiveDocument();
             updateTitle();
             updateStatus();
         }
@@ -475,6 +481,7 @@ public class EditorController {
             mActiveDocument.revision++;
             mActiveDocument.savedRevision = mActiveDocument.revision;
             applyActiveDocumentText();
+            applyLanguageForActiveDocument();
         }
         renderTabs();
         updateStatus();
@@ -512,7 +519,11 @@ public class EditorController {
         EditorDocument document = findDocument(documentId);
         if (document == null || name == null || name.trim().isEmpty()) return;
         document.name = name;
-        if (document == mActiveDocument) updateTitle();
+        if (document == mActiveDocument) {
+            updateTitle();
+            applyLanguageForActiveDocument();
+            updateStatus();
+        }
         renderTabs();
         scheduleEditorSessionSave();
     }
@@ -609,6 +620,7 @@ public class EditorController {
         mActiveDocument = document;
         if (mEditor != null) mEditor.setEnabled(document == null || !document.restorePending);
         applyActiveDocumentText();
+        applyLanguageForActiveDocument();
         updateTitle();
         updateStatus();
         renderTabs();
@@ -648,6 +660,7 @@ public class EditorController {
                 ? null : mDocuments.get(Math.min(index, mDocuments.size() - 1));
             mActiveDocument = next;
             applyActiveDocumentText();
+            applyLanguageForActiveDocument();
             updateTitle();
             updateStatus();
             notifyActiveDocumentChanged();
@@ -670,10 +683,12 @@ public class EditorController {
             tab.setFocusable(true);
 
             ImageView icon = new ImageView(mActivity);
-            icon.setImageResource(R.drawable.ic_yummy_file);
-            icon.setColorFilter(ContextCompat.getColor(mActivity,
-                active ? R.color.yummy_accent_green : R.color.yummy_text_dim));
-            tab.addView(icon, new LinearLayout.LayoutParams(dpInt(17), dpInt(17)));
+            // Gunakan Material Icon Theme yang sama persis dengan daftar File Manager.
+            // Icon tidak diberi colorFilter agar warna asli tiap format tetap terlihat.
+            icon.setImageDrawable(FileManagerIconResolver.file(mActivity, document.name));
+            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            icon.setContentDescription("Icon " + document.name);
+            tab.addView(icon, new LinearLayout.LayoutParams(dpInt(18), dpInt(18)));
 
             TextView name = new TextView(mActivity);
             name.setText(document.name);
@@ -795,10 +810,10 @@ public class EditorController {
     }
 
     /**
-     * Memuat TextMate Python, tema Yummy, auto-indent dan auto-closing pairs.
-     * Registry TextMate bersifat global, sehingga grammar/theme cukup dimuat sekali.
+     * Inisialisasi registry grammar dan tema satu kali. Grammar setiap tab dipilih
+     * secara terpisah melalui applyLanguageForActiveDocument().
      */
-    private void configurePythonLanguage() {
+    private void initializeTextMateSupport() {
         try {
             synchronized (EditorController.class) {
                 if (!sTextMateInitialized) {
@@ -822,41 +837,62 @@ public class EditorController {
                     ThemeModel themeModel = new ThemeModel(themeSource, "yummy-dark");
                     themeModel.setDark(true);
                     ThemeRegistry.getInstance().loadTheme(themeModel);
-                    // ThemeRegistry.getInstance().setTheme("");
-                    GrammarRegistry.getInstance().loadGrammars(
-                        "textmate/languages.json"
-                    );
-
+                    GrammarRegistry.getInstance().loadGrammars("textmate/languages.json");
                     sTextMateInitialized = true;
                 }
             }
 
-            // Pasang theme TextMate terlebih dahulu agar hasil token syntax memiliki warna.
+            mTextMateReady = true;
             mEditor.setColorScheme(
                 TextMateColorScheme.create(ThemeRegistry.getInstance())
             );
-            // Gutter mengikuti background editor dari theme aktif; garis pembatas dihilangkan.
             EditorColorScheme scheme = mEditor.getColorScheme();
             scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND,
-                scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND)
-            );
+                scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
             scheme.setColor(EditorColorScheme.LINE_DIVIDER, Color.TRANSPARENT);
-
             mEditor.setHighlightCurrentLine(true);
-            TextMateLanguage language =
-                TextMateLanguage.create("source.python", true);
+            mEditor.getProps().autoIndent = true;
+            mEditor.getProps().symbolPairAutoCompletion = true;
+        } catch (Exception e) {
+            mTextMateReady = false;
+            android.util.Log.e(
+                "YummyEditor",
+                "Gagal menginisialisasi registry TextMate; editor tetap dapat digunakan.",
+                e
+            );
+        }
+    }
+
+    /** Ganti grammar dan konfigurasi sesuai nama file pada tab aktif. */
+    private void applyLanguageForActiveDocument() {
+        if (mEditor == null) return;
+        String documentName = mActiveDocument == null ? "" : mActiveDocument.name;
+        EditorLanguageRegistry.Language info = EditorLanguageRegistry.detect(documentName);
+
+        if (!mTextMateReady) return;
+        try {
+            TextMateLanguage language = TextMateLanguage.create(info.scopeName, true);
             language.setTabSize(4);
             language.useTab(false);
-
             mEditor.setEditorLanguage(language);
             mEditor.getProps().autoIndent = true;
             mEditor.getProps().symbolPairAutoCompletion = true;
         } catch (Exception e) {
             android.util.Log.e(
                 "YummyEditor",
-                "Gagal mengaktifkan TextMate Python; editor tetap dapat digunakan.",
+                "Gagal mengaktifkan grammar " + info.scopeName + " untuk " + documentName,
                 e
             );
+            // Plain Text mempunyai grammar internal sederhana yang ikut didaftarkan,
+            // sehingga dokumen tak dikenal tidak mewarisi syntax dokumen sebelumnya.
+            try {
+                TextMateLanguage fallback = TextMateLanguage.create("text.plain", true);
+                fallback.setTabSize(4);
+                fallback.useTab(false);
+                mEditor.setEditorLanguage(fallback);
+            } catch (Exception fallbackError) {
+                android.util.Log.e("YummyEditor", "Gagal mengaktifkan Plain Text", fallbackError);
+            }
         }
     }
 
@@ -866,6 +902,10 @@ public class EditorController {
         int column = mEditor.getCursor().getLeftColumn() + 1;
         if (mStatusPos != null) mStatusPos.setText("Ln " + line + ", Col " + column);
         if (mStatusIndent != null) mStatusIndent.setText("Spaces: " + mEditor.getTabWidth());
+        if (mStatusLang != null) {
+            String name = mActiveDocument == null ? "" : mActiveDocument.name;
+            mStatusLang.setText(EditorLanguageRegistry.detect(name).displayName);
+        }
     }
 
     private void bindKeys() {
