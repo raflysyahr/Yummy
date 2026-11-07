@@ -790,45 +790,56 @@ public final class FileManagerController {
 
     private void applyNunitoToDialog(@NonNull AlertDialog dialog) {
         Typeface typeface = nunitoTypeface(true);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(roundRect(0xFF171A21, dp(14)));
+        }
+
         int titleId = activity.getResources().getIdentifier("alertTitle", "id", "android");
         TextView title = titleId != 0 ? dialog.findViewById(titleId) : null;
         TextView message = dialog.findViewById(android.R.id.message);
         if (title != null) {
             title.setTypeface(typeface);
-            title.setTextColor(0xFFF4F6F8);
+            title.setTextColor(0xFFF4F5F7);
         }
         if (message != null) {
             message.setTypeface(nunitoTypeface(false));
-            message.setTextColor(0xFFD5DAE0);
+            message.setTextColor(0xFFD0D4DA);
         }
-        Window dialogWindow = dialog.getWindow();
-        if (dialogWindow != null) {
-            dialogWindow.setBackgroundDrawable(roundRect(0xFF171A21, dp(12)));
-        }
+
         Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
         Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
         Button neutral = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
-        if (positive != null) { positive.setTypeface(typeface); positive.setTextColor(0xFF7DD3A7); }
-        if (negative != null) { negative.setTypeface(typeface); negative.setTextColor(0xFFB8C0CC); }
-        if (neutral != null) { neutral.setTypeface(typeface); neutral.setTextColor(0xFFB8C0CC); }
-        View decor = dialog.getWindow() == null ? null : dialog.getWindow().getDecorView();
-        applyDarkDialogInputs(decor);
+        if (positive != null) {
+            positive.setTypeface(typeface);
+            positive.setTextColor(0xFF3DDC84);
+        }
+        if (negative != null) {
+            negative.setTypeface(typeface);
+            negative.setTextColor(0xFFB8BEC8);
+        }
+        if (neutral != null) {
+            neutral.setTypeface(typeface);
+            neutral.setTextColor(0xFF3DDC84);
+        }
+
+        View content = dialog.findViewById(android.R.id.content);
+        if (content != null) styleDialogInputs(content);
     }
 
-    private void applyDarkDialogInputs(View view) {
-        if (view == null) return;
+    private void styleDialogInputs(View view) {
         if (view instanceof EditText) {
             EditText input = (EditText) view;
             input.setTypeface(nunitoTypeface(false));
-            input.setTextColor(0xFFF4F6F8);
-            input.setHintTextColor(0xFF8993A1);
-            if (Build.VERSION.SDK_INT >= 21) {
-                input.setBackgroundTintList(ColorStateList.valueOf(0xFF7DD3A7));
-            }
-        }
-        if (view instanceof ViewGroup) {
+            input.setTextColor(0xFFF4F5F7);
+            input.setHintTextColor(0xFF969EA7);
+            input.setBackground(roundRect(0xFF252A33, dp(8)));
+            input.setPadding(dp(12), dp(9), dp(12), dp(9));
+        } else if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) applyDarkDialogInputs(group.getChildAt(i));
+            for (int i = 0; i < group.getChildCount(); i++) {
+                styleDialogInputs(group.getChildAt(i));
+            }
         }
     }
 
@@ -867,6 +878,9 @@ public final class FileManagerController {
         private LinearLayout actionBar;
         private LinearLayout selectionBar;
         private ListView listView;
+        // Horizontal viewport for deeply nested directory rows.
+        private HorizontalScrollView treeHorizontalScroll;
+        private int treeViewportWidth;
         private EditText searchView;
         private Button useFolderButton;
         private ProgressBar progressBar;
@@ -1011,6 +1025,14 @@ public final class FileManagerController {
                     else refreshHome();
                 }
             }
+
+            // Use the actual visible width (also correct for the compact Save As popup).
+            rightPane.post(() -> {
+                if (rightPane != null && treeHorizontalScroll != null) {
+                    treeViewportWidth = Math.max(1, rightPane.getWidth());
+                    updateTreeHorizontalWidth();
+                }
+            });
 
    //         if (initialProvider != null) openStorage(initialProvider);
 //            else refreshHome();
@@ -1344,14 +1366,17 @@ public final class FileManagerController {
             listView.setBackgroundColor(0xFF13151B);
             listView.setAdapter(adapter);
             listView.setSelector(android.R.color.transparent);
+
             treeHorizontalScroll = new HorizontalScrollView(activity);
             treeHorizontalScroll.setHorizontalScrollBarEnabled(false);
             treeHorizontalScroll.setVerticalScrollBarEnabled(false);
             treeHorizontalScroll.setFillViewport(true);
             treeHorizontalScroll.setSmoothScrollingEnabled(true);
             treeHorizontalScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+
             treeHorizontalScroll.addView(listView, new HorizontalScrollView.LayoutParams(treeViewportWidth, -1));
             listFrame.addView(treeHorizontalScroll, new FrameLayout.LayoutParams(-1, -1));
+
             emptyView = text("No files", 14, 0xFF969EA7, false);
             emptyView.setGravity(Gravity.CENTER);
             emptyView.setVisibility(View.GONE);
@@ -1595,7 +1620,7 @@ public final class FileManagerController {
             rebuildStorageRail();
             rebuildActionBar();
             rebuildSelectionBar();
-            updateTreeContentWidth();
+            updateTreeHorizontalWidth();
             adapter.notifyDataSetChanged();
             updateEmptyState();
             if (persist) persistSession();
@@ -1727,7 +1752,7 @@ public final class FileManagerController {
         private void rebuildTreeRows() {
             rows.clear();
             if (treeRootDirectory == null || currentProvider == null) {
-                updateTreeContentWidth();
+                updateTreeHorizontalWidth();
                 adapter.notifyDataSetChanged();
                 updateEmptyState();
                 return;
@@ -1738,21 +1763,37 @@ public final class FileManagerController {
                 rows.add(Row.tree(currentProvider, treeRootDirectory, 0, true));
                 appendTreeRows(treeRootDirectory, 1, new HashSet<>());
             }
-            updateTreeContentWidth();
             adapter.notifyDataSetChanged();
+            updateTreeHorizontalWidth();
             updateEmptyState();
         }
 
-        private void updateTreeContentWidth() {
+        /**
+         * Expand the scrollable content width according to the deepest visible row.
+         * ListView keeps its normal vertical scrolling while the parent handles X.
+         */
+        private void updateTreeHorizontalWidth() {
             if (listView == null || treeHorizontalScroll == null) return;
+
             int maxDepth = 0;
-            for (Row row : rows) maxDepth = Math.max(maxDepth, row.depth);
-            int requiredWidth = treeViewportWidth + (maxDepth * dp(18));
+            for (Row row : rows) {
+                if (row != null && row.kind == RowKind.ENTRY) {
+                    maxDepth = Math.max(maxDepth, row.depth);
+                }
+            }
+
+            int requiredWidth = Math.max(treeViewportWidth,
+                treeViewportWidth + (maxDepth * dp(18)));
             ViewGroup.LayoutParams params = listView.getLayoutParams();
-            if (params == null) params = new HorizontalScrollView.LayoutParams(requiredWidth, -1);
-            params.width = Math.max(treeViewportWidth, requiredWidth);
-            params.height = -1;
-            listView.setLayoutParams(params);
+            if (params == null) {
+                params = new HorizontalScrollView.LayoutParams(requiredWidth, -1);
+            }
+            if (params.width != requiredWidth || params.height != -1) {
+                params.width = requiredWidth;
+                params.height = -1;
+                listView.setLayoutParams(params);
+            }
+        }
         }
 
         private void appendTreeRows(StorageEntry parent, int depth, Set<String> visited) {
@@ -1880,8 +1921,8 @@ public final class FileManagerController {
                         rebuildActionBar();
                         rebuildSelectionBar();
                         rebuildStorageRail();
-                        updateTreeContentWidth();
                         adapter.notifyDataSetChanged();
+                        updateTreeHorizontalWidth();
                         updateEmptyState();
                         persistSession();
                     });
@@ -2022,7 +2063,9 @@ public final class FileManagerController {
         }
 
         private void showEntryMenu(View anchor, StorageEntry entry) {
+
             PopupMenu menu = new PopupMenu(new ContextThemeWrapper(activity, android.R.style.Theme_Material), anchor);
+
             if (entry.isDirectory()) menu.getMenu().add("Open");
             menu.getMenu().add("Add to Favorites");
             if (!entry.isRoot() && entry.hasCapability(StorageCapability.RENAME)) menu.getMenu().add("Rename");
@@ -2062,7 +2105,9 @@ public final class FileManagerController {
         }
 
         private void showLocationMenu(View anchor, StorageProvider provider) {
+
             PopupMenu menu = new PopupMenu(new ContextThemeWrapper(activity, android.R.style.Theme_Material), anchor);
+
             menu.getMenu().add("Open");
             if (provider instanceof SafTreeStorageProvider) menu.getMenu().add("Remove storage");
             menu.setOnMenuItemClickListener(item -> {
@@ -2366,7 +2411,7 @@ public final class FileManagerController {
         }
 
         private void showSortMenu() {
-            PopupMenu menu = new PopupMenu(activity, actionBar.getChildAt(2));
+            PopupMenu menu = new PopupMenu(new ContextThemeWrapper(activity, android.R.style.Theme_Material), actionBar.getChildAt(2));
             menu.getMenu().add("Name"); menu.getMenu().add("Type");
             menu.getMenu().add("Size"); menu.getMenu().add("Modified");
             menu.setOnMenuItemClickListener(item -> {
@@ -2386,7 +2431,9 @@ public final class FileManagerController {
 
         private void showMoreMenu() {
             View anchor = actionBar.getChildAt(Math.max(0, actionBar.getChildCount() - 1));
+
             PopupMenu menu = new PopupMenu(new ContextThemeWrapper(activity, android.R.style.Theme_Material), anchor);
+
             menu.getMenu().add(showHidden ? "Hide hidden files" : "Show hidden files");
             menu.getMenu().add("Refresh");
             menu.getMenu().add("Locations");
@@ -2540,7 +2587,7 @@ public final class FileManagerController {
 
                 StorageEntry entry = row.entry;
                 if (entry == null) return container;
-                int indent = row.depth * dp(18);
+                int indent = Math.max(0, row.depth) * dp(18);
                 container.setPadding(indent, 0, dp(8), 0);
                 if (entry.isDirectory()) {
                     disclosure.setVisibility(View.VISIBLE);
