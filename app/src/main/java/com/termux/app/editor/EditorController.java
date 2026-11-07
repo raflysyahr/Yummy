@@ -63,6 +63,7 @@ public class EditorController {
     private final Activity mActivity;
     private CodeEditor mEditor;
     private TextView mStatusPos;
+    private TextView mStatusCol;
     private TextView mStatusIndent;
     private TextView mStatusLang;
     private LinearLayout mTabsContainer;
@@ -122,6 +123,7 @@ public class EditorController {
         if (mEditor == null) return;
 
         mStatusPos = mActivity.findViewById(R.id.yummy_status_pos);
+        mStatusCol = mActivity.findViewById(R.id.yummy_status_col);
         mStatusIndent = mActivity.findViewById(R.id.yummy_status_indent);
         mStatusLang = mActivity.findViewById(R.id.yummy_status_lang);
         mTabsContainer = mActivity.findViewById(R.id.yummy_tabs_container);
@@ -900,8 +902,9 @@ public class EditorController {
         if (mEditor == null) return;
         int line = mEditor.getCursor().getLeftLine() + 1;
         int column = mEditor.getCursor().getLeftColumn() + 1;
-        if (mStatusPos != null) mStatusPos.setText("Ln " + line + ", Col " + column);
-        if (mStatusIndent != null) mStatusIndent.setText("Spaces: " + mEditor.getTabWidth());
+        if (mStatusPos != null) mStatusPos.setText(String.valueOf(line));
+        if (mStatusCol != null) mStatusCol.setText(String.valueOf(column));
+        if (mStatusIndent != null) mStatusIndent.setText(String.valueOf(mEditor.getTabWidth()));
         if (mStatusLang != null) {
             String name = mActiveDocument == null ? "" : mActiveDocument.name;
             mStatusLang.setText(EditorLanguageRegistry.detect(name).displayName);
