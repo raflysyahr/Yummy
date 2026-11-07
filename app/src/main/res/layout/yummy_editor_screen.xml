@@ -167,15 +167,15 @@
     <LinearLayout
         android:id="@+id/yummy_editor_status_bar"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="40dp"
         android:background="@color/yummy_bar"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="8dp"
+        android:paddingStart="6dp"
         android:paddingEnd="8dp">
 
         <LinearLayout
-            android:layout_width="38dp"
+            android:layout_width="30dp"
             android:layout_height="match_parent"
             android:gravity="center"
             android:orientation="vertical">
@@ -185,23 +185,23 @@
                 android:gravity="center"
                 android:text="Ln"
                 android:textColor="@color/yummy_text_dim"
-                android:fontFamily="sans-serif"
-                android:textSize="9sp" />
+                android:fontFamily="@font/nunito_regular"
+                android:textSize="8sp" />
             <TextView
                 android:id="@+id/yummy_status_pos"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
+                android:fontFamily="@font/nunito_semibold"
                 android:gravity="center"
                 android:text="1"
                 android:textColor="@color/yummy_text"
-                android:textSize="11sp" />
+                android:textSize="10sp" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="32dp" android:background="@color/yummy_divider" />
+        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
 
         <LinearLayout
-            android:layout_width="48dp"
+            android:layout_width="34dp"
             android:layout_height="match_parent"
             android:gravity="center"
             android:orientation="vertical">
@@ -211,23 +211,23 @@
                 android:gravity="center"
                 android:text="Col"
                 android:textColor="@color/yummy_text_dim"
-                android:fontFamily="sans-serif"
-                android:textSize="9sp" />
+                android:fontFamily="@font/nunito_regular"
+                android:textSize="8sp" />
             <TextView
                 android:id="@+id/yummy_status_col"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
+                android:fontFamily="@font/nunito_semibold"
                 android:gravity="center"
                 android:text="1"
                 android:textColor="@color/yummy_text"
-                android:textSize="11sp" />
+                android:textSize="10sp" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="32dp" android:background="@color/yummy_divider" />
+        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
 
         <LinearLayout
-            android:layout_width="68dp"
+            android:layout_width="54dp"
             android:layout_height="match_parent"
             android:gravity="center"
             android:orientation="vertical">
@@ -237,20 +237,20 @@
                 android:gravity="center"
                 android:text="Spaces:"
                 android:textColor="@color/yummy_text_dim"
-                android:fontFamily="sans-serif"
-                android:textSize="9sp" />
+                android:fontFamily="@font/nunito_regular"
+                android:textSize="8sp" />
             <TextView
                 android:id="@+id/yummy_status_indent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
+                android:fontFamily="@font/nunito_semibold"
                 android:gravity="center"
                 android:text="4"
                 android:textColor="@color/yummy_text"
-                android:textSize="11sp" />
+                android:textSize="10sp" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="32dp" android:background="@color/yummy_divider" />
+        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
 
         <LinearLayout
             android:id="@+id/yummy_status_language_group"
@@ -263,9 +263,9 @@
             android:paddingEnd="6dp">
             <ImageView
                 android:id="@+id/yummy_status_lang_icon"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:layout_marginEnd="7dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="4dp"
                 android:scaleType="fitCenter"
                 android:contentDescription="Ikon bahasa" />
             <TextView
@@ -273,19 +273,19 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="sans-serif-medium"
+                android:fontFamily="@font/nunito_semibold"
                 android:gravity="center_vertical"
                 android:maxLines="1"
                 android:text="Plain Text"
                 android:textColor="@color/yummy_text"
-                android:textSize="11sp" />
+                android:textSize="10sp" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="32dp" android:background="@color/yummy_divider" />
+        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
 
         <LinearLayout
             android:id="@+id/yummy_status_encoding_button"
-            android:layout_width="88dp"
+            android:layout_width="76dp"
             android:layout_height="match_parent"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
@@ -299,24 +299,24 @@
                 android:layout_height="wrap_content"
                 android:text="UTF-8"
                 android:textColor="@color/yummy_text"
-                android:fontFamily="sans-serif"
-                android:textSize="11sp" />
+                android:fontFamily="@font/nunito_regular"
+                android:textSize="10sp" />
             <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
                 android:layout_marginStart="5dp"
                 android:src="@drawable/ic_yummy_chevron_down"
                 android:tint="@color/yummy_text_dim"
                 android:contentDescription="Buka daftar encoding" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="32dp" android:background="@color/yummy_divider" />
+        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
 
         <FrameLayout
             android:id="@+id/yummy_session_save_pill"
-            android:layout_width="40dp"
+            android:layout_width="32dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="2dp"
+            android:layout_marginStart="1dp"
             android:foregroundGravity="center">
             <ImageView
                 android:id="@+id/yummy_session_save_icon"

@@ -919,7 +919,7 @@ public class EditorController {
         if (mEditor == null) return;
         int line = mEditor.getCursor().getLeftLine() + 1;
         int column = mEditor.getCursor().getLeftColumn() + 1;
-        if (mStatusPos != null) mStatusPos.setText(String.valueOf(line));
+        if (mStatusPos != null) mStatusPos.setText(line > 999 ? "999+" : String.valueOf(line));
         if (mStatusCol != null) mStatusCol.setText(String.valueOf(column));
         if (mStatusIndent != null) mStatusIndent.setText(String.valueOf(mEditor.getTabWidth()));
         if (mStatusLang != null) {

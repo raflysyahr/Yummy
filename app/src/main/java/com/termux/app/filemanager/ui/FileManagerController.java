@@ -111,6 +111,26 @@ public final class FileManagerController {
     private static final int MAX_SEARCH_ENTRIES = 8_000;
     private static final int MAX_RECENTS = 16;
 
+    private Typeface nunitoRegular;
+    private Typeface nunitoBold;
+
+    private Typeface nunitoTypeface(boolean bold) {
+        try {
+            if (bold) {
+                if (nunitoBold == null) {
+                    nunitoBold = Typeface.createFromAsset(activity.getAssets(), "fonts/Nunito-Bold.ttf");
+                }
+                return nunitoBold;
+            }
+            if (nunitoRegular == null) {
+                nunitoRegular = Typeface.createFromAsset(activity.getAssets(), "fonts/Nunito-Regular.ttf");
+            }
+            return nunitoRegular;
+        } catch (RuntimeException ignored) {
+            return Typeface.DEFAULT;
+        }
+    }
+
     private final Activity activity;
     private final EditorController editorController;
     private final StorageRegistry registry;
@@ -1170,7 +1190,7 @@ public final class FileManagerController {
             searchView.setHintTextColor(0xFF969EA7);
             searchView.setHint("Search files and folders");
             searchView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-            searchView.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+            searchView.setTypeface(nunitoTypeface(false));
             searchView.setPadding(dp(14), 0, dp(14), 0);
             searchView.setBackground(roundRect(0xFF292C35, dp(9)));
             searchView.setVisibility(View.GONE);
@@ -2467,7 +2487,7 @@ public final class FileManagerController {
         view.setText(value);
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp);
         view.setTextColor(color);
-        view.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
+        view.setTypeface(nunitoTypeface(bold));
         return view;
     }
 
@@ -2500,7 +2520,7 @@ public final class FileManagerController {
         Button button = new Button(activity);
         button.setText(value);
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        button.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        button.setTypeface(nunitoTypeface(true));
         button.setTextColor(0xFF07110C);
         button.setAllCaps(false);
         button.setBackground(roundRect(0xFF3DDC84, dp(9)));
