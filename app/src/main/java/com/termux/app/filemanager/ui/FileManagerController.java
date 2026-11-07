@@ -1482,7 +1482,7 @@ public final class FileManagerController {
             selectionBar.setVisibility(View.VISIBLE);
             if (pendingTransfer != PendingTransfer.NONE || saveAsMode) {
                 TextView label = text(pendingTransfer != PendingTransfer.NONE
-                    ? "Pilih folder tujuan" : "Simpan editor ke folder ini", 12, 0xFFDCE3EA, true);
+                    ? "Pilih folder tujuan" : "Simpan file ke folder ini", 12, 0xFFDCE3EA, true);
                 selectionBar.addView(label, new LinearLayout.LayoutParams(0, -1, 1));
                 useFolderButton = button(pendingTransfer != PendingTransfer.NONE ? "Gunakan folder ini" : "Simpan di sini");
                 selectionBar.addView(useFolderButton, new LinearLayout.LayoutParams(-2, dp(40)));

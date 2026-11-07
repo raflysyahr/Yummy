@@ -176,6 +176,7 @@ public class EditorController {
         configureEditor();
         initializeTextMateSupport();
         bindKeys();
+        bindEditorActionButtons();
 
         mEditor.subscribeEvent(SelectionChangeEvent.class, (event, unsubscribe) -> updateStatus());
         mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
@@ -497,37 +498,6 @@ public class EditorController {
     @Nullable
     public String getActiveDocumentId() {
         return mActiveDocument == null ? null : mActiveDocument.id;
-    }
-
-    /**
-     * Membungkus teks editor sementara menjadi dokumen baru sebelum Save pertama.
-     * Editor memang boleh diketik saat tidak ada tab; dokumen baru baru dibuat
-     * ketika pengguna benar-benar meminta menyimpan.
-     */
-    @NonNull
-    public String ensureDraftDocumentForSave() {
-        if (mActiveDocument != null) {
-            if (mEditor != null) mActiveDocument.text = mEditor.getText().toString();
-            return mActiveDocument.id;
-        }
-
-        String currentText = mEditor == null ? "" : mEditor.getText().toString();
-        EditorDocument draft = new EditorDocument(
-            "yummy:untitled:" + UUID.randomUUID(), "Untitled", currentText
-        );
-        draft.baseText = "";
-        draft.baseSha256 = WorkspaceSessionManager.sha256(
-            new byte[0]
-        );
-        draft.storageBacked = false;
-        draft.restorePending = false;
-        draft.revision = 1L;
-        draft.savedRevision = 0L;
-        mDocuments.add(draft);
-        activateDocumentInternal(draft, true);
-        renderTabs();
-        scheduleEditorSessionSave();
-        return draft.id;
     }
 
     /** Kompatibilitas dengan pemanggil lama: ganti isi tab aktif, bukan membuat tab baru. */
@@ -1099,6 +1069,48 @@ public class EditorController {
         bindKey(R.id.yummy_key_down, KeyEvent.KEYCODE_DPAD_DOWN);
         bindKey(R.id.yummy_key_left, KeyEvent.KEYCODE_DPAD_LEFT);
         bindKey(R.id.yummy_key_right, KeyEvent.KEYCODE_DPAD_RIGHT);
+    }
+
+    /**
+     * Tombol aksi editor pada baris tombol bawah.
+     * Undo/redo menggunakan undo manager bawaan Sora.
+     */
+    private void bindEditorActionButtons() {
+        View undo = mActivity.findViewById(R.id.yummy_key_undo);
+        View redo = mActivity.findViewById(R.id.yummy_key_redo);
+        View paste = mActivity.findViewById(R.id.yummy_key_paste);
+
+        if (undo != null) {
+            undo.setOnClickListener(v -> {
+                if (mEditor == null) return;
+                mEditor.requestFocus();
+                mEditor.undo();
+            });
+        }
+        if (redo != null) {
+            redo.setOnClickListener(v -> {
+                if (mEditor == null) return;
+                mEditor.requestFocus();
+                mEditor.redo();
+            });
+        }
+        if (paste != null) {
+            paste.setOnClickListener(v -> sendEditorShortcut(KeyEvent.KEYCODE_V));
+        }
+    }
+
+    /** Ctrl+V memanggil mekanisme paste clipboard native milik Sora Editor. */
+    private void sendEditorShortcut(int keyCode) {
+        if (mEditor == null) return;
+        mEditor.requestFocus();
+        long now = SystemClock.uptimeMillis();
+        int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON;
+        mEditor.dispatchKeyEvent(new KeyEvent(
+            now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta
+        ));
+        mEditor.dispatchKeyEvent(new KeyEvent(
+            now, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0, meta
+        ));
     }
 
     private void bindKey(int viewId, final int keyCode) {

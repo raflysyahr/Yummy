@@ -407,47 +407,41 @@
             android:tint="@color/yummy_text"
             tools:ignore="HardcodedText" />
 
-        <FrameLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1">
-
-            <TextView
-                android:id="@+id/yummy_key_ai"
-                android:layout_width="40dp"
-                android:layout_height="32dp"
-                android:layout_gravity="center"
-                android:background="@drawable/yummy_bg_ai_button"
-                android:gravity="center"
-                android:text="AI"
-                android:textColor="@color/yummy_text"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                tools:ignore="HardcodedText" />
-        </FrameLayout>
-
-        <TextView
-            android:id="@+id/yummy_key_cmd"
+        <ImageButton
+            android:id="@+id/yummy_key_undo"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="?attr/selectableItemBackground"
-            android:gravity="center"
-            android:text="⌘"
-            android:textColor="@color/yummy_text"
-            android:textSize="26sp"
-            tools:ignore="HardcodedText" />
+            android:contentDescription="Undo"
+            android:padding="13dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_undo"
+            android:tint="@color/yummy_text" />
 
-        <TextView
-            android:id="@+id/yummy_key_more"
+        <ImageButton
+            android:id="@+id/yummy_key_redo"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="?attr/selectableItemBackground"
-            android:gravity="center"
-            android:text="»"
-            android:textColor="@color/yummy_text"
-            android:textSize="28sp"
-            tools:ignore="HardcodedText" />
+            android:contentDescription="Redo"
+            android:padding="13dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_redo"
+            android:tint="@color/yummy_text" />
+
+        <ImageButton
+            android:id="@+id/yummy_key_paste"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="Paste"
+            android:padding="13dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_yummy_clipboard_paste"
+            android:tint="@color/yummy_text" />
+
     </LinearLayout>
 </LinearLayout>
