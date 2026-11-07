@@ -776,11 +776,36 @@ public final class FileManagerController {
         mainHandler.post(() -> Toast.makeText(activity, message, Toast.LENGTH_SHORT).show());
     }
 
+    private AlertDialog.Builder nunitoDialogBuilder() {
+        return new AlertDialog.Builder(activity) {
+            @Override
+            public AlertDialog show() {
+                AlertDialog dialog = super.show();
+                applyNunitoToDialog(dialog);
+                return dialog;
+            }
+        };
+    }
+
+    private void applyNunitoToDialog(@NonNull AlertDialog dialog) {
+        Typeface typeface = nunitoTypeface(true);
+        TextView title = dialog.findViewById(android.R.id.alertTitle);
+        TextView message = dialog.findViewById(android.R.id.message);
+        if (title != null) title.setTypeface(typeface);
+        if (message != null) message.setTypeface(nunitoTypeface(false));
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        Button neutral = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+        if (positive != null) positive.setTypeface(typeface);
+        if (negative != null) negative.setTypeface(typeface);
+        if (neutral != null) neutral.setTypeface(typeface);
+    }
+
     private void showError(String title, Throwable error) {
         if (activity.isFinishing() || destroyed) return;
         String message = error == null || error.getMessage() == null
             ? "Operasi tidak dapat diselesaikan" : error.getMessage();
-        new AlertDialog.Builder(activity).setTitle(title).setMessage(message)
+        nunitoDialogBuilder().setTitle(title).setMessage(message)
             .setPositiveButton("OK", null).show();
     }
 
@@ -873,28 +898,78 @@ public final class FileManagerController {
                 window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
                 window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
                 window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+                WindowManager.LayoutParams attributes = window.getAttributes();
+                attributes.dimAmount = saveAsMode ? 0.56f : 0.42f;
+                window.setAttributes(attributes);
 
-                // Hide status bar on Dialog window
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        WindowInsetsController controller =
-                        window.getInsetsController();
-        
-                    if (controller != null) {
-                        controller.hide(WindowInsets.Type.statusBars());
-    
-                        controller.setSystemBarsBehavior(
-                            WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                if (saveAsMode) {
+                    // Save picker is a compact centered popup. Keep system bars visible so
+                    // it feels like a dialog over the editor, not another full-screen page.
+                    window.getDecorView().setSystemUiVisibility(0);
+                } else {
+                    // Normal File Manager remains a full-height navigation drawer.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        WindowInsetsController controller = window.getInsetsController();
+                        if (controller != null) {
+                            controller.hide(WindowInsets.Type.statusBars());
+                            controller.setSystemBarsBehavior(
+                                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                            );
+                        }
+                    } else {
+                        window.getDecorView().setSystemUiVisibility(
+                            View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                         );
                     }
-                } else {
-                    window.getDecorView().setSystemUiVisibility(
-                        View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    );
                 }
             }
-            drawerPanel.animate().translationX(0f).setDuration(190L).start();
+
+            FrameLayout.LayoutParams panelParams =
+                (FrameLayout.LayoutParams) drawerPanel.getLayoutParams();
+            int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+            int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
+            if (saveAsMode) {
+                int popupWidth = Math.min(dp(480), Math.max(dp(280), screenWidth - dp(32)));
+                int availableHeight = Math.max(dp(360), screenHeight - dp(112));
+                int popupHeight = Math.min(dp(620), Math.round(availableHeight * 0.82f));
+                panelParams.width = popupWidth;
+                panelParams.height = popupHeight;
+                panelParams.gravity = Gravity.CENTER;
+                panelParams.setMargins(dp(16), dp(24), dp(16), dp(24));
+                drawerPanel.setLayoutParams(panelParams);
+                drawerPanel.setBackground(roundRect(0xFF13151B, dp(16)));
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    drawerPanel.setClipToOutline(true);
+                    drawerPanel.setElevation(dp(18));
+                }
+                drawerPanel.setTranslationX(dp(12));
+                drawerPanel.setAlpha(0f);
+                drawerPanel.setScaleX(0.97f);
+                drawerPanel.setScaleY(0.97f);
+                drawerPanel.animate().translationX(0f).alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(190L).start();
+            } else {
+                int panelWidth = Math.min(screenWidth,
+                    Math.max(dp(280), Math.round(screenWidth * 0.88f)));
+                panelParams.width = panelWidth;
+                panelParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                panelParams.gravity = Gravity.START | Gravity.TOP;
+                panelParams.setMargins(0, 0, 0, 0);
+                drawerPanel.setLayoutParams(panelParams);
+                drawerPanel.setBackgroundColor(0xFF13151B);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    drawerPanel.setClipToOutline(false);
+                    drawerPanel.setElevation(0f);
+                }
+                drawerPanel.setAlpha(1f);
+                drawerPanel.setScaleX(1f);
+                drawerPanel.setScaleY(1f);
+                drawerPanel.setTranslationX(-panelWidth);
+                drawerPanel.animate().translationX(0f).setDuration(190L).start();
+            }
 
 //            StorageProvider initialProvider = findDefaultProvider();
             if (!initialized) {
@@ -1563,9 +1638,13 @@ public final class FileManagerController {
                 persistSession();
                 return;
             }
-            if (pendingTransfer != PendingTransfer.NONE || saveAsMode) {
+            if (saveAsMode) {
+                // Back cancels the Save popup instead of leaving a hidden save-mode state.
+                dismiss();
+                return;
+            }
+            if (pendingTransfer != PendingTransfer.NONE) {
                 pendingTransfer = PendingTransfer.NONE;
-                saveAsMode = false;
                 selection.clear();
                 rebuildActionBar();
                 rebuildSelectionBar();
@@ -1934,7 +2013,7 @@ public final class FileManagerController {
             menu.setOnMenuItemClickListener(item -> {
                 if ("Open".contentEquals(item.getTitle())) openStorage(provider);
                 else if ("Remove storage".contentEquals(item.getTitle())) {
-                    new AlertDialog.Builder(activity).setTitle("Remove storage")
+                    nunitoDialogBuilder().setTitle("Remove storage")
                         .setMessage("Lepaskan " + provider.getLocation().getName() + " dari Yummy? File tidak akan dihapus.")
                         .setPositiveButton("Lepaskan", (d, w) -> {
                             registry.removeSafLocation(provider.getId()); refreshHome();
@@ -1950,7 +2029,7 @@ public final class FileManagerController {
             input.setSingleLine(true);
             input.setText(entry.getName());
             input.setSelection(0, input.getText().length());
-            new AlertDialog.Builder(activity).setTitle("Rename") .setView(input)
+            nunitoDialogBuilder().setTitle("Rename") .setView(input)
                 .setPositiveButton("Simpan", (dialog, which) -> {
                     StorageProvider provider = registry.getProvider(entry.getProviderId());
                     if (provider == null) return;
@@ -1984,7 +2063,7 @@ public final class FileManagerController {
             String message = entry.isDirectory()
                 ? "Hapus folder " + entry.getName() + " beserta seluruh isinya?"
                 : "Hapus file " + entry.getName() + "?";
-            new AlertDialog.Builder(activity).setTitle("Delete").setMessage(message)
+            nunitoDialogBuilder().setTitle("Delete").setMessage(message)
                 .setPositiveButton("Hapus", (dialog, which) -> {
                     if (findDirtyOpenDocumentId(entry) != null) {
                         toast("Simpan atau tutup tab yang masih memiliki perubahan sebelum menghapus file ini");
@@ -2011,7 +2090,7 @@ public final class FileManagerController {
 
         private void deleteSelection() {
             if (selection.isEmpty()) return;
-            new AlertDialog.Builder(activity).setTitle("Delete selected")
+            nunitoDialogBuilder().setTitle("Delete selected")
                 .setMessage("Hapus " + selection.size() + " item yang dipilih beserta isi foldernya?")
                 .setPositiveButton("Hapus", (dialog, which) -> {
                     StorageSelection snapshot = new StorageSelection();
@@ -2062,7 +2141,7 @@ public final class FileManagerController {
                     ? DateFormat.getDateTimeInstance().format(new Date(entry.getLastModified())) : "Unknown")
                 + "\nStorage: " + entry.getProviderId()
                 + "\nCapabilities: " + capabilitySummary(entry);
-            new AlertDialog.Builder(activity).setTitle("File information").setMessage(message)
+            nunitoDialogBuilder().setTitle("File information").setMessage(message)
                 .setPositiveButton("OK", null).show();
         }
 
@@ -2089,7 +2168,7 @@ public final class FileManagerController {
             EditText input = new EditText(activity);
             input.setSingleLine(true);
             input.setHint(directory ? "Folder name" : "File name, e.g. main.py");
-            new AlertDialog.Builder(activity).setTitle(directory ? "New folder" : "New file")
+            nunitoDialogBuilder().setTitle(directory ? "New folder" : "New file")
                 .setView(input).setPositiveButton("Create", (dialog, which) -> {
                     String name = input.getText().toString().trim();
                     final StorageProvider targetProvider = currentProvider;
@@ -2195,7 +2274,7 @@ public final class FileManagerController {
                     toast((operation == PendingTransfer.COPY ? "Copy" : "Move") + " selesai: " + copied
                         + " berhasil, " + failures.size() + " gagal");
                     if (!failures.isEmpty()) {
-                        new AlertDialog.Builder(activity).setTitle("Sebagian transfer gagal")
+                        nunitoDialogBuilder().setTitle("Sebagian transfer gagal")
                             .setMessage(android.text.TextUtils.join("\n", failures))
                             .setPositiveButton("OK", null).show();
                     }
@@ -2213,16 +2292,22 @@ public final class FileManagerController {
             }
             EditText input = new EditText(activity);
             input.setSingleLine(true);
+            input.setTypeface(nunitoTypeface(false));
+            input.setTextColor(0xFFE8EAED);
+            input.setHintTextColor(0xFF969EA7);
             String defaultName = editorController.getDocumentName();
             input.setText(defaultName == null || defaultName.trim().isEmpty() ? "untitled.txt" : defaultName);
             input.setSelection(0, input.getText().length());
-            new AlertDialog.Builder(activity).setTitle("Save As").setView(input)
-                .setPositiveButton("Save", (dialog, which) -> {
+            AlertDialog saveNameDialog = nunitoDialogBuilder().setTitle("Simpan file")
+                .setView(input)
+                .setPositiveButton("Simpan", (dialog, which) -> {
                     String name = input.getText().toString().trim();
                     Runnable afterSave = pendingOpenAfterSave;
                     pendingOpenAfterSave = null;
                     saveAs(currentProvider, currentDirectory, name, afterSave);
-                }).setNegativeButton("Cancel", null).show();
+                }).setNegativeButton("Batal", null).create();
+            saveNameDialog.setOnShowListener(ignored -> applyNunitoToDialog(saveNameDialog));
+            saveNameDialog.show();
         }
 
         private void showSortMenu() {
@@ -2272,7 +2357,7 @@ public final class FileManagerController {
                 }
                 else if ("Remove current storage".equals(action) && currentProvider != null) {
                     StorageProvider provider = currentProvider;
-                    new AlertDialog.Builder(activity).setTitle("Remove storage")
+                    nunitoDialogBuilder().setTitle("Remove storage")
                         .setMessage("Lepaskan " + provider.getLocation().getName() + "? File tidak akan dihapus.")
                         .setPositiveButton("Lepaskan", (d, w) -> {
                             registry.removeSafLocation(provider.getId()); refreshHome();

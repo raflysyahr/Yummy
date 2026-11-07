@@ -44,7 +44,7 @@
             android:layout_weight="1"
             android:layout_marginStart="10dp"
             android:ellipsize="end"
-            android:fontFamily="serif"
+            android:fontFamily="@font/nunito_semibold"
             android:maxLines="1"
             android:text="Main.py"
             android:textColor="@color/yummy_text"

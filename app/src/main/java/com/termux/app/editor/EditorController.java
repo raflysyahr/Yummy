@@ -81,6 +81,27 @@ public class EditorController {
     private View mSessionSavingPill;
     private ImageView mSessionSavingIcon;
     private Animation mSessionSavingAnimation;
+    private Typeface mNunitoRegular;
+    private Typeface mNunitoSemiBold;
+
+    private Typeface nunitoTypeface(boolean semiBold) {
+        try {
+            if (semiBold) {
+                if (mNunitoSemiBold == null) {
+                    mNunitoSemiBold = Typeface.createFromAsset(
+                        mActivity.getAssets(), "fonts/Nunito-SemiBold.ttf");
+                }
+                return mNunitoSemiBold;
+            }
+            if (mNunitoRegular == null) {
+                mNunitoRegular = Typeface.createFromAsset(
+                    mActivity.getAssets(), "fonts/Nunito-Regular.ttf");
+            }
+            return mNunitoRegular;
+        } catch (RuntimeException ignored) {
+            return Typeface.DEFAULT;
+        }
+    }
 
     private final Handler mSessionHandler = new Handler(Looper.getMainLooper());
     private final Runnable mPendingSessionSave = this::persistEditorSessionNow;
@@ -603,7 +624,7 @@ public class EditorController {
             return;
         }
         document.closePending = true;
-        new AlertDialog.Builder(mActivity)
+        AlertDialog closeDialog = new AlertDialog.Builder(mActivity)
             .setTitle("Perubahan belum disimpan")
             .setMessage("Simpan perubahan pada " + document.name + " sebelum menutup tab?")
             .setPositiveButton("Simpan", (dialog, which) -> {
@@ -617,7 +638,19 @@ public class EditorController {
             })
             .setNeutralButton("Batal", (dialog, which) -> document.closePending = false)
             .setOnCancelListener(dialog -> document.closePending = false)
-            .show();
+            .create();
+        closeDialog.setOnShowListener(ignored -> {
+            TextView title = closeDialog.findViewById(android.R.id.alertTitle);
+            TextView message = closeDialog.findViewById(android.R.id.message);
+            if (title != null) title.setTypeface(nunitoTypeface(true));
+            if (message != null) message.setTypeface(nunitoTypeface(false));
+            for (int which : new int[] { AlertDialog.BUTTON_POSITIVE,
+                    AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL }) {
+                android.widget.Button button = closeDialog.getButton(which);
+                if (button != null) button.setTypeface(nunitoTypeface(true));
+            }
+        });
+        closeDialog.show();
     }
 
     /** Dipakai FileManager saat file dihapus; tidak menampilkan konfirmasi kedua. */
@@ -658,7 +691,10 @@ public class EditorController {
 
     private void updateTitle() {
         TextView title = mActivity.findViewById(R.id.yummy_title);
-        if (title != null) title.setText(mActiveDocument == null ? "Yummy" : mActiveDocument.name);
+        if (title != null) {
+            title.setTypeface(nunitoTypeface(true));
+            title.setText(mActiveDocument == null ? "Yummy" : mActiveDocument.name);
+        }
     }
 
     private void notifyActiveDocumentChanged() {
@@ -714,6 +750,7 @@ public class EditorController {
             name.setTextColor(ContextCompat.getColor(mActivity,
                 active ? R.color.yummy_text : R.color.yummy_text_dim));
             name.setTextSize(14f);
+            name.setTypeface(nunitoTypeface(active));
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
@@ -726,6 +763,7 @@ public class EditorController {
                 dirty.setText("•");
                 dirty.setTextColor(ContextCompat.getColor(mActivity, R.color.yummy_text));
                 dirty.setTextSize(16f);
+                dirty.setTypeface(nunitoTypeface(true));
                 tab.addView(dirty, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
             }
@@ -734,6 +772,7 @@ public class EditorController {
             close.setText("×");
             close.setTextColor(ContextCompat.getColor(mActivity, R.color.yummy_text_dim));
             close.setTextSize(20f);
+            close.setTypeface(nunitoTypeface(false));
             close.setGravity(android.view.Gravity.CENTER);
             close.setContentDescription("Tutup " + document.name);
             LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dpInt(27), -1);
@@ -976,7 +1015,7 @@ public class EditorController {
             TextView item = new TextView(mActivity);
             item.setText(encoding);
             item.setTextSize(13f);
-            item.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            item.setTypeface(nunitoTypeface(true));
             item.setTextColor(encoding.equalsIgnoreCase(mActiveDocument.encoding) ? 0xFF80B7FF : 0xFFE5E7EB);
             item.setGravity(Gravity.CENTER_VERTICAL);
             item.setPadding(dpInt(16), 0, dpInt(16), 0);
