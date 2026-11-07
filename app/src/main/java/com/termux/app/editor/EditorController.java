@@ -139,7 +139,7 @@ public class EditorController {
         mStatusLang = mActivity.findViewById(R.id.yummy_status_lang);
         mStatusLangIcon = mActivity.findViewById(R.id.yummy_status_lang_icon);
         mStatusEncoding = mActivity.findViewById(R.id.yummy_status_enc);
-        mStatusEncodingGroup = mActivity.findViewById(R.id.yummy_status_encoding_group);
+        mStatusEncodingGroup = mActivity.findViewById(R.id.yummy_status_encoding_button);
         if (mStatusEncodingGroup != null) mStatusEncodingGroup.setOnClickListener(v -> showEncodingPopup());
         mTabsContainer = mActivity.findViewById(R.id.yummy_tabs_container);
         mTabsScroll = mActivity.findViewById(R.id.yummy_tabs_scroll);
