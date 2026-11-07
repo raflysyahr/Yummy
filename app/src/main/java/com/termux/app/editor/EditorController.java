@@ -499,6 +499,37 @@ public class EditorController {
         return mActiveDocument == null ? null : mActiveDocument.id;
     }
 
+    /**
+     * Membungkus teks editor sementara menjadi dokumen baru sebelum Save pertama.
+     * Editor memang boleh diketik saat tidak ada tab; dokumen baru baru dibuat
+     * ketika pengguna benar-benar meminta menyimpan.
+     */
+    @NonNull
+    public String ensureDraftDocumentForSave() {
+        if (mActiveDocument != null) {
+            if (mEditor != null) mActiveDocument.text = mEditor.getText().toString();
+            return mActiveDocument.id;
+        }
+
+        String currentText = mEditor == null ? "" : mEditor.getText().toString();
+        EditorDocument draft = new EditorDocument(
+            "yummy:untitled:" + UUID.randomUUID(), "Untitled", currentText
+        );
+        draft.baseText = "";
+        draft.baseSha256 = WorkspaceSessionManager.sha256(
+            new byte[0]
+        );
+        draft.storageBacked = false;
+        draft.restorePending = false;
+        draft.revision = 1L;
+        draft.savedRevision = 0L;
+        mDocuments.add(draft);
+        activateDocumentInternal(draft, true);
+        renderTabs();
+        scheduleEditorSessionSave();
+        return draft.id;
+    }
+
     /** Kompatibilitas dengan pemanggil lama: ganti isi tab aktif, bukan membuat tab baru. */
     public void setDocumentContent(String content, String name) {
         if (mActiveDocument == null) {
