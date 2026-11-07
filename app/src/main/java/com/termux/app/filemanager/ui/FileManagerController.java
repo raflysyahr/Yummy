@@ -1794,7 +1794,7 @@ public final class FileManagerController {
                 listView.setLayoutParams(params);
             }
         }
-        }
+        
 
         private void appendTreeRows(StorageEntry parent, int depth, Set<String> visited) {
             String parentKey = treeKey(parent);
