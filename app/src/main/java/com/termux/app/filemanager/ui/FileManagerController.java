@@ -536,18 +536,19 @@ public final class FileManagerController {
         final String targetDocumentId = documentId;
         final long savedRevision = editorController.getDocumentRevision(targetDocumentId);
         final String content = editorController.getDocumentText(targetDocumentId);
+        final Charset documentCharset = Charset.forName(editorController.getDocumentEncoding(targetDocumentId));
+        final byte[] encodedContent = content.getBytes(documentCharset);
         final StorageProvider provider = reference.provider;
         final StorageEntry entry = reference.entry;
         ioExecutor.execute(() -> {
             try (OutputStream output = provider.openWrite(entry, false)) {
-                byte[] savedBytes = content.getBytes(Charset.forName(editorController.getDocumentEncoding(targetDocumentId)));
-                output.write(savedBytes);
+                output.write(encodedContent);
                 output.flush();
                 mainHandler.post(() -> {
                     if (destroyed) return;
                     editorController.markDocumentSaved(
                         targetDocumentId, savedRevision, content,
-                        WorkspaceSessionManager.sha256(savedBytes)
+                        WorkspaceSessionManager.sha256(encodedContent)
                     );
                     toast("Disimpan: " + entry.getName());
                     if (afterSave != null) {
@@ -569,17 +570,16 @@ public final class FileManagerController {
         if (targetDocumentId == null) { toast("Tidak ada dokumen yang aktif"); return; }
         final long savedRevision = editorController.getDocumentRevision(targetDocumentId);
         final String content = editorController.getDocumentText(targetDocumentId);
+        final Charset documentCharset = Charset.forName(editorController.getDocumentEncoding(targetDocumentId));
+        final byte[] encodedContent = content.getBytes(documentCharset);
         ioExecutor.execute(() -> {
             StorageEntry created = null;
             try {
                 if (!provider.isAvailable()) throw new IOException("Storage sedang tidak tersedia");
                 created = fileOperations.createFile(provider.getId(), parent, name,
                     FileOperationService.inferMimeType(name));
-                final byte[] savedBytes = content.getBytes(
-                    Charset.forName(editorController.getDocumentEncoding(targetDocumentId))
-                );
                 try (OutputStream output = provider.openWrite(created, false)) {
-                    output.write(savedBytes);
+                    output.write(encodedContent);
                     output.flush();
                 }
                 StorageEntry savedEntry = created;
@@ -590,7 +590,7 @@ public final class FileManagerController {
                     editorController.setDocumentName(targetDocumentId, savedEntry.getName());
                     editorController.markDocumentSaved(
                         targetDocumentId, savedRevision, content,
-                        WorkspaceSessionManager.sha256(savedBytes)
+                        WorkspaceSessionManager.sha256(encodedContent)
                     );
                     if (targetDocumentId.equals(editorController.getActiveDocumentId())) syncActiveFile(targetDocumentId);
                     toast("Disimpan sebagai " + savedEntry.getName());
@@ -1170,6 +1170,7 @@ public final class FileManagerController {
             searchView.setHintTextColor(0xFF969EA7);
             searchView.setHint("Search files and folders");
             searchView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            searchView.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
             searchView.setPadding(dp(14), 0, dp(14), 0);
             searchView.setBackground(roundRect(0xFF292C35, dp(9)));
             searchView.setVisibility(View.GONE);
@@ -2466,7 +2467,7 @@ public final class FileManagerController {
         view.setText(value);
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp);
         view.setTextColor(color);
-        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        view.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
         return view;
     }
 
@@ -2499,6 +2500,7 @@ public final class FileManagerController {
         Button button = new Button(activity);
         button.setText(value);
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        button.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         button.setTextColor(0xFF07110C);
         button.setAllCaps(false);
         button.setBackground(roundRect(0xFF3DDC84, dp(9)));
