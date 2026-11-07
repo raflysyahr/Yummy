@@ -163,150 +163,191 @@
         android:layout_height="1dp"
         android:background="@color/yummy_divider" />
 
-    <!-- Status bar: cursor metrics use compact two-line groups; metadata stays vertically centered. -->
+    <!-- Status bar inspired by compact desktop editor status bars. -->
     <LinearLayout
+        android:id="@+id/yummy_editor_status_bar"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="48dp"
         android:background="@color/yummy_bar"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp">
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp">
 
-        <!-- Line -->
+        <LinearLayout
+            android:layout_width="30dp"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="Ln"
+                android:textColor="@color/yummy_text_dim"
+                android:textSize="10sp" />
+            <TextView
+                android:id="@+id/yummy_status_pos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="1"
+                android:textColor="@color/yummy_text"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:background="@color/yummy_divider" />
+
         <LinearLayout
             android:layout_width="34dp"
             android:layout_height="match_parent"
             android:gravity="center"
             android:orientation="vertical">
-
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif"
-                android:gravity="center"
-                android:text="Ln"
-                android:textColor="@color/yummy_text_dim"
-                android:textSize="9sp"
-                tools:ignore="HardcodedText" />
-
-            <TextView
-                android:id="@+id/yummy_status_pos"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:gravity="center"
-                android:text="1"
-                android:textColor="@color/yummy_text"
-                android:textSize="12sp"
-                tools:ignore="HardcodedText" />
-        </LinearLayout>
-
-        <!-- Column -->
-        <LinearLayout
-            android:layout_width="38dp"
-            android:layout_height="match_parent"
-            android:layout_marginStart="6dp"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif"
                 android:gravity="center"
                 android:text="Col"
                 android:textColor="@color/yummy_text_dim"
-                android:textSize="9sp"
-                tools:ignore="HardcodedText" />
-
+                android:textSize="10sp" />
             <TextView
                 android:id="@+id/yummy_status_col"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
                 android:gravity="center"
                 android:text="1"
                 android:textColor="@color/yummy_text"
                 android:textSize="12sp"
-                tools:ignore="HardcodedText" />
+                android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Indentation -->
+        <View
+            android:layout_width="1dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:background="@color/yummy_divider" />
+
         <LinearLayout
             android:layout_width="50dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="6dp"
             android:gravity="center"
             android:orientation="vertical">
-
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif"
                 android:gravity="center"
-                android:text="Spaces"
+                android:text="Spaces:"
                 android:textColor="@color/yummy_text_dim"
-                android:textSize="9sp"
-                tools:ignore="HardcodedText" />
-
+                android:textSize="10sp" />
             <TextView
                 android:id="@+id/yummy_status_indent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
                 android:gravity="center"
                 android:text="4"
                 android:textColor="@color/yummy_text"
                 android:textSize="12sp"
-                tools:ignore="HardcodedText" />
+                android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Language remains on one line and is vertically centered beside the metrics. -->
-        <TextView
-            android:id="@+id/yummy_status_lang"
+        <View
+            android:layout_width="1dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:background="@color/yummy_divider" />
+
+        <LinearLayout
+            android:id="@+id/yummy_status_language_group"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
-            android:gravity="end|center_vertical"
-            android:maxLines="1"
-            android:text="Plain Text"
-            android:textColor="@color/yummy_text_dim"
-            android:textSize="12sp"
-            tools:ignore="HardcodedText" />
-
-        <TextView
-            android:id="@+id/yummy_status_enc"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif"
             android:gravity="center"
-            android:text="UTF-8"
-            android:textColor="@color/yummy_text_dim"
-            android:textSize="11sp"
-            tools:ignore="HardcodedText" />
+            android:orientation="horizontal"
+            android:paddingStart="5dp"
+            android:paddingEnd="5dp">
+            <ImageView
+                android:id="@+id/yummy_status_lang_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_yummy_file"
+                android:contentDescription="Ikon bahasa" />
+            <TextView
+                android:id="@+id/yummy_status_lang"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="Plain Text"
+                android:textColor="@color/yummy_text"
+                android:textSize="14sp" />
+        </LinearLayout>
 
-        <!-- Session save status: refresh icon spins only while the workspace is being written. -->
+        <View
+            android:layout_width="1dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="5dp"
+            android:layout_marginEnd="5dp"
+            android:background="@color/yummy_divider" />
+
+        <LinearLayout
+            android:id="@+id/yummy_status_encoding_group"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:minWidth="72dp"
+            android:orientation="horizontal"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp">
+            <TextView
+                android:id="@+id/yummy_status_enc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="UTF-8"
+                android:textColor="@color/yummy_text"
+                android:textSize="13sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="⌄"
+                android:textColor="@color/yummy_text_dim"
+                android:textSize="20sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="5dp"
+            android:layout_marginEnd="5dp"
+            android:background="@color/yummy_divider" />
+
         <FrameLayout
             android:id="@+id/yummy_session_save_pill"
-            android:layout_width="28dp"
-            android:layout_height="24dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/yummy_bg_session_save_idle"
+            android:layout_width="36dp"
+            android:layout_height="match_parent"
             android:foregroundGravity="center">
-
             <ImageView
                 android:id="@+id/yummy_session_save_icon"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:contentDescription="Sesi tersimpan"
-                android:src="@drawable/ic_yummy_session_sync"
-                tools:ignore="ContentDescription" />
+                android:src="@drawable/ic_yummy_session_sync" />
         </FrameLayout>
     </LinearLayout>
 

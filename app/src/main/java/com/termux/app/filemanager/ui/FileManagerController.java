@@ -77,6 +77,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.text.DateFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -539,13 +540,14 @@ public final class FileManagerController {
         final StorageEntry entry = reference.entry;
         ioExecutor.execute(() -> {
             try (OutputStream output = provider.openWrite(entry, false)) {
-                output.write(content.getBytes(StandardCharsets.UTF_8));
+                byte[] savedBytes = content.getBytes(Charset.forName(editorController.getDocumentEncoding(targetDocumentId)));
+                output.write(savedBytes);
                 output.flush();
                 mainHandler.post(() -> {
                     if (destroyed) return;
                     editorController.markDocumentSaved(
                         targetDocumentId, savedRevision, content,
-                        WorkspaceSessionManager.sha256(content.getBytes(StandardCharsets.UTF_8))
+                        WorkspaceSessionManager.sha256(savedBytes)
                     );
                     toast("Disimpan: " + entry.getName());
                     if (afterSave != null) {
@@ -573,8 +575,11 @@ public final class FileManagerController {
                 if (!provider.isAvailable()) throw new IOException("Storage sedang tidak tersedia");
                 created = fileOperations.createFile(provider.getId(), parent, name,
                     FileOperationService.inferMimeType(name));
+                final byte[] savedBytes = content.getBytes(
+                    Charset.forName(editorController.getDocumentEncoding(targetDocumentId))
+                );
                 try (OutputStream output = provider.openWrite(created, false)) {
-                    output.write(content.getBytes(StandardCharsets.UTF_8));
+                    output.write(savedBytes);
                     output.flush();
                 }
                 StorageEntry savedEntry = created;
@@ -585,7 +590,7 @@ public final class FileManagerController {
                     editorController.setDocumentName(targetDocumentId, savedEntry.getName());
                     editorController.markDocumentSaved(
                         targetDocumentId, savedRevision, content,
-                        WorkspaceSessionManager.sha256(content.getBytes(StandardCharsets.UTF_8))
+                        WorkspaceSessionManager.sha256(savedBytes)
                     );
                     if (targetDocumentId.equals(editorController.getActiveDocumentId())) syncActiveFile(targetDocumentId);
                     toast("Disimpan sebagai " + savedEntry.getName());

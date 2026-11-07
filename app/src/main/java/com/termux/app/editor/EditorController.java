@@ -15,10 +15,16 @@ import android.view.animation.RotateAnimation;
 import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.Gravity;
+import android.widget.PopupWindow;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import java.nio.charset.Charset;
 import android.widget.TextView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ScrollView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -66,6 +72,10 @@ public class EditorController {
     private TextView mStatusCol;
     private TextView mStatusIndent;
     private TextView mStatusLang;
+    private ImageView mStatusLangIcon;
+    private TextView mStatusEncoding;
+    private View mStatusEncodingGroup;
+    private PopupWindow mEncodingPopup;
     private LinearLayout mTabsContainer;
     private HorizontalScrollView mTabsScroll;
     private View mSessionSavingPill;
@@ -92,6 +102,7 @@ public class EditorController {
     private static final class EditorDocument {
         final String id;
         String name;
+        String encoding = "UTF-8";
         String text;
         String baseText;
         String baseSha256 = "";
@@ -126,6 +137,10 @@ public class EditorController {
         mStatusCol = mActivity.findViewById(R.id.yummy_status_col);
         mStatusIndent = mActivity.findViewById(R.id.yummy_status_indent);
         mStatusLang = mActivity.findViewById(R.id.yummy_status_lang);
+        mStatusLangIcon = mActivity.findViewById(R.id.yummy_status_lang_icon);
+        mStatusEncoding = mActivity.findViewById(R.id.yummy_status_enc);
+        mStatusEncodingGroup = mActivity.findViewById(R.id.yummy_status_encoding_group);
+        if (mStatusEncodingGroup != null) mStatusEncodingGroup.setOnClickListener(v -> showEncodingPopup());
         mTabsContainer = mActivity.findViewById(R.id.yummy_tabs_container);
         mTabsScroll = mActivity.findViewById(R.id.yummy_tabs_scroll);
         mSessionSavingPill = mActivity.findViewById(R.id.yummy_session_save_pill);
@@ -207,6 +222,7 @@ public class EditorController {
                     id, item.optString("name", "Untitled"), restoredText
                 );
                 document.storageBacked = storageBacked;
+                document.encoding = normalizeEncoding(item.optString("encoding", "UTF-8"));
                 document.baseText = storageBacked ? "" : baseText;
                 document.recoveryPatch = item.optJSONObject("recoveryPatch");
                 document.baseSha256 = item.optString("baseSha256",
@@ -284,6 +300,7 @@ public class EditorController {
                 JSONObject item = new JSONObject();
                 item.put("id", document.id);
                 item.put("name", document.name);
+                item.put("encoding", document.encoding);
                 item.put("text", document.text == null ? "" : document.text);
                 item.put("baseText", document.baseText == null ? "" : document.baseText);
                 item.put("baseSha256", document.baseSha256 == null ? "" : document.baseSha256);
@@ -907,8 +924,102 @@ public class EditorController {
         if (mStatusIndent != null) mStatusIndent.setText(String.valueOf(mEditor.getTabWidth()));
         if (mStatusLang != null) {
             String name = mActiveDocument == null ? "" : mActiveDocument.name;
-            mStatusLang.setText(EditorLanguageRegistry.detect(name).displayName);
+            EditorLanguageRegistry.Language language = EditorLanguageRegistry.detect(name);
+            mStatusLang.setText(language.displayName);
+            if (mStatusLangIcon != null) {
+                try {
+                    if ("plaintext".equals(language.id)) {
+                        mStatusLangIcon.setImageResource(R.drawable.ic_yummy_language_plain);
+                    } else {
+                        Drawable icon = FileManagerIconResolver.file(mActivity, name);
+                        mStatusLangIcon.setImageDrawable(icon);
+                    }
+                    mStatusLangIcon.setColorFilter(null);
+                } catch (RuntimeException ignored) {
+                    mStatusLangIcon.setImageResource(R.drawable.ic_yummy_file);
+                }
+            }
         }
+        if (mStatusEncoding != null) {
+            mStatusEncoding.setText(mActiveDocument == null ? "UTF-8" : mActiveDocument.encoding);
+        }
+    }
+
+    private static final String[] SUPPORTED_ENCODINGS = new String[] {
+        "UTF-8", "UTF-16", "UTF-16LE", "UTF-16BE", "US-ASCII",
+        "ISO-8859-1", "ISO-8859-2", "Windows-1252", "Shift_JIS",
+        "EUC-JP", "GBK", "GB18030", "Big5", "KOI8-R"
+    };
+
+    private String normalizeEncoding(String value) {
+        try { return Charset.forName(value).name(); }
+        catch (Exception ignored) { return "UTF-8"; }
+    }
+
+    @NonNull
+    public String getDocumentEncoding(@NonNull String documentId) {
+        EditorDocument document = findDocument(documentId);
+        return document == null ? "UTF-8" : document.encoding;
+    }
+
+    private void showEncodingPopup() {
+        if (mStatusEncodingGroup == null || mActiveDocument == null) return;
+        if (mEncodingPopup != null && mEncodingPopup.isShowing()) {
+            mEncodingPopup.dismiss();
+            return;
+        }
+        LinearLayout list = new LinearLayout(mActivity);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setBackgroundColor(0xFF202329);
+        list.setPadding(0, dpInt(5), 0, dpInt(5));
+        for (String encoding : SUPPORTED_ENCODINGS) {
+            TextView item = new TextView(mActivity);
+            item.setText(encoding);
+            item.setTextSize(13f);
+            item.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            item.setTextColor(encoding.equalsIgnoreCase(mActiveDocument.encoding) ? 0xFF80B7FF : 0xFFE5E7EB);
+            item.setGravity(Gravity.CENTER_VERTICAL);
+            item.setPadding(dpInt(16), 0, dpInt(16), 0);
+            item.setMinHeight(dpInt(42));
+            item.setBackgroundResource(android.R.drawable.list_selector_background);
+            item.setOnClickListener(v -> {
+                setActiveDocumentEncoding(encoding);
+                if (mEncodingPopup != null) mEncodingPopup.dismiss();
+            });
+            list.addView(item, new LinearLayout.LayoutParams(-1, dpInt(42)));
+        }
+        ScrollView scroll = new ScrollView(mActivity);
+        scroll.setFillViewport(false);
+        scroll.setBackgroundColor(0xFF202329);
+        scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
+        int popupWidth = dpInt(178);
+        int maxPopupHeight = dpInt(280);
+        scroll.measure(View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(maxPopupHeight, View.MeasureSpec.AT_MOST));
+        int popupHeight = Math.min(maxPopupHeight, scroll.getMeasuredHeight());
+        mEncodingPopup = new PopupWindow(scroll, popupWidth, popupHeight, true);
+        mEncodingPopup.setBackgroundDrawable(new ColorDrawable(0xFF202329));
+        mEncodingPopup.setOutsideTouchable(true);
+        mEncodingPopup.setElevation(dpInt(10));
+        int[] location = new int[2];
+        mStatusEncodingGroup.getLocationOnScreen(location);
+        int x = Math.max(dpInt(6), location[0] + mStatusEncodingGroup.getWidth() - popupWidth);
+        int y = Math.max(dpInt(8), location[1] - popupHeight - dpInt(5));
+        mEncodingPopup.showAtLocation(mStatusEncodingGroup, Gravity.TOP | Gravity.LEFT, x, y);
+        scroll.setAlpha(0f);
+        scroll.setTranslationY(dpInt(14));
+        scroll.animate().alpha(1f).translationY(0f).setDuration(180L).start();
+    }
+
+    private void setActiveDocumentEncoding(@NonNull String encoding) {
+        if (mActiveDocument == null) return;
+        String normalized = normalizeEncoding(encoding);
+        if (mActiveDocument.encoding.equalsIgnoreCase(normalized)) return;
+        mActiveDocument.encoding = normalized;
+        mActiveDocument.revision++;
+        if (mStatusEncoding != null) mStatusEncoding.setText(normalized);
+        renderTabs();
+        scheduleEditorSessionSave();
     }
 
     private void bindKeys() {
