@@ -349,8 +349,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        // Queue a fresh snapshot as soon as the editor loses foreground focus.
+        // onStop() below waits for the queued write to finish.
+        if (!mIsInvalidState && mEditorController != null) {
+            mEditorController.persistEditorSessionNow();
+        }
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
+
+        // Commit synchronously while this Activity is still alive. This avoids
+        // depending on a delayed debounce callback when the task is removed.
+        if (!mIsInvalidState && mEditorController != null) {
+            mEditorController.persistEditorSessionBlocking();
+        }
 
         Logger.logDebug(LOG_TAG, "onStop");
 
@@ -401,6 +417,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onSaveInstanceState");
 
         super.onSaveInstanceState(savedInstanceState);
+        if (!mIsInvalidState && mEditorController != null) {
+            mEditorController.persistEditorSessionBlocking();
+        }
         saveTerminalToolbarTextInput(savedInstanceState);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
     }

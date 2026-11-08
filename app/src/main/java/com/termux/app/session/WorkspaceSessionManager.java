@@ -241,14 +241,18 @@ public final class WorkspaceSessionManager {
                 String baseSha256 = metadata.optString("baseSha256", "");
 
                 JSONObject recoveryPatch = null;
-                if (dirty && metadata.optBoolean("preserveRecoveryPatch", false)) {
+                // Untitled documents are persisted as complete draftText values below.
+                // Do not spend time generating a line diff for them: there is no source
+                // file to reconcile, and the full draft is the recovery source of truth.
+                if (dirty && !untitledDocument
+                    && metadata.optBoolean("preserveRecoveryPatch", false)) {
                     recoveryPatch = metadata.optJSONObject("recoveryPatch");
                 }
-                if (dirty && recoveryPatch == null) {
+                if (dirty && !untitledDocument && recoveryPatch == null) {
                     recoveryPatch = createTextPatch(baseText, currentText);
                 }
 
-                if (dirty && recoveryPatch != null) {
+                if (dirty && !untitledDocument && recoveryPatch != null) {
                     if (baseSha256.isEmpty()) {
                         baseSha256 = sha256(baseText.getBytes(StandardCharsets.UTF_8));
                     }

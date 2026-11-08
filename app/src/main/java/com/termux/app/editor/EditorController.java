@@ -297,6 +297,7 @@ public class EditorController {
 
     /** Capture and enqueue the complete in-memory editor state immediately. */
     public void persistEditorSessionNow() {
+        mSessionHandler.removeCallbacks(mPendingSessionSave);
         JSONObject session = createEditorSessionSnapshot();
         if (session != null && mWorkspaceSessionManager != null) {
             mWorkspaceSessionManager.saveEditorSession(session);
@@ -304,16 +305,20 @@ public class EditorController {
     }
 
     /**
-     * Final lifecycle checkpoint. Unlike normal autosaves, this waits for the
-     * background writer to finish so a task removed from Recents cannot lose the
-     * last edits that were still inside the debounce window.
+     * Commit the current editor snapshot before Activity leaves the foreground.
+     * This is called directly by TermuxActivity rather than relying only on
+     * Application.ActivityLifecycleCallbacks, whose dispatch happens outside
+     * the Activity override itself.
      */
-    private void persistEditorSessionForShutdown() {
+    public boolean persistEditorSessionBlocking() {
         mSessionHandler.removeCallbacks(mPendingSessionSave);
         JSONObject session = createEditorSessionSnapshot();
-        if (session != null && mWorkspaceSessionManager != null) {
-            mWorkspaceSessionManager.saveEditorSessionBlocking(session);
+        if (session == null || mWorkspaceSessionManager == null) return false;
+        boolean saved = mWorkspaceSessionManager.saveEditorSessionBlocking(session);
+        if (!saved) {
+            android.util.Log.e("YummyEditor", "Could not commit editor session during Activity lifecycle");
         }
+        return saved;
     }
 
     @Nullable
@@ -1218,7 +1223,6 @@ public class EditorController {
             @Override
             public void onActivityDestroyed(@NonNull Activity activity) {
                 if (activity != mActivity) return;
-                persistEditorSessionForShutdown();
                 activity.getApplication().unregisterActivityLifecycleCallbacks(this);
                 if (mEditor != null) {
                     mEditor.release();
@@ -1244,12 +1248,12 @@ public class EditorController {
 
             @Override
             public void onActivityStopped(@NonNull Activity activity) {
-                if (activity == mActivity) persistEditorSessionForShutdown();
+                // TermuxActivity commits synchronously from its own onStop().
             }
 
             @Override
             public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle outState) {
-                if (activity == mActivity) persistEditorSessionForShutdown();
+                // TermuxActivity commits synchronously from its own onSaveInstanceState().
             }
         };
 }
