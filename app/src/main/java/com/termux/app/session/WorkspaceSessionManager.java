@@ -36,9 +36,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Persists workspace metadata and text-only recovery patches.
  *
- * Clean, storage-backed documents only persist their tab metadata. Dirty documents persist
- * a line patch relative to the exact source-file fingerprint captured when editing began.
- * The original file is never modified by session recovery.
+ * Untitled documents persist their full draft text directly in editor.json. Dirty,
+ * storage-backed documents persist a line patch relative to the exact source-file
+ * fingerprint captured when editing began. The original file is never modified by recovery.
  */
 public final class WorkspaceSessionManager {
 
@@ -87,9 +87,8 @@ public final class WorkspaceSessionManager {
     }
 
     /**
-     * Loads tab metadata from editor.json and the full text of every Untitled tab from
-     * Yummy Private Storage. Draft files are also scanned for tabs written just before a
-     * process stop but not yet referenced by the manifest.
+     * Loads tab metadata from editor.json. The legacy Yummy Private draft directory is
+     * read only as a migration fallback for sessions created by older app versions.
      */
     @Nullable
     public JSONObject loadEditorSession() {
@@ -118,13 +117,14 @@ public final class WorkspaceSessionManager {
                     );
                     restored.put("storageBacked", storageBacked);
 
-                    if (isUntitledDocument(id, storageBacked)) {
+                    if (isUntitledDocument(id, storageBacked)
+                        && !restored.has("draftText")) {
+                        // One-time compatibility path: older builds stored each Untitled
+                        // document in .yummy/drafts. The embedded draftText in editor.json
+                        // is authoritative once migration has completed.
                         JSONObject draft = readUntitledDraft(id);
                         if (draft != null) {
-                            // The draft is written before editor.json. Its revision and text
-                            // therefore win if the process stopped between those two commits.
                             restored.put("draftText", draft.optString("text", ""));
-                            restored.put("draftFile", untitledDraftFileName(id));
                             restored.put("name", draft.optString(
                                 "name", restored.optString("name", "Untitled")
                             ));
@@ -190,8 +190,9 @@ public final class WorkspaceSessionManager {
             }
         }
 
-        // Recover a draft even if editor.json was not committed or was replaced by an older
-        // snapshot. This also closes the creation-window gap for a newly typed Untitled tab.
+        // One-time migration fallback: recover legacy draft files that were committed before
+        // editor.json, including orphan drafts from a process stop during the old two-file write.
+        // Once copied into editor.json and successfully committed, these files are removed.
         List<JSONObject> orphanDrafts = readAllUntitledDrafts(restoredIds);
         for (JSONObject draft : orphanDrafts) {
             try {
@@ -358,8 +359,9 @@ public final class WorkspaceSessionManager {
     }
 
     /**
-     * Converts in-memory document text into a compact patch before writing the manifest.
-     * For storage-backed documents, neither the base text nor current full text is persisted.
+     * Converts storage-backed document changes into recovery patches and writes the complete
+     * Untitled draft text inline with its metadata in editor.json. Storage-backed documents
+     * never persist their base text or current full text in the editor manifest.
      */
     private void writeEditorSession(JSONObject snapshot) throws IOException {
         ensureDirectory(sessionDirectory);
@@ -368,7 +370,6 @@ public final class WorkspaceSessionManager {
         JSONArray documents = snapshot.optJSONArray("documents");
         JSONArray manifestDocuments = new JSONArray();
         List<String> keepRecoveryFiles = new ArrayList<>();
-        List<String> keepUntitledDraftFiles = new ArrayList<>();
         String activeDocumentId = snapshot.optString("activeDocumentId", "");
 
         if (documents != null) {
@@ -387,9 +388,9 @@ public final class WorkspaceSessionManager {
                 if (id.isEmpty()) continue;
 
                 boolean storageBacked = metadata.optBoolean("storageBacked", id.contains("::"));
-                // Untitled tabs have no source file to reload. Their text is stored in
-                // one independently checksummed draft file under Yummy Private Storage.
-                boolean untitledDocument = !storageBacked && id.startsWith("yummy:untitled:");
+                // Untitled tabs have no source file to reload, so their full text is stored
+                // inline in editor.json. This avoids a second persistence location.
+                boolean untitledDocument = isUntitledDocument(id, storageBacked);
                 long revision = metadata.optLong("revision", 0L);
                 long savedRevision = metadata.optLong("savedRevision", revision);
                 boolean dirty = revision != savedRevision;
@@ -397,19 +398,9 @@ public final class WorkspaceSessionManager {
                 String baseText = metadata.optString("baseText", "");
                 String baseSha256 = metadata.optString("baseSha256", "");
 
-                if (untitledDocument) {
-                    String draftName = writeUntitledDraft(
-                        id, metadata, currentText, i, id.equals(activeDocumentId)
-                    );
-                    keepUntitledDraftFiles.add(draftName);
-                    try {
-                        metadata.put("draftFile", draftName);
-                    } catch (JSONException error) {
-                        throw new IOException("Could not reference Untitled draft file", error);
-                    }
-                } else {
-                    metadata.remove("draftFile");
-                }
+                // Remove the legacy draft-file reference. The current text is committed
+                // together with tab metadata below, in the same atomic editor.json write.
+                metadata.remove("draftFile");
 
                 JSONObject recoveryPatch = null;
                 // Do not generate a line diff for Untitled tabs: they have no source file
@@ -456,9 +447,13 @@ public final class WorkspaceSessionManager {
                 try {
                     metadata.put("storageBacked", storageBacked);
                     metadata.put("baseSha256", baseSha256);
-                    // Untitled content lives in an individual file under Yummy Private Storage.
-                    // editor.json stores only the stable draft filename and tab metadata.
-                    metadata.remove("draftText");
+                    if (untitledDocument) {
+                        // Store every Untitled tab independently by its existing UUID in
+                        // the documents array. All drafts are committed in one AtomicFile.
+                        metadata.put("draftText", currentText);
+                    } else {
+                        metadata.remove("draftText");
+                    }
                     if (storageBacked) {
                         metadata.remove("baseText");
                     } else {
@@ -479,53 +474,89 @@ public final class WorkspaceSessionManager {
             throw new IOException("Could not build editor session manifest", error);
         }
 
-        // Commit the manifest before pruning old patch generations. If the process stops
-        // before the manifest commit, its previously referenced patch files remain intact.
+        // Commit all Untitled texts in one atomic manifest before deleting any legacy
+        // draft files. If verification fails, the previous files remain available for
+        // the next startup and the failed save is surfaced through the session indicator.
         writeJsonAtomically(editorManifest, snapshot);
         pruneRecoveryFiles(keepRecoveryFiles);
-        if (documents != null) pruneUntitledDraftFiles(keepUntitledDraftFiles);
-    }
-
-    private String writeUntitledDraft(String id,
-                                      JSONObject metadata,
-                                      String text,
-                                      int tabIndex,
-                                      boolean active) throws IOException {
-        ensureDirectory(untitledDraftDirectory);
-        JSONObject draft = new JSONObject();
-        try {
-            draft.put("version", 1);
-            draft.put("documentId", id);
-            draft.put("name", metadata.optString("name", "Untitled"));
-            draft.put("encoding", metadata.optString("encoding", "UTF-8"));
-            draft.put("text", text == null ? "" : text);
-            draft.put("revision", metadata.optLong("revision", 0L));
-            draft.put("savedRevision", metadata.optLong("savedRevision", 0L));
-            draft.put("tabIndex", tabIndex);
-            draft.put("active", active);
-            draft.put("updatedAt", System.currentTimeMillis());
-        } catch (JSONException error) {
-            throw new IOException("Could not create Untitled draft", error);
+        if (documents != null && verifyUntitledDraftTexts(manifestDocuments)) {
+            pruneLegacyUntitledDraftFiles();
+        } else if (documents != null) {
+            throw new IOException("Could not verify Untitled drafts in editor.json; legacy drafts were retained");
         }
-        String fileName = untitledDraftFileName(id);
-        writeJsonAtomically(new File(untitledDraftDirectory, fileName), draft);
-        return fileName;
     }
 
-    private void pruneUntitledDraftFiles(List<String> keepFiles) {
+    private boolean verifyUntitledDraftTexts(JSONArray expectedDocuments) {
+        JSONObject committed = readJson(editorManifest);
+        if (committed == null) return false;
+        JSONArray actualDocuments = committed.optJSONArray("documents");
+        if (actualDocuments == null) return false;
+
+        for (int i = 0; i < expectedDocuments.length(); i++) {
+            JSONObject expected = expectedDocuments.optJSONObject(i);
+            if (expected == null) continue;
+            String id = expected.optString("id", "");
+            boolean storageBacked = expected.optBoolean("storageBacked", id.contains("::"));
+            if (!isUntitledDocument(id, storageBacked)) continue;
+
+            String expectedText = expected.optString("draftText", "");
+            boolean found = false;
+            for (int j = 0; j < actualDocuments.length(); j++) {
+                JSONObject actual = actualDocuments.optJSONObject(j);
+                if (actual == null || !id.equals(actual.optString("id", ""))) continue;
+                if (!actual.has("draftText")
+                    || !expectedText.equals(actual.optString("draftText", ""))) {
+                    return false;
+                }
+                found = true;
+                break;
+            }
+            if (!found) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Removes only the legacy per-document draft files after every Untitled text has been
+     * verified in the committed editor.json. The containing hidden directories are removed
+     * only when empty; unrelated Yummy Private Storage content is never touched.
+     */
+    private void pruneLegacyUntitledDraftFiles() {
         File[] files = untitledDraftDirectory.listFiles();
-        if (files == null) return;
         Set<String> processed = new HashSet<>();
-        for (File candidate : files) {
-            if (!candidate.isFile()) continue;
-            String name = candidate.getName();
-            String baseName = name.endsWith(".json.bak")
-                ? name.substring(0, name.length() - 4) : name;
-            if (!baseName.endsWith(".json") || keepFiles.contains(baseName)
-                || !processed.add(baseName)) continue;
-            // The editor manifest has already committed without this tab. AtomicFile.delete()
-            // removes both the base file and any interrupted-write backup.
-            new AtomicFile(new File(untitledDraftDirectory, baseName)).delete();
+        if (files != null) {
+            for (File candidate : files) {
+                if (!candidate.isFile()) continue;
+                String name = candidate.getName();
+                String baseName = name.endsWith(".json.bak")
+                    ? name.substring(0, name.length() - 4) : name;
+                if (!baseName.endsWith(".json") || !processed.add(baseName)) continue;
+
+                // Delete only files that can be positively identified as legacy Yummy
+                // Untitled drafts. Unknown or malformed files are deliberately retained.
+                JSONObject legacyDraft = readJson(new File(untitledDraftDirectory, baseName));
+                if (legacyDraft == null) continue;
+                String documentId = legacyDraft.optString("documentId", "");
+                if (!isUntitledDocument(documentId, false)
+                    || !baseName.equals(untitledDraftFileName(documentId))) continue;
+
+                new AtomicFile(new File(untitledDraftDirectory, baseName)).delete();
+                File remainingBase = new File(untitledDraftDirectory, baseName);
+                File remainingBackup = new File(untitledDraftDirectory, baseName + ".bak");
+                if (remainingBase.exists() || remainingBackup.exists()) {
+                    android.util.Log.w("YummySession",
+                        "Could not remove migrated legacy Untitled draft " + baseName);
+                }
+            }
+        }
+        if (untitledDraftDirectory.isDirectory()) {
+            String[] remaining = untitledDraftDirectory.list();
+            if (remaining != null && remaining.length == 0) untitledDraftDirectory.delete();
+        }
+        File hiddenDirectory = untitledDraftDirectory.getParentFile();
+        if (hiddenDirectory != null && hiddenDirectory.isDirectory()) {
+            String[] remaining = hiddenDirectory.list();
+            if (remaining != null && remaining.length == 0) hiddenDirectory.delete();
         }
     }
 

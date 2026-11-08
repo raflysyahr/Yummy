@@ -10,6 +10,7 @@ import android.content.ClipData;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -1771,21 +1772,59 @@ public final class FileManagerController {
         }
 
         /**
-         * Expand the scrollable content width according to the deepest visible row.
-         * ListView keeps its normal vertical scrolling while the parent handles X.
+         * Size the horizontal content for both folder indentation and the widest visible
+         * label. ListView keeps its normal vertical scrolling while the parent handles X.
          */
         private void updateTreeHorizontalWidth() {
             if (listView == null || treeHorizontalScroll == null) return;
 
-            int maxDepth = 0;
+            Paint namePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            namePaint.setTypeface(nunitoTypeface(false));
+            namePaint.setTextSize(TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP, 14f,
+                activity.getResources().getDisplayMetrics()));
+
+            Paint subtitlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            subtitlePaint.setTypeface(nunitoTypeface(false));
+            subtitlePaint.setTextSize(TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP, 10f,
+                activity.getResources().getDisplayMetrics()));
+
+            // Row fixed parts: disclosure (16 + 4), file icon (16 + 6),
+            // selection indicator (20), and right padding (8) dp.
+            final int rowFixedWidth = dp(70);
+            int requiredWidth = treeViewportWidth;
             for (Row row : rows) {
-                if (row != null && row.kind == RowKind.ENTRY) {
-                    maxDepth = Math.max(maxDepth, row.depth);
+                if (row == null) continue;
+
+                if ((row.kind == RowKind.ENTRY || row.kind == RowKind.FAVORITE
+                    || row.kind == RowKind.RECENT) && row.entry != null) {
+                    String label = row.entry.isRoot() ? "/" : row.entry.getName();
+                    int indentWidth = Math.max(0, row.depth) * dp(18);
+                    int textWidth = (int) Math.ceil(namePaint.measureText(
+                        label == null ? "" : label));
+                    requiredWidth = Math.max(requiredWidth,
+                        indentWidth + rowFixedWidth + textWidth + dp(2));
+                } else if (row.kind == RowKind.LOCATION && row.provider != null) {
+                    String label = storageLabel(row.provider);
+                    String description = row.provider.getLocation().getDescription();
+                    if (description == null) {
+                        description = row.provider.isAvailable() ? "Available" : "Unavailable";
+                    }
+                    int textWidth = (int) Math.ceil(Math.max(
+                        namePaint.measureText(label == null ? "" : label),
+                        subtitlePaint.measureText(description)));
+                    requiredWidth = Math.max(requiredWidth,
+                        dp(8) + rowFixedWidth + textWidth + dp(2));
+                } else if (row.kind == RowKind.SECTION && row.label != null) {
+                    Paint sectionPaint = new Paint(namePaint);
+                    sectionPaint.setTypeface(nunitoTypeface(true));
+                    sectionPaint.setTextSize(subtitlePaint.getTextSize());
+                    int textWidth = (int) Math.ceil(sectionPaint.measureText(row.label));
+                    requiredWidth = Math.max(requiredWidth, dp(14 + 12) + textWidth);
                 }
             }
 
-            int requiredWidth = Math.max(treeViewportWidth,
-                treeViewportWidth + (maxDepth * dp(18)));
             ViewGroup.LayoutParams params = listView.getLayoutParams();
             if (params == null) {
                 params = new HorizontalScrollView.LayoutParams(requiredWidth, -1);

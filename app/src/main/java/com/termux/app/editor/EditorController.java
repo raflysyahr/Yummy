@@ -848,6 +848,8 @@ public class EditorController {
             name.setTypeface(nunitoTypeface(active));
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            // Keep long filenames from making one tab dominate the horizontal tab strip.
+            name.setMaxWidth(dpInt(140));
             LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             nameParams.setMargins(dpInt(8), 0, dpInt(5), 0);
