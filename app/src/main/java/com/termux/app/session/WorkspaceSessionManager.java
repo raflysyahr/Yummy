@@ -230,6 +230,9 @@ public final class WorkspaceSessionManager {
                 if (id.isEmpty()) continue;
 
                 boolean storageBacked = metadata.optBoolean("storageBacked", id.contains("::"));
+                // Untitled tabs have no source file to reload. Persist their full text
+                // independently so restoring them never depends on generating a diff patch.
+                boolean untitledDocument = !storageBacked && id.startsWith("yummy:untitled:");
                 long revision = metadata.optLong("revision", 0L);
                 long savedRevision = metadata.optLong("savedRevision", revision);
                 boolean dirty = revision != savedRevision;
@@ -279,11 +282,17 @@ public final class WorkspaceSessionManager {
                 try {
                     metadata.put("storageBacked", storageBacked);
                     metadata.put("baseSha256", baseSha256);
+                    // Never leak a stale draft field into file-backed or other document types.
+                    metadata.remove("draftText");
+                    if (untitledDocument) {
+                        // Keep the complete text for each Untitled tab. The document ID is
+                        // unique, so multiple Untitled tabs remain independent in editor.json.
+                        metadata.put("draftText", currentText);
+                    }
                     if (storageBacked) {
                         metadata.remove("baseText");
                     } else {
-                        // Non-storage-backed starter/untitled documents have no external source
-                        // to reload; retain their baseline, while still storing only a patch.
+                        // Non-storage-backed documents retain their original baseline.
                         metadata.put("baseText", baseText);
                     }
                     manifestDocuments.put(metadata);

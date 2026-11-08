@@ -243,7 +243,10 @@ public class EditorController {
                 if (id.isEmpty()) continue;
                 boolean storageBacked = item.optBoolean("storageBacked", id.contains("::"));
                 String baseText = item.optString("baseText", item.optString("text", ""));
-                String restoredText = storageBacked ? "" : baseText;
+                boolean hasUntitledDraftText = !storageBacked
+                    && id.startsWith("yummy:untitled:") && item.has("draftText");
+                String restoredText = storageBacked ? ""
+                    : (hasUntitledDraftText ? item.optString("draftText", baseText) : baseText);
                 EditorDocument document = new EditorDocument(
                     id, item.optString("name", "Untitled"), restoredText
                 );
@@ -262,7 +265,9 @@ public class EditorController {
                     // File Manager must reload and fingerprint the real source before
                     // a dirty patch can be applied. Until then, never guess the base.
                     document.restorePending = true;
-                } else if (document.recoveryPatch != null) {
+                } else if (!hasUntitledDraftText && document.recoveryPatch != null) {
+                    // Older sessions do not contain draftText, so keep their patch-based
+                    // recovery path as a compatibility fallback.
                     String patched = WorkspaceSessionManager.applyTextPatch(
                         document.baseText, document.recoveryPatch
                     );
