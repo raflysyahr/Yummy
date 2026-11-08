@@ -329,9 +329,9 @@
         <FrameLayout
             android:id="@+id/yummy_session_save_pill"
             android:layout_width="32dp"
-            android:layout_height="match_parent"
+            android:layout_height="32dp"
             android:layout_marginStart="1dp"
-            android:foregroundGravity="center">
+            android:layout_gravity="center_vertical">
             <ImageView
                 android:id="@+id/yummy_session_save_icon"
                 android:layout_width="20dp"

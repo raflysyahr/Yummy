@@ -22,10 +22,12 @@ import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.ViewConfiguration;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -1370,10 +1372,37 @@ public final class FileManagerController {
             listView.setAdapter(adapter);
             listView.setSelector(android.R.color.transparent);
 
-            treeHorizontalScroll = new HorizontalScrollView(activity);
+            treeHorizontalScroll = new HorizontalScrollView(activity) {
+                private float downX;
+                private float downY;
+                private final int touchSlop = ViewConfiguration.get(activity).getScaledTouchSlop();
+
+                @Override
+                public boolean onInterceptTouchEvent(MotionEvent event) {
+                    switch (event.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            downX = event.getX();
+                            downY = event.getY();
+                            break;
+                        case MotionEvent.ACTION_MOVE:
+                            float deltaX = Math.abs(event.getX() - downX);
+                            float deltaY = Math.abs(event.getY() - downY);
+                            View content = getChildAt(0);
+                            boolean contentCanScroll = content != null
+                                && content.getWidth() > getWidth();
+                            // ListView handles vertical scrolling. Claim only a clear
+                            // horizontal swipe when the tree is wider than its viewport.
+                            if (contentCanScroll && deltaX > touchSlop && deltaX > deltaY) {
+                                return true;
+                            }
+                            break;
+                    }
+                    return super.onInterceptTouchEvent(event);
+                }
+            };
             treeHorizontalScroll.setHorizontalScrollBarEnabled(false);
             treeHorizontalScroll.setVerticalScrollBarEnabled(false);
-            treeHorizontalScroll.setFillViewport(true);
+            treeHorizontalScroll.setFillViewport(false);
             treeHorizontalScroll.setSmoothScrollingEnabled(true);
             treeHorizontalScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
 
@@ -1834,6 +1863,12 @@ public final class FileManagerController {
                 params.height = -1;
                 listView.setLayoutParams(params);
             }
+            // Re-measure the scroll content after each expand/collapse. Without an
+            // explicit layout pass, ListView may retain its old viewport-sized width.
+            listView.setMinimumWidth(requiredWidth);
+            listView.requestLayout();
+            treeHorizontalScroll.requestLayout();
+            treeHorizontalScroll.invalidate();
         }
 
         private void appendTreeRows(StorageEntry parent, int depth, Set<String> visited) {
