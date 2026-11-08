@@ -1897,6 +1897,23 @@ public final class FileManagerController {
             treeContentContainer.requestLayout();
             treeHorizontalScroll.requestLayout();
             treeHorizontalScroll.invalidate();
+
+            // updateTreeHorizontalWidth() can run before the scroll view receives
+            // its final layout width. Re-check after layout so the content is never
+            // left at the stale compact panel width (157 px in the reported case).
+            treeHorizontalScroll.post(() -> {
+                if (treeContentContainer == null || treeHorizontalScroll == null) return;
+                int actualViewportWidth = treeHorizontalScroll.getWidth();
+                if (actualViewportWidth <= 0) return;
+                ViewGroup.LayoutParams params = treeContentContainer.getLayoutParams();
+                if (params != null && params.width < actualViewportWidth) {
+                    params.width = actualViewportWidth;
+                    treeContentContainer.setLayoutParams(params);
+                    treeContentContainer.requestLayout();
+                    if (listView != null) listView.requestLayout();
+                    treeHorizontalScroll.requestLayout();
+                }
+            });
             scheduleTreeWidthDebug();
         }
 
