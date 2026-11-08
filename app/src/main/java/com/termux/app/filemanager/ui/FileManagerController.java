@@ -888,6 +888,8 @@ public final class FileManagerController {
         private HorizontalScrollView treeHorizontalScroll;
         private FrameLayout treeContentContainer;
         private int treeViewportWidth;
+        // Minimum width required by the viewport and widest current row.
+        private int requiredTreeContentWidth;
         private EditText searchView;
         private Button useFolderButton;
         private ProgressBar progressBar;
@@ -1420,6 +1422,18 @@ public final class FileManagerController {
             treeContentContainer.addView(listView,
                 new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
+
+            // HorizontalScrollView may receive its final width after the initial tree
+            // rows are measured. Reconcile the content width every time its viewport
+            // is laid out, rather than relying on a one-time post() callback.
+            treeHorizontalScroll.addOnLayoutChangeListener((view, left, top, right, bottom,
+                                                             oldLeft, oldTop, oldRight, oldBottom) -> {
+                int viewportWidth = right - left;
+                if (viewportWidth <= 0 || treeContentContainer == null) return;
+                treeViewportWidth = viewportWidth;
+                applyTreeContentWidth(viewportWidth);
+            });
+
             treeHorizontalScroll.addView(treeContentContainer);
             listFrame.addView(treeHorizontalScroll, new FrameLayout.LayoutParams(-1, -1));
 
@@ -1836,10 +1850,14 @@ public final class FileManagerController {
             // Row fixed parts: disclosure (16 + 4), file icon (16 + 6),
             // selection indicator (20), and right padding (8) dp.
             final int rowFixedWidth = dp(70);
-            // Use the actual measured scroll viewport as the minimum content width.
-            // treeViewportWidth can be stale or based on the drawer's compact width,
-            // which makes every row collapse and its text area become only a few px.
+            // Use the actual measured viewport, including the right pane's current
+            // width. The cached initial panel calculation can be stale during the
+            // first layout or after the dialog changes between drawer/popup sizing.
             int measuredViewportWidth = treeHorizontalScroll.getWidth();
+            if (rightPane != null) {
+                measuredViewportWidth = Math.max(measuredViewportWidth, rightPane.getWidth());
+            }
+            if (measuredViewportWidth > 0) treeViewportWidth = measuredViewportWidth;
             int requiredWidth = Math.max(treeViewportWidth, measuredViewportWidth);
             for (Row row : rows) {
                 if (row == null) continue;
@@ -1873,17 +1891,44 @@ public final class FileManagerController {
             }
 
             if (treeContentContainer == null) return;
+            requiredTreeContentWidth = requiredWidth;
+            applyTreeContentWidth(measuredViewportWidth);
+
+            // Also reconcile once on the next UI turn. The layout-change listener
+            // above remains the source of truth for later viewport size changes.
+            treeHorizontalScroll.post(() -> {
+                if (treeHorizontalScroll == null || treeContentContainer == null) return;
+                int actualViewportWidth = treeHorizontalScroll.getWidth();
+                if (actualViewportWidth <= 0) return;
+                treeViewportWidth = actualViewportWidth;
+                applyTreeContentWidth(actualViewportWidth);
+            });
+            scheduleTreeWidthDebug();
+        }
+
+
+        /**
+         * Keeps the horizontal content surface at least as wide as its current viewport
+         * and as wide as the widest row measured by updateTreeHorizontalWidth().
+         */
+        private void applyTreeContentWidth(int viewportWidth) {
+            if (treeContentContainer == null || listView == null) return;
+
+            int targetWidth = Math.max(requiredTreeContentWidth, viewportWidth);
+            if (targetWidth <= 0) return;
+
             ViewGroup.LayoutParams contentParams = treeContentContainer.getLayoutParams();
             if (contentParams == null) {
-                contentParams = new HorizontalScrollView.LayoutParams(requiredWidth, -1);
+                contentParams = new HorizontalScrollView.LayoutParams(targetWidth, -1);
             }
-            if (contentParams.width != requiredWidth || contentParams.height != -1) {
-                contentParams.width = requiredWidth;
+            if (contentParams.width != targetWidth || contentParams.height != -1) {
+                contentParams.width = targetWidth;
                 contentParams.height = -1;
                 treeContentContainer.setLayoutParams(contentParams);
             }
-            // The wrapper owns the overflow width. Keep ListView exactly as wide as
-            // that wrapper so each row is laid out against the full horizontal canvas.
+
+            // ListView fills the explicit-width wrapper, so each row receives the
+            // full horizontal canvas instead of shrinking to the initial panel width.
             ViewGroup.LayoutParams listParams = listView.getLayoutParams();
             if (listParams == null) {
                 listParams = new FrameLayout.LayoutParams(
@@ -1895,26 +1940,10 @@ public final class FileManagerController {
             listView.setLayoutParams(listParams);
             listView.requestLayout();
             treeContentContainer.requestLayout();
-            treeHorizontalScroll.requestLayout();
-            treeHorizontalScroll.invalidate();
-
-            // updateTreeHorizontalWidth() can run before the scroll view receives
-            // its final layout width. Re-check after layout so the content is never
-            // left at the stale compact panel width (157 px in the reported case).
-            treeHorizontalScroll.post(() -> {
-                if (treeContentContainer == null || treeHorizontalScroll == null) return;
-                int actualViewportWidth = treeHorizontalScroll.getWidth();
-                if (actualViewportWidth <= 0) return;
-                ViewGroup.LayoutParams params = treeContentContainer.getLayoutParams();
-                if (params != null && params.width < actualViewportWidth) {
-                    params.width = actualViewportWidth;
-                    treeContentContainer.setLayoutParams(params);
-                    treeContentContainer.requestLayout();
-                    if (listView != null) listView.requestLayout();
-                    treeHorizontalScroll.requestLayout();
-                }
-            });
-            scheduleTreeWidthDebug();
+            if (treeHorizontalScroll != null) {
+                treeHorizontalScroll.requestLayout();
+                treeHorizontalScroll.invalidate();
+            }
         }
 
         /**
