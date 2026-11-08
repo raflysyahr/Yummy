@@ -22,7 +22,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -46,11 +49,14 @@ public final class WorkspaceSessionManager {
     private static final String EDITOR_FILE = "editor.json";
     private static final String FILE_MANAGER_FILE = "filemanager.json";
     private static final String RECOVERY_DIRECTORY = "recovery";
+    private static final String YUMMY_PRIVATE_DIRECTORY = "yummy-storage";
+    private static final String UNTITLED_DRAFT_DIRECTORY = ".yummy/drafts";
     private static final int MAX_TRACE_CELLS = 4_000_000;
 
     private final File sessionDirectory;
     private final File legacyDocumentsDirectory;
     private final File recoveryDirectory;
+    private final File untitledDraftDirectory;
     private final File editorManifest;
     private final File fileManagerManifest;
     private final ExecutorService ioExecutor;
@@ -69,6 +75,8 @@ public final class WorkspaceSessionManager {
         sessionDirectory = new File(appContext.getFilesDir(), "yummy-session");
         legacyDocumentsDirectory = new File(sessionDirectory, "documents");
         recoveryDirectory = new File(sessionDirectory, RECOVERY_DIRECTORY);
+        File yummyPrivateRoot = appContext.getDir(YUMMY_PRIVATE_DIRECTORY, Context.MODE_PRIVATE);
+        untitledDraftDirectory = new File(yummyPrivateRoot, UNTITLED_DRAFT_DIRECTORY);
         editorManifest = new File(sessionDirectory, EDITOR_FILE);
         fileManagerManifest = new File(sessionDirectory, FILE_MANAGER_FILE);
         ioExecutor = Executors.newSingleThreadExecutor(runnable -> {
@@ -78,14 +86,24 @@ public final class WorkspaceSessionManager {
         });
     }
 
-    /** Returns null when no editor session has ever been saved. */
+    /**
+     * Loads tab metadata from editor.json and the full text of every Untitled tab from
+     * Yummy Private Storage. Draft files are also scanned for tabs written just before a
+     * process stop but not yet referenced by the manifest.
+     */
     @Nullable
     public JSONObject loadEditorSession() {
         JSONObject manifest = readJson(editorManifest);
-        if (manifest == null) return null;
+        boolean hasManifest = manifest != null;
+        if (manifest == null) manifest = new JSONObject();
 
         JSONArray storedDocuments = manifest.optJSONArray("documents");
         JSONArray restoredDocuments = new JSONArray();
+        Set<String> restoredIds = new HashSet<>();
+        String activeDocumentId = manifest.optString("activeDocumentId", "");
+        String newestActiveDraftId = "";
+        long newestActiveDraftTime = Long.MIN_VALUE;
+
         if (storedDocuments != null) {
             for (int i = 0; i < storedDocuments.length(); i++) {
                 JSONObject stored = storedDocuments.optJSONObject(i);
@@ -93,10 +111,40 @@ public final class WorkspaceSessionManager {
                 try {
                     JSONObject restored = new JSONObject(stored.toString());
                     String id = restored.optString("id", "");
+                    if (id.isEmpty()) continue;
+
                     boolean storageBacked = restored.optBoolean(
                         "storageBacked", id.contains("::")
                     );
                     restored.put("storageBacked", storageBacked);
+
+                    if (isUntitledDocument(id, storageBacked)) {
+                        JSONObject draft = readUntitledDraft(id);
+                        if (draft != null) {
+                            // The draft is written before editor.json. Its revision and text
+                            // therefore win if the process stopped between those two commits.
+                            restored.put("draftText", draft.optString("text", ""));
+                            restored.put("draftFile", untitledDraftFileName(id));
+                            restored.put("name", draft.optString(
+                                "name", restored.optString("name", "Untitled")
+                            ));
+                            restored.put("encoding", draft.optString(
+                                "encoding", restored.optString("encoding", "UTF-8")
+                            ));
+                            restored.put("revision", draft.optLong(
+                                "revision", restored.optLong("revision", 0L)
+                            ));
+                            restored.put("savedRevision", draft.optLong(
+                                "savedRevision", restored.optLong("savedRevision", 0L)
+                            ));
+                            long updatedAt = draft.optLong("updatedAt", 0L);
+                            if (draft.optBoolean("active", false)
+                                && updatedAt >= newestActiveDraftTime) {
+                                newestActiveDraftId = id;
+                                newestActiveDraftTime = updatedAt;
+                            }
+                        }
+                    }
 
                     String recoveryFile = restored.optString("recoveryFile", "");
                     if (!recoveryFile.isEmpty()) {
@@ -133,19 +181,126 @@ public final class WorkspaceSessionManager {
                                 "Could not read legacy document cache for " + id, error);
                         }
                     }
+
                     restoredDocuments.put(restored);
+                    restoredIds.add(id);
                 } catch (JSONException error) {
                     android.util.Log.e("YummySession", "Invalid editor document metadata", error);
                 }
             }
         }
+
+        // Recover a draft even if editor.json was not committed or was replaced by an older
+        // snapshot. This also closes the creation-window gap for a newly typed Untitled tab.
+        List<JSONObject> orphanDrafts = readAllUntitledDrafts(restoredIds);
+        for (JSONObject draft : orphanDrafts) {
+            try {
+                JSONObject document = new JSONObject();
+                String id = draft.optString("documentId", "");
+                document.put("id", id);
+                document.put("name", draft.optString("name", "Untitled"));
+                document.put("encoding", draft.optString("encoding", "UTF-8"));
+                document.put("storageBacked", false);
+                document.put("baseText", "");
+                document.put("baseSha256", sha256(new byte[0]));
+                document.put("revision", draft.optLong("revision", 0L));
+                document.put("savedRevision", draft.optLong("savedRevision", 0L));
+                document.put("draftText", draft.optString("text", ""));
+                document.put("draftFile", untitledDraftFileName(id));
+                restoredDocuments.put(document);
+
+                long updatedAt = draft.optLong("updatedAt", 0L);
+                if (draft.optBoolean("active", false) && updatedAt >= newestActiveDraftTime) {
+                    newestActiveDraftId = id;
+                    newestActiveDraftTime = updatedAt;
+                }
+            } catch (JSONException error) {
+                android.util.Log.e("YummySession", "Could not restore an orphan Untitled draft", error);
+            }
+        }
+
+        if (!hasManifest && restoredDocuments.length() == 0) return null;
+
+        // Draft files are written before editor.json. Their most recent active marker wins
+        // if the process stopped between those two commits.
+        if (!newestActiveDraftId.isEmpty()) activeDocumentId = newestActiveDraftId;
+
+        // If neither the manifest nor a draft identifies an available active tab, use the
+        // first tab in the restored order.
+        boolean activeExists = false;
+        for (int i = 0; i < restoredDocuments.length(); i++) {
+            JSONObject document = restoredDocuments.optJSONObject(i);
+            if (document != null && activeDocumentId.equals(document.optString("id", ""))) {
+                activeExists = true;
+                break;
+            }
+        }
+        if (!activeExists && restoredDocuments.length() > 0) {
+            JSONObject first = restoredDocuments.optJSONObject(0);
+            activeDocumentId = first == null ? "" : first.optString("id", "");
+        }
+
         try {
+            manifest.put("version", manifest.optInt("version", 1));
             manifest.put("documents", restoredDocuments);
+            manifest.put("activeDocumentId", activeDocumentId.isEmpty()
+                ? JSONObject.NULL : activeDocumentId);
         } catch (JSONException error) {
             android.util.Log.e("YummySession", "Could not restore editor manifest", error);
             return null;
         }
         return manifest;
+    }
+
+    private boolean isUntitledDocument(String id, boolean storageBacked) {
+        return !storageBacked && id != null && id.startsWith("yummy:untitled:");
+    }
+
+    private String untitledDraftFileName(String documentId) {
+        return sha256(documentId.getBytes(StandardCharsets.UTF_8)) + ".json";
+    }
+
+    @Nullable
+    private JSONObject readUntitledDraft(String documentId) {
+        if (!isUntitledDocument(documentId, false)) return null;
+        File file = new File(untitledDraftDirectory, untitledDraftFileName(documentId));
+        JSONObject draft = readJson(file);
+        if (draft == null || !documentId.equals(draft.optString("documentId", ""))) {
+            return null;
+        }
+        return draft;
+    }
+
+    private List<JSONObject> readAllUntitledDrafts(Set<String> excludedIds) {
+        List<JSONObject> drafts = new ArrayList<>();
+        File[] files = untitledDraftDirectory.listFiles();
+        if (files == null) return drafts;
+        for (File candidate : files) {
+            if (!candidate.isFile()) continue;
+            String candidateName = candidate.getName();
+            // AtomicFile can leave a .bak after an abrupt process stop. openRead() on
+            // the base filename restores that last committed generation.
+            String baseName = candidateName.endsWith(".json.bak")
+                ? candidateName.substring(0, candidateName.length() - 4) : candidateName;
+            if (!baseName.endsWith(".json")) continue;
+            File baseFile = new File(untitledDraftDirectory, baseName);
+            JSONObject draft = readJson(baseFile);
+            if (draft == null) continue;
+            String id = draft.optString("documentId", "");
+            if (!isUntitledDocument(id, false) || excludedIds.contains(id)) continue;
+            if (!baseName.equals(untitledDraftFileName(id))) continue;
+            drafts.add(draft);
+            excludedIds.add(id);
+        }
+        Collections.sort(drafts, (left, right) -> {
+            int leftIndex = left.optInt("tabIndex", Integer.MAX_VALUE);
+            int rightIndex = right.optInt("tabIndex", Integer.MAX_VALUE);
+            if (leftIndex != rightIndex) return Integer.compare(leftIndex, rightIndex);
+            return Long.compare(
+                left.optLong("updatedAt", 0L), right.optLong("updatedAt", 0L)
+            );
+        });
+        return drafts;
     }
 
     /** A detached JSON snapshot is captured by the caller before this asynchronous write. */
@@ -213,6 +368,8 @@ public final class WorkspaceSessionManager {
         JSONArray documents = snapshot.optJSONArray("documents");
         JSONArray manifestDocuments = new JSONArray();
         List<String> keepRecoveryFiles = new ArrayList<>();
+        List<String> keepUntitledDraftFiles = new ArrayList<>();
+        String activeDocumentId = snapshot.optString("activeDocumentId", "");
 
         if (documents != null) {
             for (int i = 0; i < documents.length(); i++) {
@@ -230,8 +387,8 @@ public final class WorkspaceSessionManager {
                 if (id.isEmpty()) continue;
 
                 boolean storageBacked = metadata.optBoolean("storageBacked", id.contains("::"));
-                // Untitled tabs have no source file to reload. Persist their full text
-                // independently so restoring them never depends on generating a diff patch.
+                // Untitled tabs have no source file to reload. Their text is stored in
+                // one independently checksummed draft file under Yummy Private Storage.
                 boolean untitledDocument = !storageBacked && id.startsWith("yummy:untitled:");
                 long revision = metadata.optLong("revision", 0L);
                 long savedRevision = metadata.optLong("savedRevision", revision);
@@ -240,10 +397,23 @@ public final class WorkspaceSessionManager {
                 String baseText = metadata.optString("baseText", "");
                 String baseSha256 = metadata.optString("baseSha256", "");
 
+                if (untitledDocument) {
+                    String draftName = writeUntitledDraft(
+                        id, metadata, currentText, i, id.equals(activeDocumentId)
+                    );
+                    keepUntitledDraftFiles.add(draftName);
+                    try {
+                        metadata.put("draftFile", draftName);
+                    } catch (JSONException error) {
+                        throw new IOException("Could not reference Untitled draft file", error);
+                    }
+                } else {
+                    metadata.remove("draftFile");
+                }
+
                 JSONObject recoveryPatch = null;
-                // Untitled documents are persisted as complete draftText values below.
-                // Do not spend time generating a line diff for them: there is no source
-                // file to reconcile, and the full draft is the recovery source of truth.
+                // Do not generate a line diff for Untitled tabs: they have no source file
+                // to reconcile, and the external draft file is their recovery source.
                 if (dirty && !untitledDocument
                     && metadata.optBoolean("preserveRecoveryPatch", false)) {
                     recoveryPatch = metadata.optJSONObject("recoveryPatch");
@@ -286,13 +456,9 @@ public final class WorkspaceSessionManager {
                 try {
                     metadata.put("storageBacked", storageBacked);
                     metadata.put("baseSha256", baseSha256);
-                    // Never leak a stale draft field into file-backed or other document types.
+                    // Untitled content lives in an individual file under Yummy Private Storage.
+                    // editor.json stores only the stable draft filename and tab metadata.
                     metadata.remove("draftText");
-                    if (untitledDocument) {
-                        // Keep the complete text for each Untitled tab. The document ID is
-                        // unique, so multiple Untitled tabs remain independent in editor.json.
-                        metadata.put("draftText", currentText);
-                    }
                     if (storageBacked) {
                         metadata.remove("baseText");
                     } else {
@@ -317,6 +483,50 @@ public final class WorkspaceSessionManager {
         // before the manifest commit, its previously referenced patch files remain intact.
         writeJsonAtomically(editorManifest, snapshot);
         pruneRecoveryFiles(keepRecoveryFiles);
+        if (documents != null) pruneUntitledDraftFiles(keepUntitledDraftFiles);
+    }
+
+    private String writeUntitledDraft(String id,
+                                      JSONObject metadata,
+                                      String text,
+                                      int tabIndex,
+                                      boolean active) throws IOException {
+        ensureDirectory(untitledDraftDirectory);
+        JSONObject draft = new JSONObject();
+        try {
+            draft.put("version", 1);
+            draft.put("documentId", id);
+            draft.put("name", metadata.optString("name", "Untitled"));
+            draft.put("encoding", metadata.optString("encoding", "UTF-8"));
+            draft.put("text", text == null ? "" : text);
+            draft.put("revision", metadata.optLong("revision", 0L));
+            draft.put("savedRevision", metadata.optLong("savedRevision", 0L));
+            draft.put("tabIndex", tabIndex);
+            draft.put("active", active);
+            draft.put("updatedAt", System.currentTimeMillis());
+        } catch (JSONException error) {
+            throw new IOException("Could not create Untitled draft", error);
+        }
+        String fileName = untitledDraftFileName(id);
+        writeJsonAtomically(new File(untitledDraftDirectory, fileName), draft);
+        return fileName;
+    }
+
+    private void pruneUntitledDraftFiles(List<String> keepFiles) {
+        File[] files = untitledDraftDirectory.listFiles();
+        if (files == null) return;
+        Set<String> processed = new HashSet<>();
+        for (File candidate : files) {
+            if (!candidate.isFile()) continue;
+            String name = candidate.getName();
+            String baseName = name.endsWith(".json.bak")
+                ? name.substring(0, name.length() - 4) : name;
+            if (!baseName.endsWith(".json") || keepFiles.contains(baseName)
+                || !processed.add(baseName)) continue;
+            // The editor manifest has already committed without this tab. AtomicFile.delete()
+            // removes both the base file and any interrupted-write backup.
+            new AtomicFile(new File(untitledDraftDirectory, baseName)).delete();
+        }
     }
 
     private void pruneRecoveryFiles(List<String> keepFiles) {
@@ -422,11 +632,16 @@ public final class WorkspaceSessionManager {
 
     @Nullable
     private JSONObject readJson(File file) {
-        if (!file.isFile()) return null;
-        try {
-            return new JSONObject(readText(file));
+        try (FileInputStream input = new AtomicFile(file).openRead();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[16 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            return new JSONObject(new String(output.toByteArray(), StandardCharsets.UTF_8));
         } catch (IOException | JSONException error) {
-            android.util.Log.e("YummySession", "Could not read " + file.getName(), error);
+            if (file.exists() || new File(file.getPath() + ".bak").exists()) {
+                android.util.Log.e("YummySession", "Could not read " + file.getName(), error);
+            }
             return null;
         }
     }
