@@ -1378,6 +1378,13 @@ public final class FileManagerController {
                 private final int touchSlop = ViewConfiguration.get(activity).getScaledTouchSlop();
 
                 @Override
+                public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
+                    // Keep horizontal gestures available to this scroll container.
+                    // onInterceptTouchEvent() still lets ListView handle vertical gestures.
+                    super.requestDisallowInterceptTouchEvent(false);
+                }
+
+                @Override
                 public boolean onInterceptTouchEvent(MotionEvent event) {
                     switch (event.getActionMasked()) {
                         case MotionEvent.ACTION_DOWN:
@@ -1826,7 +1833,7 @@ public final class FileManagerController {
             for (Row row : rows) {
                 if (row == null) continue;
 
-                if ((row.kind == RowKind.TREE || row.kind == RowKind.ENTRY || row.kind == RowKind.FAVORITE
+                if ((row.kind == RowKind.ENTRY || row.kind == RowKind.FAVORITE
                     || row.kind == RowKind.RECENT) && row.entry != null) {
                     String label = row.entry.isRoot() ? "/" : row.entry.getName();
                     int indentWidth = Math.max(0, row.depth) * dp(18);
