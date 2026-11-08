@@ -883,8 +883,9 @@ public final class FileManagerController {
         private LinearLayout actionBar;
         private LinearLayout selectionBar;
         private ListView listView;
-        // Horizontal viewport for deeply nested directory rows.
+        // Horizontal viewport and explicit wide content surface for deeply nested rows.
         private HorizontalScrollView treeHorizontalScroll;
+        private FrameLayout treeContentContainer;
         private int treeViewportWidth;
         private EditText searchView;
         private Button useFolderButton;
@@ -1412,8 +1413,13 @@ public final class FileManagerController {
             treeHorizontalScroll.setFillViewport(false);
             treeHorizontalScroll.setSmoothScrollingEnabled(true);
             treeHorizontalScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-
-            treeHorizontalScroll.addView(listView, new HorizontalScrollView.LayoutParams(treeViewportWidth, -1));
+            treeContentContainer = new FrameLayout(activity);
+            treeContentContainer.setLayoutParams(
+                new HorizontalScrollView.LayoutParams(treeViewportWidth, -1));
+            treeContentContainer.addView(listView,
+                new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+            treeHorizontalScroll.addView(treeContentContainer);
             listFrame.addView(treeHorizontalScroll, new FrameLayout.LayoutParams(-1, -1));
 
             emptyView = text("No files", 14, 0xFF969EA7, false);
@@ -1861,19 +1867,29 @@ public final class FileManagerController {
                 }
             }
 
-            ViewGroup.LayoutParams params = listView.getLayoutParams();
-            if (params == null) {
-                params = new HorizontalScrollView.LayoutParams(requiredWidth, -1);
+            if (treeContentContainer == null) return;
+            ViewGroup.LayoutParams contentParams = treeContentContainer.getLayoutParams();
+            if (contentParams == null) {
+                contentParams = new HorizontalScrollView.LayoutParams(requiredWidth, -1);
             }
-            if (params.width != requiredWidth || params.height != -1) {
-                params.width = requiredWidth;
-                params.height = -1;
-                listView.setLayoutParams(params);
+            if (contentParams.width != requiredWidth || contentParams.height != -1) {
+                contentParams.width = requiredWidth;
+                contentParams.height = -1;
+                treeContentContainer.setLayoutParams(contentParams);
             }
-            // Re-measure the scroll content after each expand/collapse. Without an
-            // explicit layout pass, ListView may retain its old viewport-sized width.
-            listView.setMinimumWidth(requiredWidth);
+            // The wrapper owns the overflow width. Keep ListView exactly as wide as
+            // that wrapper so each row is laid out against the full horizontal canvas.
+            ViewGroup.LayoutParams listParams = listView.getLayoutParams();
+            if (listParams == null) {
+                listParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            } else {
+                listParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                listParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            }
+            listView.setLayoutParams(listParams);
             listView.requestLayout();
+            treeContentContainer.requestLayout();
             treeHorizontalScroll.requestLayout();
             treeHorizontalScroll.invalidate();
         }
