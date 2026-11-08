@@ -734,7 +734,10 @@ public class EditorController {
     }
 
     private void activateDocumentInternal(EditorDocument document, boolean notify) {
-        if (mActiveDocument != null && mEditor != null) {
+        // Only capture the editor buffer when switching away from a different document.
+        // During startup restore, mActiveDocument is already set while the editor still
+        // contains its initial empty buffer; copying it here would erase the restored draft.
+        if (mActiveDocument != null && mActiveDocument != document && mEditor != null) {
             mActiveDocument.text = mEditor.getText().toString();
         }
         mActiveDocument = document;
