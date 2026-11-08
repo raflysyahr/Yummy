@@ -1836,7 +1836,11 @@ public final class FileManagerController {
             // Row fixed parts: disclosure (16 + 4), file icon (16 + 6),
             // selection indicator (20), and right padding (8) dp.
             final int rowFixedWidth = dp(70);
-            int requiredWidth = treeViewportWidth;
+            // Use the actual measured scroll viewport as the minimum content width.
+            // treeViewportWidth can be stale or based on the drawer's compact width,
+            // which makes every row collapse and its text area become only a few px.
+            int measuredViewportWidth = treeHorizontalScroll.getWidth();
+            int requiredWidth = Math.max(treeViewportWidth, measuredViewportWidth);
             for (Row row : rows) {
                 if (row == null) continue;
 
