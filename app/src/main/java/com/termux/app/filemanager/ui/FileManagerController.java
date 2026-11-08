@@ -862,6 +862,7 @@ public final class FileManagerController {
         private enum PendingTransfer { NONE, COPY, MOVE }
 
         private boolean initialized;
+        private boolean treeWidthDebugShown;
         
         private final Dialog dialog;
         private boolean initialSaveAsMode;
@@ -1892,6 +1893,60 @@ public final class FileManagerController {
             treeContentContainer.requestLayout();
             treeHorizontalScroll.requestLayout();
             treeHorizontalScroll.invalidate();
+            showTreeWidthDebugOnce();
+        }
+
+        /** Shows actual laid-out widths once, directly inside the app for diagnosis. */
+        private void showTreeWidthDebugOnce() {
+            if (treeWidthDebugShown || treeContentContainer == null
+                || treeHorizontalScroll == null || listView == null) return;
+
+            treeContentContainer.post(() -> {
+                if (treeWidthDebugShown || destroyed || !dialog.isShowing()) return;
+                treeWidthDebugShown = true;
+
+                StringBuilder info = new StringBuilder();
+                info.append("TREE WIDTH DEBUG\n\n")
+                    .append("Viewport: ").append(treeHorizontalScroll.getWidth()).append(" px\n")
+                    .append("Content: ").append(treeContentContainer.getWidth()).append(" px\n")
+                    .append("ListView: ").append(listView.getWidth()).append(" px\n")
+                    .append("ScrollX: ").append(treeHorizontalScroll.getScrollX()).append(" px\n")
+                    .append("Visible rows: ").append(listView.getChildCount()).append('\n');
+
+                if (listView.getChildCount() > 0) {
+                    View row = listView.getChildAt(0);
+                    info.append("First row: ").append(row.getWidth()).append(" px\n");
+                    if (row instanceof ViewGroup) {
+                        ViewGroup rowGroup = (ViewGroup) row;
+                        info.append("Row children: ").append(rowGroup.getChildCount()).append('\n');
+                        for (int i = 0; i < rowGroup.getChildCount(); i++) {
+                            View child = rowGroup.getChildAt(i);
+                            info.append("  Child[").append(i).append("]: ")
+                                .append(child.getClass().getSimpleName()).append(" = ")
+                                .append(child.getWidth()).append(" px\n");
+                            if (child instanceof ViewGroup) {
+                                ViewGroup group = (ViewGroup) child;
+                                for (int j = 0; j < group.getChildCount(); j++) {
+                                    View nested = group.getChildAt(j);
+                                    if (nested instanceof TextView) {
+                                        TextView textView = (TextView) nested;
+                                        info.append("    Text[").append(j).append("]: width=")
+                                            .append(textView.getWidth()).append(" px, text=\"")
+                                            .append(textView.getText()).append("\", ellipsize=")
+                                            .append(textView.getEllipsize()).append('\n');
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                new android.app.AlertDialog.Builder(activity)
+                    .setTitle("File Tree Width Debug")
+                    .setMessage(info.toString())
+                    .setPositiveButton("OK", null)
+                    .show();
+            });
         }
 
         private void appendTreeRows(StorageEntry parent, int depth, Set<String> visited) {
