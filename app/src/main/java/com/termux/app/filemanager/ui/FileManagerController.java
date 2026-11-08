@@ -862,7 +862,7 @@ public final class FileManagerController {
         private enum PendingTransfer { NONE, COPY, MOVE }
 
         private boolean initialized;
-        private boolean treeWidthDebugShown;
+        private Runnable pendingTreeWidthDebug;
         
         private final Dialog dialog;
         private boolean initialSaveAsMode;
@@ -1893,19 +1893,32 @@ public final class FileManagerController {
             treeContentContainer.requestLayout();
             treeHorizontalScroll.requestLayout();
             treeHorizontalScroll.invalidate();
-            showTreeWidthDebugOnce();
+            scheduleTreeWidthDebug();
         }
 
-        /** Shows actual laid-out widths once, directly inside the app for diagnosis. */
-        private void showTreeWidthDebugOnce() {
-            if (treeWidthDebugShown || treeContentContainer == null
-                || treeHorizontalScroll == null || listView == null) return;
+        /**
+         * Show the measurements after each File Tree rebuild/navigation, not just once
+         * when the sidebar first opens. A short debounce lets ListView finish measuring
+         * the newly loaded rows before the diagnostic is collected.
+         */
+        private void scheduleTreeWidthDebug() {
+            if (treeContentContainer == null || treeHorizontalScroll == null || listView == null) return;
+            if (pendingTreeWidthDebug != null) {
+                treeContentContainer.removeCallbacks(pendingTreeWidthDebug);
+            }
+            pendingTreeWidthDebug = () -> {
+                pendingTreeWidthDebug = null;
+                if (destroyed || !dialog.isShowing()) return;
+                showTreeWidthDebugNow();
+            };
+            treeContentContainer.postDelayed(pendingTreeWidthDebug, 300);
+        }
 
-            treeContentContainer.post(() -> {
-                if (treeWidthDebugShown || destroyed || !dialog.isShowing()) return;
-                treeWidthDebugShown = true;
+        /** Collect actual laid-out widths after the current list contents are rendered. */
+        private void showTreeWidthDebugNow() {
+            if (treeContentContainer == null || treeHorizontalScroll == null || listView == null) return;
 
-                StringBuilder info = new StringBuilder();
+            StringBuilder info = new StringBuilder();
                 info.append("TREE WIDTH DEBUG\n\n")
                     .append("Viewport: ").append(treeHorizontalScroll.getWidth()).append(" px\n")
                     .append("Content: ").append(treeContentContainer.getWidth()).append(" px\n")
@@ -1941,12 +1954,11 @@ public final class FileManagerController {
                     }
                 }
 
-                new android.app.AlertDialog.Builder(activity)
-                    .setTitle("File Tree Width Debug")
-                    .setMessage(info.toString())
-                    .setPositiveButton("OK", null)
-                    .show();
-            });
+            new android.app.AlertDialog.Builder(activity)
+                .setTitle("File Tree Width Debug")
+                .setMessage(info.toString())
+                .setPositiveButton("OK", null)
+                .show();
         }
 
         private void appendTreeRows(StorageEntry parent, int depth, Set<String> visited) {
