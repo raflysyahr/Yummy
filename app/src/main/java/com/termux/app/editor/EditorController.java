@@ -60,12 +60,6 @@ import java.util.UUID;
 public class EditorController {
     private static boolean sTextMateInitialized;
 
-    private static final String SAMPLE =
-        "import urwid\n\nclass Application:\n    def __init__(self):\n"
-            + "        self.loop = MainLoop()\n\n    def run(self):\n"
-            + "        self.loop.run()\n\n\nif __name__ == \"__main__\":\n"
-            + "    app = Application()\n    app.run()\n";
-
     private final Activity mActivity;
     private CodeEditor mEditor;
     private TextView mStatusPos;
@@ -78,6 +72,14 @@ public class EditorController {
     private PopupWindow mEncodingPopup;
     private LinearLayout mTabsContainer;
     private HorizontalScrollView mTabsScroll;
+    private View mEditorContainer;
+    private View mEditorTopDivider;
+    private View mEditorBottomDivider;
+    private View mStatusBarDivider;
+    private View mEditorStatusBar;
+    private View mKeysRow;
+    private View mSaveButton;
+    private View mNewTabButton;
     private View mSessionSavingPill;
     private ImageView mSessionSavingIcon;
     private Animation mSessionSavingAnimation;
@@ -164,6 +166,15 @@ public class EditorController {
         if (mStatusEncodingGroup != null) mStatusEncodingGroup.setOnClickListener(v -> showEncodingPopup());
         mTabsContainer = mActivity.findViewById(R.id.yummy_tabs_container);
         mTabsScroll = mActivity.findViewById(R.id.yummy_tabs_scroll);
+        mNewTabButton = mActivity.findViewById(R.id.yummy_btn_new_tab);
+        if (mNewTabButton != null) mNewTabButton.setOnClickListener(v -> createUntitledDocument());
+        mEditorContainer = mActivity.findViewById(R.id.yummy_editor_container);
+        mEditorTopDivider = mActivity.findViewById(R.id.yummy_editor_top_divider);
+        mEditorBottomDivider = mActivity.findViewById(R.id.yummy_editor_bottom_divider);
+        mStatusBarDivider = mActivity.findViewById(R.id.yummy_editor_status_divider);
+        mEditorStatusBar = mActivity.findViewById(R.id.yummy_editor_status_bar);
+        mKeysRow = mActivity.findViewById(R.id.yummy_keys_row);
+        mSaveButton = mActivity.findViewById(R.id.yummy_btn_save);
         mSessionSavingPill = mActivity.findViewById(R.id.yummy_session_save_pill);
         mSessionSavingIcon = mActivity.findViewById(R.id.yummy_session_save_icon);
 
@@ -190,23 +201,16 @@ public class EditorController {
         });
 
         boolean restored = restoreEditorSession();
-        if (!restored) {
-            // Dokumen awal hanya dibuat pada instalasi/sesi pertama.
-            EditorDocument initial = new EditorDocument(
-                "yummy:initial:" + UUID.randomUUID(), "Main.py", SAMPLE
-            );
-            initial.baseText = SAMPLE;
-            initial.revision = 1;
-            initial.savedRevision = 1;
-            mDocuments.add(initial);
-            mActiveDocument = initial;
-            activateDocumentInternal(initial, false);
-        } else if (mActiveDocument != null) {
+        if (restored && mActiveDocument != null) {
             activateDocumentInternal(mActiveDocument, false);
         } else {
-            mEditor.setText("");
+            // Workspace baru atau sesi tanpa tab: jangan tampilkan editor kosong.
+            mActiveDocument = null;
+            applyActiveDocumentText();
             applyLanguageForActiveDocument();
             updateTitle();
+            updateStatus();
+            updateEditorVisibility();
         }
         renderTabs();
         updateStatus();
@@ -378,6 +382,26 @@ public class EditorController {
         notifyActiveDocumentChanged();
     }
 
+    /** Membuat tab Untitled baru hanya ketika pengguna menekan tombol +. */
+    private void createUntitledDocument() {
+        EditorDocument document = new EditorDocument(
+            "yummy:untitled:" + UUID.randomUUID(), "Untitled", ""
+        );
+        document.baseText = "";
+        document.baseSha256 = WorkspaceSessionManager.sha256(new byte[0]);
+        document.storageBacked = false;
+        document.restorePending = false;
+        document.revision = 0L;
+        document.savedRevision = 0L;
+        mDocuments.add(document);
+        activateDocumentInternal(document, true);
+        scheduleEditorSessionSave();
+        if (mEditor != null) mEditor.requestFocus();
+        if (mTabsScroll != null) {
+            mTabsScroll.post(() -> mTabsScroll.fullScroll(View.FOCUS_RIGHT));
+        }
+    }
+
     /** Membuka dokumen non-storage sebagai tab baru. */
     public void openDocument(@NonNull String documentId, String content, @NonNull String name) {
         EditorDocument document = findDocument(documentId);
@@ -469,6 +493,7 @@ public class EditorController {
             applyLanguageForActiveDocument();
             updateTitle();
             updateStatus();
+            updateEditorVisibility();
         }
         renderTabs();
         scheduleEditorSessionSave();
@@ -501,9 +526,9 @@ public class EditorController {
     }
 
     /**
-     * Membungkus teks editor sementara menjadi dokumen baru sebelum Save pertama.
-     * Editor memang boleh diketik saat tidak ada tab; dokumen baru baru dibuat
-     * ketika pengguna benar-benar meminta menyimpan.
+     * Safety net untuk pemanggil Save lama: bila belum ada dokumen aktif,
+     * buat dokumen sementara agar alur penyimpanan tidak menerima ID null.
+     * Pada UI normal, tab Untitled dibuat melalui tombol + terlebih dahulu.
      */
     @NonNull
     public String ensureDraftDocumentForSave() {
@@ -703,11 +728,11 @@ public class EditorController {
             mActiveDocument.text = mEditor.getText().toString();
         }
         mActiveDocument = document;
-        if (mEditor != null) mEditor.setEnabled(document == null || !document.restorePending);
         applyActiveDocumentText();
         applyLanguageForActiveDocument();
         updateTitle();
         updateStatus();
+        updateEditorVisibility();
         renderTabs();
         if (notify) notifyActiveDocumentChanged();
     }
@@ -719,6 +744,29 @@ public class EditorController {
             mEditor.setText(mActiveDocument == null ? "" : mActiveDocument.text);
         } finally {
             mSuppressContentChanges = false;
+        }
+    }
+
+    /** Hides all document-editing surfaces when there is no active tab. */
+    private void updateEditorVisibility() {
+        boolean hasActiveDocument = mActiveDocument != null;
+        int visibility = hasActiveDocument ? View.VISIBLE : View.GONE;
+        if (mEditorContainer != null) mEditorContainer.setVisibility(visibility);
+        if (mEditorTopDivider != null) mEditorTopDivider.setVisibility(visibility);
+        if (mEditorBottomDivider != null) mEditorBottomDivider.setVisibility(visibility);
+        if (mStatusBarDivider != null) mStatusBarDivider.setVisibility(visibility);
+        if (mEditorStatusBar != null) mEditorStatusBar.setVisibility(visibility);
+        if (mKeysRow != null) mKeysRow.setVisibility(visibility);
+        if (mEditor != null) {
+            mEditor.setEnabled(hasActiveDocument && !mActiveDocument.restorePending);
+            if (!hasActiveDocument) mEditor.clearFocus();
+        }
+        if (mSaveButton != null) {
+            mSaveButton.setEnabled(hasActiveDocument);
+            mSaveButton.setAlpha(hasActiveDocument ? 1f : 0.38f);
+        }
+        if (mStatusEncodingGroup != null) {
+            mStatusEncodingGroup.setEnabled(hasActiveDocument);
         }
     }
 
@@ -751,6 +799,7 @@ public class EditorController {
             applyLanguageForActiveDocument();
             updateTitle();
             updateStatus();
+            updateEditorVisibility();
             notifyActiveDocumentChanged();
         }
         renderTabs();
