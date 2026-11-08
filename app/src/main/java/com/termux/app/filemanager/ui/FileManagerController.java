@@ -413,6 +413,8 @@ public final class FileManagerController {
 
         View saveButton = activity.findViewById(R.id.yummy_btn_save);
         if (saveButton != null) saveButton.setOnClickListener(v -> {
+            // Editor tanpa tab tetap dapat diketik. Buat draft saat pengguna menekan Save.
+            editorController.ensureDraftDocumentForSave();
             if (activeFileProvider == null || activeFileEntry == null) {
                 show(true);
             } else {
@@ -587,8 +589,8 @@ public final class FileManagerController {
 
     private void saveAs(StorageProvider provider, StorageEntry parent, String name,
                         @Nullable Runnable afterSave) {
-        final String targetDocumentId = editorController.getActiveDocumentId();
-        if (targetDocumentId == null) { toast("Tidak ada dokumen yang aktif"); return; }
+        // Jaga alur Save As tetap aman meskipun dipanggil tanpa tab aktif.
+        final String targetDocumentId = editorController.ensureDraftDocumentForSave();
         final long savedRevision = editorController.getDocumentRevision(targetDocumentId);
         final String content = editorController.getDocumentText(targetDocumentId);
         final Charset documentCharset = Charset.forName(editorController.getDocumentEncoding(targetDocumentId));
@@ -2383,6 +2385,8 @@ public final class FileManagerController {
         }
 
         private void saveAsHere() {
+            // Pastikan teks editor sementara sudah menjadi dokumen yang dapat disimpan.
+            editorController.ensureDraftDocumentForSave();
             if (currentProvider == null || currentDirectory == null) {
                 toast("Pilih folder tujuan terlebih dahulu"); return;
             }
