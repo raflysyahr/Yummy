@@ -6,6 +6,7 @@ on:
       - changes/rename-package-name
       - feature/editor
       - feature/storage-provider-system
+      - feature/undo-redo-manager
 
   workflow_dispatch:
 
