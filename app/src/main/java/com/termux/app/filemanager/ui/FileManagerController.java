@@ -9,7 +9,13 @@ import android.view.ContextThemeWrapper;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -18,6 +24,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -27,6 +34,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.view.ViewConfiguration;
 import android.widget.BaseAdapter;
 import android.widget.Button;
@@ -96,6 +105,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -117,6 +127,7 @@ public final class FileManagerController {
 
     private Typeface nunitoRegular;
     private Typeface nunitoBold;
+    private Bitmap popupDecorationBitmap;
 
     private Typeface nunitoTypeface(boolean bold) {
         try {
@@ -780,6 +791,223 @@ public final class FileManagerController {
     private void toast(String message) {
         if (activity.isFinishing() || destroyed) return;
         mainHandler.post(() -> Toast.makeText(activity, message, Toast.LENGTH_SHORT).show());
+    }
+
+    /**
+     * Reusable square-corner input dialog for File Manager name operations.
+     * The supplied decoration bitmap is drawn with SCREEN blending so the black
+     * pixels in the uploaded artwork visually merge with the dark-green surface.
+     * The image asset itself is kept unchanged.
+     */
+    private void showFileManagerInputDialog(
+        @NonNull String title,
+        @NonNull String hint,
+        @Nullable String initialValue,
+        boolean directoryIcon,
+        @NonNull String actionLabel,
+        @NonNull Consumer<String> onConfirm
+    ) {
+        if (activity.isFinishing() || destroyed) return;
+
+        Dialog dialog = new Dialog(activity);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setLayoutParams(new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        card.setBackground(flatRectangle(0xFF001D0D, 0xFF263D31, dp(1)));
+
+        FrameLayout header = new FrameLayout(activity);
+        card.addView(header, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(112)
+        ));
+
+        ImageView decoration = new ImageView(activity);
+        Bitmap artwork = getPopupDecorationBitmap();
+        if (artwork != null) {
+            decoration.setImageDrawable(new ScreenBlendDrawable(artwork));
+        }
+        decoration.setScaleType(ImageView.ScaleType.FIT_XY);
+        header.addView(decoration, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        decoration.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+
+        LinearLayout heading = new LinearLayout(activity);
+        heading.setOrientation(LinearLayout.HORIZONTAL);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        heading.setPadding(dp(24), 0, dp(18), 0);
+        header.addView(heading, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        ImageView leadingIcon = new ImageView(activity);
+        leadingIcon.setImageResource(directoryIcon
+            ? R.drawable.yummy_popup_folder_icon : R.drawable.yummy_popup_file_icon);
+        leadingIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        leadingIcon.setContentDescription(directoryIcon ? "Folder" : "File");
+        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(42), dp(48)));
+
+        View divider = new View(activity);
+        divider.setBackgroundColor(0xFF43554B);
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(dp(2), dp(38));
+        dividerParams.setMargins(dp(20), 0, dp(20), 0);
+        heading.addView(divider, dividerParams);
+
+        TextView titleView = text(title, 23, 0xFFF4F6F5, true);
+        titleView.setSingleLine(true);
+        titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        heading.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        TextView closeButton = text("×", 32, 0xFFE3E8E5, false);
+        closeButton.setGravity(Gravity.CENTER);
+        closeButton.setBackground(flatRectangle(0xFF202724, 0x00000000, 0));
+        closeButton.setContentDescription("Close dialog");
+        closeButton.setClickable(true);
+        closeButton.setFocusable(true);
+        heading.addView(closeButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        closeButton.setOnClickListener(view -> dialog.dismiss());
+
+        EditText input = new EditText(activity);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        input.setTypeface(nunitoTypeface(false));
+        input.setTextColor(0xFFF3F7F4);
+        input.setHintTextColor(0xFF858F99);
+        input.setHint(hint);
+        input.setPadding(dp(16), 0, dp(16), 0);
+        input.setBackground(flatRectangle(0xFF00170B, 0xFF00E676, dp(2)));
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        if (initialValue != null && !initialValue.isEmpty()) {
+            input.setText(initialValue);
+            input.setSelection(0, input.getText().length());
+        }
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(62)
+        );
+        inputParams.setMargins(dp(22), dp(8), dp(22), 0);
+        card.addView(input, inputParams);
+
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(54)
+        );
+        actionsParams.setMargins(dp(22), dp(24), dp(22), dp(20));
+        card.addView(actions, actionsParams);
+
+        TextView cancelButton = text("BATAL", 16, 0xFFE3E7ED, true);
+        cancelButton.setGravity(Gravity.CENTER);
+        cancelButton.setBackground(flatRectangle(0xFF25282D, 0xFF30363A, dp(1)));
+        cancelButton.setClickable(true);
+        cancelButton.setFocusable(true);
+        actions.addView(cancelButton, new LinearLayout.LayoutParams(0, -1, 1f));
+        LinearLayout.LayoutParams actionGap = new LinearLayout.LayoutParams(dp(12), 1);
+        actions.addView(new View(activity), actionGap);
+
+        TextView confirmButton = text(actionLabel, 16, 0xFF001D0D, true);
+        confirmButton.setGravity(Gravity.CENTER);
+        confirmButton.setBackground(flatRectangle(0xFF00E676, 0xFF00E676, dp(1)));
+        confirmButton.setClickable(true);
+        confirmButton.setFocusable(true);
+        actions.addView(confirmButton, new LinearLayout.LayoutParams(0, -1, 1f));
+        cancelButton.setOnClickListener(view -> dialog.dismiss());
+
+        final Runnable submit = () -> {
+            String value = input.getText() == null ? "" : input.getText().toString().trim();
+            dialog.dismiss();
+            onConfirm.accept(value);
+        };
+        confirmButton.setOnClickListener(view -> submit.run());
+        input.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE
+                || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == KeyEvent.ACTION_DOWN)) {
+                submit.run();
+                return true;
+            }
+            return false;
+        });
+
+        dialog.setContentView(card);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams attributes = window.getAttributes();
+            attributes.dimAmount = 0.68f;
+            window.setAttributes(attributes);
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        }
+        dialog.show();
+        if (window != null) {
+            int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+            int horizontalMargin = dp(48);
+            int maxWidth = dp(480);
+            int dialogWidth = Math.min(Math.max(0, screenWidth - horizontalMargin), maxWidth);
+            window.setLayout(dialogWidth, WindowManager.LayoutParams.WRAP_CONTENT);
+            window.setGravity(Gravity.CENTER);
+        }
+        input.requestFocus();
+        input.postDelayed(() -> {
+            if (!dialog.isShowing() || window == null) return;
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+            InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(
+                Context.INPUT_METHOD_SERVICE
+            );
+            if (keyboard != null) keyboard.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+        }, 180L);
+    }
+
+    @Nullable
+    private Bitmap getPopupDecorationBitmap() {
+        if (popupDecorationBitmap == null || popupDecorationBitmap.isRecycled()) {
+            popupDecorationBitmap = BitmapFactory.decodeResource(
+                activity.getResources(), R.drawable.yummy_popup_wave
+            );
+        }
+        return popupDecorationBitmap;
+    }
+
+    private GradientDrawable flatRectangle(int color, int strokeColor, int strokeWidth) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.RECTANGLE);
+        drawable.setColor(color);
+        drawable.setCornerRadius(0f);
+        if (strokeWidth > 0) drawable.setStroke(strokeWidth, strokeColor);
+        return drawable;
+    }
+
+    /** Draw the original artwork with black pixels screened into the card background. */
+    private static final class ScreenBlendDrawable extends Drawable {
+        private final Bitmap bitmap;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Rect source = new Rect();
+        private int alpha = 255;
+
+        ScreenBlendDrawable(Bitmap bitmap) {
+            this.bitmap = bitmap;
+            source.set(0, 0, bitmap.getWidth(), bitmap.getHeight());
+            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SCREEN));
+        }
+
+        @Override public void draw(Canvas canvas) {
+            if (bitmap == null || bitmap.isRecycled()) return;
+            paint.setAlpha(alpha);
+            canvas.drawBitmap(bitmap, source, getBounds(), paint);
+        }
+        @Override public void setAlpha(int value) { alpha = value; invalidateSelf(); }
+        @Override public void setColorFilter(android.graphics.ColorFilter filter) {
+            paint.setColorFilter(filter); invalidateSelf();
+        }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     private AlertDialog.Builder nunitoDialogBuilder() {
@@ -2312,15 +2540,15 @@ public final class FileManagerController {
         }
 
         private void renameEntry(StorageEntry entry) {
-            EditText input = new EditText(activity);
-            input.setSingleLine(true);
-            input.setText(entry.getName());
-            input.setSelection(0, input.getText().length());
-            nunitoDialogBuilder().setTitle("Rename") .setView(input)
-                .setPositiveButton("Simpan", (dialog, which) -> {
+            showFileManagerInputDialog(
+                entry.isDirectory() ? "Rename folder" : "Rename file",
+                "Enter new name",
+                entry.getName(),
+                entry.isDirectory(),
+                "SIMPAN",
+                newName -> {
                     StorageProvider provider = registry.getProvider(entry.getProviderId());
                     if (provider == null) return;
-                    String newName = input.getText().toString().trim();
                     ioExecutor.execute(() -> {
                         try {
                             StorageEntry renamed = fileOperations.rename(provider.getId(), entry, newName);
@@ -2334,7 +2562,8 @@ public final class FileManagerController {
                             mainHandler.post(() -> showError("Rename gagal", error));
                         }
                     });
-                }).setNegativeButton("Batal", null).show();
+                }
+            );
         }
 
         private void replaceStoredEntry(String key, StorageEntry oldEntry, StorageEntry newEntry) {
@@ -2452,12 +2681,13 @@ public final class FileManagerController {
                 toast("Folder ini tidak mengizinkan pembuatan item");
                 return;
             }
-            EditText input = new EditText(activity);
-            input.setSingleLine(true);
-            input.setHint(directory ? "Folder name" : "File name, e.g. main.py");
-            nunitoDialogBuilder().setTitle(directory ? "New folder" : "New file")
-                .setView(input).setPositiveButton("Create", (dialog, which) -> {
-                    String name = input.getText().toString().trim();
+            showFileManagerInputDialog(
+                directory ? "New folder" : "New file",
+                directory ? "Folder name" : "File name, e.g. main.py",
+                null,
+                directory,
+                "CREATE",
+                name -> {
                     final StorageProvider targetProvider = currentProvider;
                     final StorageEntry targetDirectory = currentDirectory;
                     ioExecutor.execute(() -> {
@@ -2481,7 +2711,8 @@ public final class FileManagerController {
                             mainHandler.post(() -> showError("Tidak dapat membuat item", error));
                         }
                     });
-                }).setNegativeButton("Batal", null).show();
+                }
+            );
         }
 
         private void beginTransfer(PendingTransfer operation) {
@@ -2579,24 +2810,19 @@ public final class FileManagerController {
             if (!currentDirectory.hasCapability(StorageCapability.CREATE_CHILD)) {
                 toast("Folder ini tidak mengizinkan pembuatan file"); return;
             }
-            EditText input = new EditText(activity);
-            input.setSingleLine(true);
-            input.setTypeface(nunitoTypeface(false));
-            input.setTextColor(0xFFE8EAED);
-            input.setHintTextColor(0xFF969EA7);
             String defaultName = editorController.getDocumentName();
-            input.setText(defaultName == null || defaultName.trim().isEmpty() ? "untitled.txt" : defaultName);
-            input.setSelection(0, input.getText().length());
-            AlertDialog saveNameDialog = nunitoDialogBuilder().setTitle("Simpan file")
-                .setView(input)
-                .setPositiveButton("Simpan", (dialog, which) -> {
-                    String name = input.getText().toString().trim();
+            showFileManagerInputDialog(
+                "Save as",
+                "File name",
+                defaultName == null || defaultName.trim().isEmpty() ? "untitled.txt" : defaultName,
+                false,
+                "SIMPAN",
+                name -> {
                     Runnable afterSave = pendingOpenAfterSave;
                     pendingOpenAfterSave = null;
                     saveAs(currentProvider, currentDirectory, name, afterSave);
-                }).setNegativeButton("Batal", null).create();
-            saveNameDialog.setOnShowListener(ignored -> applyNunitoToDialog(saveNameDialog));
-            saveNameDialog.show();
+                }
+            );
         }
 
         private void showSortMenu() {
