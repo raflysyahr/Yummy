@@ -10,3 +10,8 @@
 -dontobfuscate
 #-renamesourcefileattribute SourceFile
 #-keepattributes SourceFile,LineNumberTable
+
+# Yummy's durable Sora 0.24.4 undo-history codec reflects over the pinned
+# UndoManager/action-stack implementation. Keep those members stable in release builds.
+-keep class io.github.rosemoe.sora.text.UndoManager { *; }
+-keep class io.github.rosemoe.sora.text.UndoManager$* { *; }
