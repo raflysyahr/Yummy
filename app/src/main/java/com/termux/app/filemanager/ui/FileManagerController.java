@@ -1951,6 +1951,15 @@ public final class FileManagerController {
             int targetWidth = Math.max(requiredTreeContentWidth, viewportWidth);
             if (targetWidth <= 0) return;
 
+            // Only expose horizontal scrolling when the currently displayed rows
+            // actually exceed the sidebar viewport. The content remains viewport-wide
+            // when everything fits, while wider rows retain their measured width.
+            boolean hasHorizontalOverflow = targetWidth > viewportWidth;
+            treeHorizontalScroll.setHorizontalScrollBarEnabled(hasHorizontalOverflow);
+            if (!hasHorizontalOverflow && treeHorizontalScroll.getScrollX() != 0) {
+                treeHorizontalScroll.scrollTo(0, treeHorizontalScroll.getScrollY());
+            }
+
             ViewGroup.LayoutParams contentParams = treeContentContainer.getLayoutParams();
             if (contentParams == null) {
                 contentParams = new HorizontalScrollView.LayoutParams(targetWidth, -1);
