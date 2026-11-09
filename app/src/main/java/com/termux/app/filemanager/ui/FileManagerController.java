@@ -862,7 +862,6 @@ public final class FileManagerController {
         private enum PendingTransfer { NONE, COPY, MOVE }
 
         private boolean initialized;
-        private Runnable pendingTreeWidthDebug;
         
         private final Dialog dialog;
         private boolean initialSaveAsMode;
@@ -1937,7 +1936,6 @@ public final class FileManagerController {
             // Viewport changes are handled by the layout-change listener. Avoid an
             // additional post()/requestLayout cycle on every tree refresh so ListView
             // can keep its native vertical fling and scroll behavior.
-            scheduleTreeWidthDebug();
         }
 
 
@@ -1983,77 +1981,6 @@ public final class FileManagerController {
                 listParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
                 listView.setLayoutParams(listParams);
             }
-        }
-
-        /**
-         * Show the measurements after each File Tree rebuild/navigation, not just once
-         * when the sidebar first opens. A short debounce lets ListView finish measuring
-         * the newly loaded rows before the diagnostic is collected.
-         */
-        private void scheduleTreeWidthDebug() {
-            if (treeContentContainer == null || treeHorizontalScroll == null || listView == null) return;
-            if (pendingTreeWidthDebug != null) {
-                treeContentContainer.removeCallbacks(pendingTreeWidthDebug);
-            }
-            pendingTreeWidthDebug = () -> {
-                pendingTreeWidthDebug = null;
-                if (destroyed || !dialog.isShowing()) return;
-                showTreeWidthDebugNow();
-            };
-            treeContentContainer.postDelayed(pendingTreeWidthDebug, 300);
-        }
-
-        /** Collect actual laid-out widths after the current list contents are rendered. */
-        private void showTreeWidthDebugNow() {
-            if (treeContentContainer == null || treeHorizontalScroll == null || listView == null) return;
-
-            StringBuilder info = new StringBuilder();
-                info.append("TREE WIDTH DEBUG\n\n")
-                    .append("Viewport: ").append(treeHorizontalScroll.getWidth()).append(" px\n")
-                    .append("Content: ").append(treeContentContainer.getWidth()).append(" px\n")
-                    .append("Content measured: ").append(treeContentContainer.getMeasuredWidth()).append(" px\n")
-                    .append("Content LP: ").append(treeContentContainer.getLayoutParams() == null
-                        ? "null" : treeContentContainer.getLayoutParams().width).append(" px\n")
-                    .append("RightPane: ").append(rightPane == null ? 0 : rightPane.getWidth()).append(" px\n")
-                    .append("ListView: ").append(listView.getWidth()).append(" px\n")
-                    .append("ListView measured: ").append(listView.getMeasuredWidth()).append(" px\n")
-                    .append("Can scroll right: ").append(treeHorizontalScroll.canScrollHorizontally(1)).append('\n')
-                    .append("ScrollX: ").append(treeHorizontalScroll.getScrollX()).append(" px\n")
-                    .append("Visible rows: ").append(listView.getChildCount()).append('\n');
-
-                if (listView.getChildCount() > 0) {
-                    View row = listView.getChildAt(0);
-                    info.append("First row: ").append(row.getWidth()).append(" px\n");
-                    if (row instanceof ViewGroup) {
-                        ViewGroup rowGroup = (ViewGroup) row;
-                        info.append("Row children: ").append(rowGroup.getChildCount()).append('\n');
-                        for (int i = 0; i < rowGroup.getChildCount(); i++) {
-                            View child = rowGroup.getChildAt(i);
-                            info.append("  Child[").append(i).append("]: ")
-                                .append(child.getClass().getSimpleName()).append(" = ")
-                                .append(child.getWidth()).append(" px\n");
-                            if (child instanceof ViewGroup) {
-                                ViewGroup group = (ViewGroup) child;
-                                for (int j = 0; j < group.getChildCount(); j++) {
-                                    View nested = group.getChildAt(j);
-                                    if (nested instanceof TextView) {
-                                        TextView textView = (TextView) nested;
-                                        info.append("    Text[").append(j).append("]: width=")
-                                            .append(textView.getWidth()).append(" px, text=\"")
-                                            .append(textView.getText()).append("\", ellipsize=")
-                                            .append(textView.getEllipsize()).append('\n');
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-            new android.app.AlertDialog.Builder(activity)
-                .setTitle("File Tree Width Debug")
-                .setMessage(info.toString())
-                .setPositiveButton("OK", null)
-                .show();
         }
 
         private void appendTreeRows(StorageEntry parent, int depth, Set<String> visited) {
