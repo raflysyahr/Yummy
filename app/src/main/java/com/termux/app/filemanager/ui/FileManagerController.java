@@ -818,11 +818,11 @@ public final class FileManagerController {
         card.setLayoutParams(new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ));
-        card.setBackground(flatRectangle(0xFF001D0D, 0xFF001D0D, dp(1)));
+        card.setBackground(flatRectangle(0xFF0F1113, 0xFF0F1113, dp(1)));
 
         FrameLayout header = new FrameLayout(activity);
         card.addView(header, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(40)
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(32)
         ));
 
 
@@ -849,15 +849,15 @@ public final class FileManagerController {
             ? R.drawable.yummy_popup_folder_icon : R.drawable.yummy_popup_file_icon);
         leadingIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         leadingIcon.setContentDescription(directoryIcon ? "Folder" : "File");
-        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(14), dp(15)));
+        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         View divider = new View(activity);
-        divider.setBackgroundColor(0xFF43554B);
+        divider.setBackgroundColor(0xFFA0A0A0);
         LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(dp(2), dp(38));
         dividerParams.setMargins(dp(20), 0, dp(20), 0);
         heading.addView(divider, dividerParams);
 
-        TextView titleView = text(title, 14, 0xFFF4F6F5, true);
+        TextView titleView = text(title, 18, 0xFFFFFFFF, true);
         titleView.setSingleLine(true);
         titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         heading.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
@@ -875,7 +875,7 @@ public final class FileManagerController {
         closeButton.setContentDescription("Close");
         closeButton.setClickable(true);
         closeButton.setFocusable(true);
-        heading.addView(closeButton, new LinearLayout.LayoutParams(dp(14), dp(35)));
+        heading.addView(closeButton, new LinearLayout.LayoutParams(dp(32), dp(32)));
         closeButton.setOnClickListener(view -> dialog.dismiss());
 
         EditText input = new EditText(activity);
@@ -883,18 +883,18 @@ public final class FileManagerController {
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         input.setTypeface(nunitoTypeface(false));
-        input.setTextColor(0xFFF3F7F4);
-        input.setHintTextColor(0xFF858F99);
+        input.setTextColor(0xFFFA0A0A0);
+        input.setHintTextColor(0xFFA0A0A0);
         input.setHint(hint);
         input.setPadding(dp(16), 0, dp(16), 0);
-        input.setBackground(flatRectangle(0xFF00170B, 0xFF00E676, dp(2)));
+        input.setBackground(flatRectangle(0xFF000000, 0xFF000000, dp(2)));
         input.setImeOptions(EditorInfo.IME_ACTION_DONE);
         if (initialValue != null && !initialValue.isEmpty()) {
             input.setText(initialValue);
             input.setSelection(0, input.getText().length());
         }
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(20)
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(40)
         );
         inputParams.setMargins(dp(22), dp(8), dp(22), 0);
         card.addView(input, inputParams);
@@ -903,23 +903,23 @@ public final class FileManagerController {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(20)
+            dp(136), dp(36)
         );
         actionsParams.setMargins(dp(22), dp(24), dp(22), dp(20));
         card.addView(actions, actionsParams);
 
-        TextView cancelButton = text("BATAL", 14, 0xFFE3E7ED, true);
+        TextView cancelButton = text("BATAL", 14, 0xFFE0E0E0, true);
         cancelButton.setGravity(Gravity.CENTER);
-        cancelButton.setBackground(flatRectangle(0xFF25282D, 0xFF30363A, dp(1)));
+        cancelButton.setBackground(flatRectangle(0xFF2A2D31, 0xFF2A2D31, dp(1)));
         cancelButton.setClickable(true);
         cancelButton.setFocusable(true);
         actions.addView(cancelButton, new LinearLayout.LayoutParams(0, -1, 1f));
         LinearLayout.LayoutParams actionGap = new LinearLayout.LayoutParams(dp(12), 1);
         actions.addView(new View(activity), actionGap);
 
-        TextView confirmButton = text(actionLabel, 14, 0xFF001D0D, true);
+        TextView confirmButton = text(actionLabel, 14, 0xFF000000, true);
         confirmButton.setGravity(Gravity.CENTER);
-        confirmButton.setBackground(flatRectangle(0xFF00E676, 0xFF00E676, dp(1)));
+        confirmButton.setBackground(flatRectangle(0xFF00D65A, 0xFF00D65A, dp(1)));
         confirmButton.setClickable(true);
         confirmButton.setFocusable(true);
         actions.addView(confirmButton, new LinearLayout.LayoutParams(0, -1, 1f));
@@ -956,9 +956,9 @@ public final class FileManagerController {
         if (window != null) {
             int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
             int horizontalMargin = dp(48);
-            int maxWidth = dp(480);
+            int maxWidth = dp(336);
             int dialogWidth = Math.min(Math.max(0, screenWidth - horizontalMargin), maxWidth);
-            int dialogHeight = dp(200); //WindowManager.LayoutParams.WRAP_CONTENT);
+            int dialogHeight = dp(112); //WindowManager.LayoutParams.WRAP_CONTENT);
             window.setLayout(dialogWidth, dialogHeight);
             window.setGravity(Gravity.CENTER);
         }
