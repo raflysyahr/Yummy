@@ -9,13 +9,7 @@ import android.view.ContextThemeWrapper;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
-import android.graphics.Rect;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -127,7 +121,6 @@ public final class FileManagerController {
 
     private Typeface nunitoRegular;
     private Typeface nunitoBold;
-    private Bitmap popupDecorationBitmap;
 
     private Typeface nunitoTypeface(boolean bold) {
         try {
@@ -794,10 +787,8 @@ public final class FileManagerController {
     }
 
     /**
-     * Reusable square-corner input dialog for File Manager name operations.
-     * The supplied decoration bitmap is drawn with SCREEN blending so the black
-     * pixels in the uploaded artwork visually merge with the dark-green surface.
-     * The image asset itself is kept unchanged.
+     * Shared input popup for New File, New Folder, Rename and Save As.
+     * Layout measurements and colors follow the supplied Yummy popup specification.
      */
     private void showFileManagerInputDialog(
         @NonNull String title,
@@ -818,23 +809,26 @@ public final class FileManagerController {
         card.setLayoutParams(new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ));
-        card.setBackground(flatRectangle(0xFF0F1113, 0xFF0F1113, dp(1)));
+        GradientDrawable cardBackground = roundRect(0xFF0F1113, dp(18));
+        cardBackground.setStroke(dp(1), 0xFF2A2D31);
+        card.setBackground(cardBackground);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            card.setClipToOutline(true);
+        }
 
+        // Header: transparent wave artwork sits behind the icon, divider, title and close icon.
         FrameLayout header = new FrameLayout(activity);
         card.addView(header, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(32)
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(56)
         ));
-
 
         ImageView decoration = new ImageView(activity);
         decoration.setImageResource(R.drawable.yummy_popup_wave);
         decoration.setScaleType(ImageView.ScaleType.FIT_XY);
-
-        header.addView(decoration, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ));
         decoration.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        header.addView(decoration, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ));
 
         LinearLayout heading = new LinearLayout(activity);
         heading.setOrientation(LinearLayout.HORIZONTAL);
@@ -854,7 +848,7 @@ public final class FileManagerController {
         View divider = new View(activity);
         divider.setBackgroundColor(0xFFA0A0A0);
         LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(dp(2), dp(38));
-        dividerParams.setMargins(dp(20), 0, dp(20), 0);
+        dividerParams.setMargins(dp(20), 0, dp(18), 0);
         heading.addView(divider, dividerParams);
 
         TextView titleView = text(title, 18, 0xFFFFFFFF, true);
@@ -862,16 +856,14 @@ public final class FileManagerController {
         titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         heading.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
 
-
-
-
-
-
         ImageButton closeButton = new ImageButton(activity);
-        closeButton.setImageResource(R.drawable.ic_yummy_close_circle);
-        closeButton.setBackgroundColor(Color.TRANSPARENT);
-        closeButton.setScaleType(ImageView.ScaleType.CENTER);
-        closeButton.setPadding(dp(10), dp(10), dp(10), dp(10));
+        closeButton.setImageResource(R.drawable.ic_yummy_close);
+        closeButton.setColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN);
+        closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        closeButton.setPadding(dp(8), dp(8), dp(8), dp(8));
+        GradientDrawable closeBackground = roundRect(0x14FFFFFF, dp(16));
+        closeBackground.setShape(GradientDrawable.OVAL);
+        closeButton.setBackground(closeBackground);
         closeButton.setContentDescription("Close");
         closeButton.setClickable(true);
         closeButton.setFocusable(true);
@@ -887,7 +879,12 @@ public final class FileManagerController {
         input.setHintTextColor(0xFFA0A0A0);
         input.setHint(hint);
         input.setPadding(dp(16), 0, dp(16), 0);
-        input.setBackground(flatRectangle(0xFF000000, 0xFF000000, dp(2)));
+        GradientDrawable inputBackground = new GradientDrawable();
+        inputBackground.setShape(GradientDrawable.RECTANGLE);
+        inputBackground.setColor(0x99000000);
+        inputBackground.setCornerRadius(dp(12));
+        inputBackground.setStroke(dp(2), 0xFF00D65A);
+        input.setBackground(inputBackground);
         input.setImeOptions(EditorInfo.IME_ACTION_DONE);
         if (initialValue != null && !initialValue.isEmpty()) {
             input.setText(initialValue);
@@ -896,33 +893,34 @@ public final class FileManagerController {
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(40)
         );
-        inputParams.setMargins(dp(22), dp(8), dp(22), 0);
+        inputParams.setMargins(dp(16), dp(4), dp(16), 0);
         card.addView(input, inputParams);
 
         LinearLayout actions = new LinearLayout(activity);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
+        actions.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(
-            dp(136), dp(36)
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(36)
         );
-        actionsParams.setMargins(dp(22), dp(24), dp(22), dp(20));
+        actionsParams.setMargins(dp(16), dp(12), dp(16), dp(8));
         card.addView(actions, actionsParams);
 
         TextView cancelButton = text("BATAL", 14, 0xFFE0E0E0, true);
         cancelButton.setGravity(Gravity.CENTER);
-        cancelButton.setBackground(flatRectangle(0xFF2A2D31, 0xFF2A2D31, dp(1)));
+        cancelButton.setBackground(roundRect(0xFF2A2D31, dp(18)));
         cancelButton.setClickable(true);
         cancelButton.setFocusable(true);
-        actions.addView(cancelButton, new LinearLayout.LayoutParams(0, -1, 1f));
-        LinearLayout.LayoutParams actionGap = new LinearLayout.LayoutParams(dp(12), 1);
-        actions.addView(new View(activity), actionGap);
+        actions.addView(cancelButton, new LinearLayout.LayoutParams(dp(120), dp(36)));
+
+        View actionGap = new View(activity);
+        actions.addView(actionGap, new LinearLayout.LayoutParams(dp(12), dp(1)));
 
         TextView confirmButton = text(actionLabel, 14, 0xFF000000, true);
         confirmButton.setGravity(Gravity.CENTER);
-        confirmButton.setBackground(flatRectangle(0xFF00D65A, 0xFF00D65A, dp(1)));
+        confirmButton.setBackground(roundRect(0xFF00D65A, dp(18)));
         confirmButton.setClickable(true);
         confirmButton.setFocusable(true);
-        actions.addView(confirmButton, new LinearLayout.LayoutParams(0, -1, 1f));
+        actions.addView(confirmButton, new LinearLayout.LayoutParams(dp(136), dp(36)));
         cancelButton.setOnClickListener(view -> dialog.dismiss());
 
         final Runnable submit = () -> {
@@ -955,11 +953,10 @@ public final class FileManagerController {
         dialog.show();
         if (window != null) {
             int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
-            int horizontalMargin = dp(48);
+            int horizontalMargin = dp(32);
             int maxWidth = dp(336);
             int dialogWidth = Math.min(Math.max(0, screenWidth - horizontalMargin), maxWidth);
-            int dialogHeight = dp(112); //WindowManager.LayoutParams.WRAP_CONTENT);
-            window.setLayout(dialogWidth, dialogHeight);
+            window.setLayout(dialogWidth, WindowManager.LayoutParams.WRAP_CONTENT);
             window.setGravity(Gravity.CENTER);
         }
         input.requestFocus();
@@ -972,50 +969,6 @@ public final class FileManagerController {
             );
             if (keyboard != null) keyboard.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
         }, 180L);
-    }
-
-    @Nullable
-    private Bitmap getPopupDecorationBitmap() {
-        if (popupDecorationBitmap == null || popupDecorationBitmap.isRecycled()) {
-            popupDecorationBitmap = BitmapFactory.decodeResource(
-                activity.getResources(), R.drawable.yummy_popup_wave
-            );
-        }
-        return popupDecorationBitmap;
-    }
-
-    private GradientDrawable flatRectangle(int color, int strokeColor, int strokeWidth) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setShape(GradientDrawable.RECTANGLE);
-        drawable.setColor(color);
-        drawable.setCornerRadius(0f);
-        if (strokeWidth > 0) drawable.setStroke(strokeWidth, strokeColor);
-        return drawable;
-    }
-
-    /** Draw the original artwork with black pixels screened into the card background. */
-    private static final class ScreenBlendDrawable extends Drawable {
-        private final Bitmap bitmap;
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        private final Rect source = new Rect();
-        private int alpha = 255;
-
-        ScreenBlendDrawable(Bitmap bitmap) {
-            this.bitmap = bitmap;
-            source.set(0, 0, bitmap.getWidth(), bitmap.getHeight());
-            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SCREEN));
-        }
-
-        @Override public void draw(Canvas canvas) {
-            if (bitmap == null || bitmap.isRecycled()) return;
-            paint.setAlpha(alpha);
-            canvas.drawBitmap(bitmap, source, getBounds(), paint);
-        }
-        @Override public void setAlpha(int value) { alpha = value; invalidateSelf(); }
-        @Override public void setColorFilter(android.graphics.ColorFilter filter) {
-            paint.setColorFilter(filter); invalidateSelf();
-        }
-        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     private AlertDialog.Builder nunitoDialogBuilder() {
