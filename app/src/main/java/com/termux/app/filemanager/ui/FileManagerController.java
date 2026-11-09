@@ -1413,7 +1413,11 @@ public final class FileManagerController {
             };
             treeHorizontalScroll.setHorizontalScrollBarEnabled(false);
             treeHorizontalScroll.setVerticalScrollBarEnabled(false);
-            treeHorizontalScroll.setFillViewport(false);
+            // Force the single content child to occupy at least the viewport width.
+            // With fillViewport disabled, a narrower measured child (157 px in the
+            // reported case) stays narrow even when the viewport is 494 px wide.
+            // A wider child is still preserved, so long names remain horizontally scrollable.
+            treeHorizontalScroll.setFillViewport(true);
             treeHorizontalScroll.setSmoothScrollingEnabled(true);
             treeHorizontalScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
             treeContentContainer = new FrameLayout(activity);
@@ -1972,6 +1976,9 @@ public final class FileManagerController {
                 info.append("TREE WIDTH DEBUG\n\n")
                     .append("Viewport: ").append(treeHorizontalScroll.getWidth()).append(" px\n")
                     .append("Content: ").append(treeContentContainer.getWidth()).append(" px\n")
+                    .append("Content LP: ").append(treeContentContainer.getLayoutParams() == null
+                        ? "null" : treeContentContainer.getLayoutParams().width).append(" px\n")
+                    .append("RightPane: ").append(rightPane == null ? 0 : rightPane.getWidth()).append(" px\n")
                     .append("ListView: ").append(listView.getWidth()).append(" px\n")
                     .append("ScrollX: ").append(treeHorizontalScroll.getScrollX()).append(" px\n")
                     .append("Visible rows: ").append(listView.getChildCount()).append('\n');
