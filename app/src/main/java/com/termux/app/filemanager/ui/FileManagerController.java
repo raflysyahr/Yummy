@@ -822,7 +822,7 @@ public final class FileManagerController {
 
         FrameLayout header = new FrameLayout(activity);
         card.addView(header, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(112)
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(60)
         ));
 
 
@@ -849,7 +849,7 @@ public final class FileManagerController {
             ? R.drawable.yummy_popup_folder_icon : R.drawable.yummy_popup_file_icon);
         leadingIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         leadingIcon.setContentDescription(directoryIcon ? "Folder" : "File");
-        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(42), dp(48)));
+        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(30), dp(30)));
 
         View divider = new View(activity);
         divider.setBackgroundColor(0xFF43554B);
@@ -958,7 +958,7 @@ public final class FileManagerController {
             int horizontalMargin = dp(48);
             int maxWidth = dp(480);
             int dialogWidth = Math.min(Math.max(0, screenWidth - horizontalMargin), maxWidth);
-            int dialogHeight = dp(100); //WindowManager.LayoutParams.WRAP_CONTENT);
+            int dialogHeight = dp(150); //WindowManager.LayoutParams.WRAP_CONTENT);
             window.setLayout(dialogWidth, dialogHeight);
             window.setGravity(Gravity.CENTER);
         }
