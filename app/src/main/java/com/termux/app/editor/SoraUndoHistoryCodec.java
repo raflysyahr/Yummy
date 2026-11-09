@@ -107,6 +107,23 @@ public final class SoraUndoHistoryCodec {
     }
 
     /**
+     * Returns whether a cached snapshot belongs to the exact current Content text.
+     * This is used when a checkpoint cannot encode a manager during an in-progress edit:
+     * a previous snapshot may be retained only while its text fingerprint is still valid.
+     */
+    public static boolean matchesContent(@NonNull Content content, @Nullable JSONObject snapshot) {
+        if (content == null || snapshot == null) return false;
+        try {
+            return FORMAT.equals(snapshot.optString("format", ""))
+                    && snapshot.optInt("schemaVersion", -1) == SCHEMA_VERSION
+                    && SORA_VERSION.equals(snapshot.optString("soraVersion", ""))
+                    && snapshot.optString("textSha256", "").equals(sha256(content.toString()));
+        } catch (IOException error) {
+            return false;
+        }
+    }
+
+    /**
      * Restore history only when the snapshot is valid and belongs to the exact current text.
      * A failed restore leaves the Content's existing UndoManager untouched.
      */

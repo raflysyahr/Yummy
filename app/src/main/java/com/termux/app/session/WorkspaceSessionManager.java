@@ -49,6 +49,9 @@ public final class WorkspaceSessionManager {
     private static final String EDITOR_FILE = "editor.json";
     private static final String FILE_MANAGER_FILE = "filemanager.json";
     private static final String RECOVERY_DIRECTORY = "recovery";
+    private static final String UNDO_HISTORY_DIRECTORY = "undo";
+    private static final String UNDO_HISTORY_FORMAT = "yummy-document-undo-history";
+    private static final int UNDO_HISTORY_FILE_VERSION = 1;
     private static final String YUMMY_PRIVATE_DIRECTORY = "yummy-storage";
     private static final String UNTITLED_DRAFT_DIRECTORY = ".yummy/drafts";
     private static final int MAX_TRACE_CELLS = 4_000_000;
@@ -56,6 +59,7 @@ public final class WorkspaceSessionManager {
     private final File sessionDirectory;
     private final File legacyDocumentsDirectory;
     private final File recoveryDirectory;
+    private final File undoHistoryDirectory;
     private final File untitledDraftDirectory;
     private final File editorManifest;
     private final File fileManagerManifest;
@@ -75,6 +79,7 @@ public final class WorkspaceSessionManager {
         sessionDirectory = new File(appContext.getFilesDir(), "yummy-session");
         legacyDocumentsDirectory = new File(sessionDirectory, "documents");
         recoveryDirectory = new File(sessionDirectory, RECOVERY_DIRECTORY);
+        undoHistoryDirectory = new File(sessionDirectory, UNDO_HISTORY_DIRECTORY);
         File yummyPrivateRoot = appContext.getDir(YUMMY_PRIVATE_DIRECTORY, Context.MODE_PRIVATE);
         untitledDraftDirectory = new File(yummyPrivateRoot, UNTITLED_DRAFT_DIRECTORY);
         editorManifest = new File(sessionDirectory, EDITOR_FILE);
@@ -154,6 +159,29 @@ public final class WorkspaceSessionManager {
                         } catch (RuntimeException error) {
                             android.util.Log.e("YummySession",
                                 "Could not load recovery patch for " + id, error);
+                        }
+                    }
+
+                    // Undo history lives in its own atomic file. The manifest reference must
+                    // match the filename derived from this document ID; never accept a path
+                    // supplied by session JSON.
+                    String undoHistoryFile = restored.optString("undoHistoryFile", "");
+                    if (isUndoHistoryFileNameForDocument(undoHistoryFile, id)) {
+                        JSONObject undoEnvelope = readJson(
+                            new File(undoHistoryDirectory, undoHistoryFile)
+                        );
+                        if (undoEnvelope != null
+                            && UNDO_HISTORY_FORMAT.equals(undoEnvelope.optString("format", ""))
+                            && undoEnvelope.optInt("version", -1) == UNDO_HISTORY_FILE_VERSION
+                            && sha256(id.getBytes(StandardCharsets.UTF_8)).equals(
+                                undoEnvelope.optString("documentIdSha256", ""))) {
+                            JSONObject history = undoEnvelope.optJSONObject("history");
+                            if (history != null) {
+                                restored.put("undoHistory", new JSONObject(history.toString()));
+                            }
+                        } else if (undoEnvelope != null) {
+                            android.util.Log.w("YummySession",
+                                "Ignoring invalid undo history for document " + id);
                         }
                     }
 
@@ -261,6 +289,20 @@ public final class WorkspaceSessionManager {
         return sha256(documentId.getBytes(StandardCharsets.UTF_8)) + ".json";
     }
 
+    private String newUndoHistoryFileName(String documentId) {
+        return sha256(documentId.getBytes(StandardCharsets.UTF_8))
+            + "_" + UUID.randomUUID() + ".json";
+    }
+
+    private boolean isUndoHistoryFileNameForDocument(String fileName, String documentId) {
+        String prefix = sha256(documentId.getBytes(StandardCharsets.UTF_8)) + "_";
+        return fileName != null && fileName.startsWith(prefix)
+            && fileName.length() == prefix.length() + 36 + 5
+            && fileName.endsWith(".json")
+            && fileName.substring(prefix.length(), prefix.length() + 36)
+                .matches("[0-9a-fA-F-]{36}");
+    }
+
     @Nullable
     private JSONObject readUntitledDraft(String documentId) {
         if (!isUntitledDocument(documentId, false)) return null;
@@ -366,10 +408,12 @@ public final class WorkspaceSessionManager {
     private void writeEditorSession(JSONObject snapshot) throws IOException {
         ensureDirectory(sessionDirectory);
         ensureDirectory(recoveryDirectory);
+        ensureDirectory(undoHistoryDirectory);
 
         JSONArray documents = snapshot.optJSONArray("documents");
         JSONArray manifestDocuments = new JSONArray();
         List<String> keepRecoveryFiles = new ArrayList<>();
+        List<String> keepUndoHistoryFiles = new ArrayList<>();
         String activeDocumentId = snapshot.optString("activeDocumentId", "");
 
         if (documents != null) {
@@ -401,6 +445,39 @@ public final class WorkspaceSessionManager {
                 // Remove the legacy draft-file reference. The current text is committed
                 // together with tab metadata below, in the same atomic editor.json write.
                 metadata.remove("draftFile");
+
+                // Commit a document's undo snapshot before editor.json references it. Both
+                // writes use AtomicFile and run on the same single-threaded IO executor, so a
+                // manifest can never point at a history file whose write was still queued.
+                JSONObject undoHistory = metadata.optJSONObject("undoHistory");
+                if (undoHistory != null) {
+                    String undoName = newUndoHistoryFileName(id);
+                    JSONObject envelope = new JSONObject();
+                    try {
+                        envelope.put("format", UNDO_HISTORY_FORMAT);
+                        envelope.put("version", UNDO_HISTORY_FILE_VERSION);
+                        envelope.put("documentIdSha256",
+                            sha256(id.getBytes(StandardCharsets.UTF_8)));
+                        envelope.put("history", undoHistory);
+                    } catch (JSONException error) {
+                        throw new IOException("Could not build undo history envelope", error);
+                    }
+                    try {
+                        writeJsonAtomically(new File(undoHistoryDirectory, undoName), envelope);
+                        metadata.put("undoHistoryFile", undoName);
+                        keepUndoHistoryFiles.add(undoName);
+                    } catch (IOException | JSONException error) {
+                        // Undo history is best-effort metadata. A full disk or damaged history
+                        // snapshot must not prevent the editor's text/recovery manifest from
+                        // being committed.
+                        metadata.remove("undoHistoryFile");
+                        android.util.Log.e("YummySession",
+                            "Could not persist undo history for document " + id, error);
+                    }
+                } else {
+                    metadata.remove("undoHistoryFile");
+                }
+                metadata.remove("undoHistory");
 
                 JSONObject recoveryPatch = null;
                 // Do not generate a line diff for Untitled tabs: they have no source file
@@ -479,6 +556,7 @@ public final class WorkspaceSessionManager {
         // the next startup and the failed save is surfaced through the session indicator.
         writeJsonAtomically(editorManifest, snapshot);
         pruneRecoveryFiles(keepRecoveryFiles);
+        pruneUndoHistoryFiles(keepUndoHistoryFiles);
         if (documents != null && verifyUntitledDraftTexts(manifestDocuments)) {
             pruneLegacyUntitledDraftFiles();
         } else if (documents != null) {
@@ -568,6 +646,22 @@ public final class WorkspaceSessionManager {
                 //noinspection ResultOfMethodCallIgnored
                 file.delete();
             }
+        }
+    }
+
+    /** Remove only stale JSON history snapshots from Yummy's dedicated private directory. */
+    private void pruneUndoHistoryFiles(List<String> keepFiles) {
+        File[] files = undoHistoryDirectory.listFiles();
+        if (files == null) return;
+        Set<String> processed = new HashSet<>();
+        for (File candidate : files) {
+            if (!candidate.isFile()) continue;
+            String name = candidate.getName();
+            String baseName = name.endsWith(".json.bak")
+                ? name.substring(0, name.length() - 4) : name;
+            if (!baseName.endsWith(".json") || !processed.add(baseName)
+                || keepFiles.contains(baseName)) continue;
+            new AtomicFile(new File(undoHistoryDirectory, baseName)).delete();
         }
     }
 

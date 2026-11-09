@@ -130,6 +130,9 @@ public class EditorController {
         String text;
         /** Live Sora buffer owned by this tab, including its native UndoManager. */
         Content content;
+        /** Last durable history snapshot; kept until a fresh snapshot supersedes it. */
+        JSONObject undoHistory;
+        boolean undoHistoryRestoreAttempted;
         String baseText;
         String baseSha256 = "";
         boolean storageBacked;
@@ -196,6 +199,9 @@ public class EditorController {
         mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
             if (!mSuppressContentChanges && mActiveDocument != null) {
                 mActiveDocument.revision++;
+                // A previous snapshot is no longer authoritative after any content mutation,
+                // even when Undo/Redo returns to text that happens to have the same hash.
+                mActiveDocument.undoHistory = null;
                 captureActiveDocumentContent();
                 renderTabs();
                 scheduleEditorSessionSave();
@@ -263,6 +269,7 @@ public class EditorController {
                 document.legacyRecoveryText = item.optString("legacyRecoveryText", null);
                 document.revision = item.optLong("revision", 0L);
                 document.savedRevision = item.optLong("savedRevision", document.revision);
+                document.undoHistory = item.optJSONObject("undoHistory");
 
                 if (storageBacked) {
                     // File Manager must reload and fingerprint the real source before
@@ -336,6 +343,22 @@ public class EditorController {
             session.put("version", 1);
             session.put("activeDocumentId", mActiveDocument == null ? JSONObject.NULL : mActiveDocument.id);
             for (EditorDocument document : mDocuments) {
+                if (document.content != null) {
+                    try {
+                        document.undoHistory = SoraUndoHistoryCodec.encode(document.content);
+                    } catch (java.io.IOException error) {
+                        // A transient Sora edit must not fail the whole workspace checkpoint.
+                        // Never keep a stale snapshot after the buffer has changed; it may have
+                        // the same text hash after an Undo/Redo but a different stack pointer.
+                        if (!SoraUndoHistoryCodec.matchesContent(
+                                document.content, document.undoHistory)) {
+                            document.undoHistory = null;
+                        }
+                        android.util.Log.w("YummyEditor",
+                            "Could not encode undo history for " + document.id, error);
+                    }
+                }
+
                 JSONObject item = new JSONObject();
                 item.put("id", document.id);
                 item.put("name", document.name);
@@ -346,6 +369,9 @@ public class EditorController {
                 item.put("storageBacked", document.storageBacked);
                 item.put("revision", document.revision);
                 item.put("savedRevision", document.savedRevision);
+                if (document.undoHistory != null) {
+                    item.put("undoHistory", document.undoHistory);
+                }
                 if (document.restorePending && document.recoveryPatch != null) {
                     item.put("preserveRecoveryPatch", true);
                     item.put("recoveryPatch", document.recoveryPatch);
@@ -495,6 +521,7 @@ public class EditorController {
         document.baseSha256 = sourceSha256;
         document.text = restoredText;
         document.content = null; // Rebuild Content from the verified recovered source.
+        document.undoHistoryRestoreAttempted = false;
         document.restorePending = false;
         document.recoveryPatch = null;
         document.legacyRecoveryText = null;
@@ -583,6 +610,8 @@ public class EditorController {
         } else {
             if (name != null && !name.trim().isEmpty()) mActiveDocument.name = name;
             mActiveDocument.content = null; // Explicit content replacement starts a fresh history.
+            mActiveDocument.undoHistory = null;
+            mActiveDocument.undoHistoryRestoreAttempted = true;
             mActiveDocument.text = content == null ? "" : content;
             mActiveDocument.baseText = mActiveDocument.text;
             mActiveDocument.baseSha256 = WorkspaceSessionManager.sha256(
@@ -781,6 +810,20 @@ public class EditorController {
             }
             // Reusing Content preserves the Sora UndoManager and cursor state for this tab.
             mEditor.setText(content, true, null);
+
+            // Storage-backed tabs stay pending until File Manager verifies the source and
+            // applies any recovery patch. Only then can the saved text fingerprint be checked.
+            if (!mActiveDocument.restorePending
+                    && mActiveDocument.undoHistory != null
+                    && !mActiveDocument.undoHistoryRestoreAttempted) {
+                mActiveDocument.undoHistoryRestoreAttempted = true;
+                if (!SoraUndoHistoryCodec.restore(content, mActiveDocument.undoHistory)) {
+                    android.util.Log.w("YummyEditor",
+                        "Saved undo history did not match the restored document: "
+                            + mActiveDocument.id);
+                    mActiveDocument.undoHistory = null;
+                }
+            }
         } finally {
             mSuppressContentChanges = false;
         }
