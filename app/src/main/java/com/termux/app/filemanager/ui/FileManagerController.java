@@ -825,14 +825,14 @@ public final class FileManagerController {
             ViewGroup.LayoutParams.MATCH_PARENT, dp(112)
         ));
 
+
         ImageView decoration = new ImageView(activity);
-        Bitmap artwork = getPopupDecorationBitmap();
-        if (artwork != null) {
-            decoration.setImageDrawable(new ScreenBlendDrawable(artwork));
-        }
+        decoration.setImageResource(R.drawable.yummy_popup_wave);
         decoration.setScaleType(ImageView.ScaleType.FIT_XY);
+
         header.addView(decoration, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
         ));
         decoration.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 
@@ -862,13 +862,20 @@ public final class FileManagerController {
         titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         heading.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView closeButton = text("×", 32, 0xFFE3E8E5, false);
-        closeButton.setGravity(Gravity.CENTER);
-        closeButton.setBackground(flatRectangle(0xFF202724, 0x00000000, 0));
-        closeButton.setContentDescription("Close dialog");
+
+
+
+
+
+        ImageButton closeButton = new ImageButton(activity);
+        closeButton.setImageResource(R.drawable.ic_yummy_close_circle);
+        closeButton.setBackgroundColor(Color.TRANSPARENT);
+        closeButton.setScaleType(ImageView.ScaleType.CENTER);
+        closeButton.setPadding(dp(10), dp(10), dp(10), dp(10));
+        closeButton.setContentDescription("Close");
         closeButton.setClickable(true);
         closeButton.setFocusable(true);
-        heading.addView(closeButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        heading.addView(closeButton, new LinearLayout.LayoutParams(dp(35), dp(35)));
         closeButton.setOnClickListener(view -> dialog.dismiss());
 
         EditText input = new EditText(activity);
@@ -887,7 +894,7 @@ public final class FileManagerController {
             input.setSelection(0, input.getText().length());
         }
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(62)
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(40)
         );
         inputParams.setMargins(dp(22), dp(8), dp(22), 0);
         card.addView(input, inputParams);
@@ -896,7 +903,7 @@ public final class FileManagerController {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(54)
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(35)
         );
         actionsParams.setMargins(dp(22), dp(24), dp(22), dp(20));
         card.addView(actions, actionsParams);
@@ -951,7 +958,8 @@ public final class FileManagerController {
             int horizontalMargin = dp(48);
             int maxWidth = dp(480);
             int dialogWidth = Math.min(Math.max(0, screenWidth - horizontalMargin), maxWidth);
-            window.setLayout(dialogWidth, WindowManager.LayoutParams.WRAP_CONTENT);
+            int dialogHeight = dp(100); //WindowManager.LayoutParams.WRAP_CONTENT);
+            window.setLayout(dialogWidth, dialogHeight);
             window.setGravity(Gravity.CENTER);
         }
         input.requestFocus();
