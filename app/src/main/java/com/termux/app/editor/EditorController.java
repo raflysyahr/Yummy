@@ -33,6 +33,7 @@ import androidx.core.content.ContextCompat;
 import com.termux.R;
 import io.github.rosemoe.sora.event.ContentChangeEvent;
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
+import io.github.rosemoe.sora.text.Content;
 import io.github.rosemoe.sora.widget.CodeEditor;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
@@ -127,6 +128,8 @@ public class EditorController {
         String name;
         String encoding = "UTF-8";
         String text;
+        /** Live Sora buffer owned by this tab, including its native UndoManager. */
+        Content content;
         String baseText;
         String baseSha256 = "";
         boolean storageBacked;
@@ -193,7 +196,7 @@ public class EditorController {
         mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
             if (!mSuppressContentChanges && mActiveDocument != null) {
                 mActiveDocument.revision++;
-                mActiveDocument.text = mEditor.getText().toString();
+                captureActiveDocumentContent();
                 renderTabs();
                 scheduleEditorSessionSave();
             }
@@ -325,7 +328,7 @@ public class EditorController {
     private JSONObject createEditorSessionSnapshot() {
         if (mWorkspaceSessionManager == null) return null;
         if (mEditor != null && mActiveDocument != null) {
-            mActiveDocument.text = mEditor.getText().toString();
+            captureActiveDocumentContent();
         }
         JSONObject session = new JSONObject();
         JSONArray documents = new JSONArray();
@@ -491,6 +494,7 @@ public class EditorController {
         document.baseText = sourceText;
         document.baseSha256 = sourceSha256;
         document.text = restoredText;
+        document.content = null; // Rebuild Content from the verified recovered source.
         document.restorePending = false;
         document.recoveryPatch = null;
         document.legacyRecoveryText = null;
@@ -543,7 +547,7 @@ public class EditorController {
     @NonNull
     public String ensureDraftDocumentForSave() {
         if (mActiveDocument != null) {
-            if (mEditor != null) mActiveDocument.text = mEditor.getText().toString();
+            captureActiveDocumentContent();
             return mActiveDocument.id;
         }
 
@@ -578,6 +582,7 @@ public class EditorController {
             activateDocumentInternal(document, false);
         } else {
             if (name != null && !name.trim().isEmpty()) mActiveDocument.name = name;
+            mActiveDocument.content = null; // Explicit content replacement starts a fresh history.
             mActiveDocument.text = content == null ? "" : content;
             mActiveDocument.baseText = mActiveDocument.text;
             mActiveDocument.baseSha256 = WorkspaceSessionManager.sha256(
@@ -738,7 +743,7 @@ public class EditorController {
         // During startup restore, mActiveDocument is already set while the editor still
         // contains its initial empty buffer; copying it here would erase the restored draft.
         if (mActiveDocument != null && mActiveDocument != document && mEditor != null) {
-            mActiveDocument.text = mEditor.getText().toString();
+            captureActiveDocumentContent();
         }
         mActiveDocument = document;
         applyActiveDocumentText();
@@ -750,11 +755,32 @@ public class EditorController {
         if (notify) notifyActiveDocumentChanged();
     }
 
+    /** Keep the active document's exact Sora Content instance, not only its text. */
+    private void captureActiveDocumentContent() {
+        if (mActiveDocument == null || mEditor == null) return;
+        Content content = mEditor.getText();
+        mActiveDocument.content = content;
+        mActiveDocument.text = content.toString();
+    }
+
     private void applyActiveDocumentText() {
         if (mEditor == null) return;
         mSuppressContentChanges = true;
         try {
-            mEditor.setText(mActiveDocument == null ? "" : mActiveDocument.text);
+            if (mActiveDocument == null) {
+                mEditor.setText(new Content(""), true, null);
+                return;
+            }
+
+            String targetText = mActiveDocument.text == null ? "" : mActiveDocument.text;
+            Content content = mActiveDocument.content;
+            if (content == null || !targetText.equals(content.toString())) {
+                // A programmatic text replacement invalidates the previous action stack.
+                content = new Content(targetText);
+                mActiveDocument.content = content;
+            }
+            // Reusing Content preserves the Sora UndoManager and cursor state for this tab.
+            mEditor.setText(content, true, null);
         } finally {
             mSuppressContentChanges = false;
         }
