@@ -113,6 +113,8 @@ public class EditorController {
     private final List<EditorDocument> mDocuments = new ArrayList<>();
     private EditorDocument mActiveDocument;
     private boolean mSuppressContentChanges;
+    /** True only after a synchronous checkpoint has committed the latest editor state. */
+    private boolean mFinalCheckpointCompleted;
     private boolean mTextMateReady;
     private DocumentActionListener mDocumentActionListener;
 
@@ -301,12 +303,14 @@ public class EditorController {
 
     private void scheduleEditorSessionSave() {
         if (mWorkspaceSessionManager == null) return;
+        mFinalCheckpointCompleted = false;
         mSessionHandler.removeCallbacks(mPendingSessionSave);
         mSessionHandler.postDelayed(mPendingSessionSave, 350L);
     }
 
     /** Capture and enqueue the complete in-memory editor state immediately. */
     public void persistEditorSessionNow() {
+        mFinalCheckpointCompleted = false;
         mSessionHandler.removeCallbacks(mPendingSessionSave);
         JSONObject session = createEditorSessionSnapshot();
         if (session != null && mWorkspaceSessionManager != null) {
@@ -321,10 +325,12 @@ public class EditorController {
      * the Activity override itself.
      */
     public boolean persistEditorSessionBlocking() {
+        mFinalCheckpointCompleted = false;
         mSessionHandler.removeCallbacks(mPendingSessionSave);
         JSONObject session = createEditorSessionSnapshot();
         if (session == null || mWorkspaceSessionManager == null) return false;
         boolean saved = mWorkspaceSessionManager.saveEditorSessionBlocking(session);
+        mFinalCheckpointCompleted = saved;
         if (!saved) {
             android.util.Log.e("YummyEditor", "Could not commit editor session during Activity lifecycle");
         }
@@ -1297,6 +1303,12 @@ public class EditorController {
             @Override
             public void onActivityDestroyed(@NonNull Activity activity) {
                 if (activity != mActivity) return;
+                // Final fallback for destruction paths that did not complete onStop() or
+                // onSaveInstanceState(). Never release the live Sora buffer before its
+                // latest Undo/Redo stack has had one synchronous persistence attempt.
+                if (!mFinalCheckpointCompleted) {
+                    persistEditorSessionBlocking();
+                }
                 activity.getApplication().unregisterActivityLifecycleCallbacks(this);
                 if (mEditor != null) {
                     mEditor.release();
