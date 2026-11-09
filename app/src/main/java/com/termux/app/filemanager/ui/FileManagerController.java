@@ -1377,15 +1377,28 @@ public final class FileManagerController {
             listView.setSelector(android.R.color.transparent);
 
             treeHorizontalScroll = new HorizontalScrollView(activity) {
+                private static final int GESTURE_UNDECIDED = 0;
+                private static final int GESTURE_HORIZONTAL = 1;
+                private static final int GESTURE_VERTICAL = 2;
                 private float downX;
                 private float downY;
+                private int gestureDirection = GESTURE_UNDECIDED;
+                private boolean childRequestedDisallowIntercept;
                 private final int touchSlop = ViewConfiguration.get(activity).getScaledTouchSlop();
 
                 @Override
                 public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
-                    // Keep horizontal gestures available to this scroll container.
-                    // onInterceptTouchEvent() still lets ListView handle vertical gestures.
-                    super.requestDisallowInterceptTouchEvent(false);
+                    childRequestedDisallowIntercept = disallowIntercept;
+                    if (!disallowIntercept || gestureDirection == GESTURE_HORIZONTAL) {
+                        // A horizontal swipe belongs to this container, not ListView.
+                        super.requestDisallowInterceptTouchEvent(false);
+                    } else if (gestureDirection == GESTURE_VERTICAL) {
+                        super.requestDisallowInterceptTouchEvent(true);
+                    } else {
+                        // Defer the child's request until the gesture direction is known.
+                        // This keeps the parent eligible to take over a horizontal swipe.
+                        super.requestDisallowInterceptTouchEvent(false);
+                    }
                 }
 
                 @Override
@@ -1394,6 +1407,8 @@ public final class FileManagerController {
                         case MotionEvent.ACTION_DOWN:
                             downX = event.getX();
                             downY = event.getY();
+                            gestureDirection = GESTURE_UNDECIDED;
+                            childRequestedDisallowIntercept = false;
                             break;
                         case MotionEvent.ACTION_MOVE:
                             float deltaX = Math.abs(event.getX() - downX);
@@ -1401,10 +1416,19 @@ public final class FileManagerController {
                             View content = getChildAt(0);
                             boolean contentCanScroll = content != null
                                 && content.getWidth() > getWidth();
-                            // ListView handles vertical scrolling. Claim only a clear
-                            // horizontal swipe when the tree is wider than its viewport.
-                            if (contentCanScroll && deltaX > touchSlop && deltaX > deltaY) {
+
+                            if (contentCanScroll && deltaX > touchSlop
+                                && deltaX > deltaY * 1.2f) {
+                                gestureDirection = GESTURE_HORIZONTAL;
+                                super.requestDisallowInterceptTouchEvent(false);
                                 return true;
+                            }
+                            if (deltaY > touchSlop && deltaY > deltaX * 1.2f) {
+                                gestureDirection = GESTURE_VERTICAL;
+                                if (childRequestedDisallowIntercept) {
+                                    super.requestDisallowInterceptTouchEvent(true);
+                                }
+                                return false;
                             }
                             break;
                     }
@@ -1413,14 +1437,26 @@ public final class FileManagerController {
             };
             treeHorizontalScroll.setHorizontalScrollBarEnabled(false);
             treeHorizontalScroll.setVerticalScrollBarEnabled(false);
-            // Force the single content child to occupy at least the viewport width.
-            // With fillViewport disabled, a narrower measured child (157 px in the
-            // reported case) stays narrow even when the viewport is 494 px wide.
-            // A wider child is still preserved, so long names remain horizontally scrollable.
-            treeHorizontalScroll.setFillViewport(true);
+            // The content wrapper measures to its explicit width below. Do not use
+            // fillViewport here: it previously left the wrapper measured at viewport
+            // width even while its layout params requested the larger tree width.
+            treeHorizontalScroll.setFillViewport(false);
             treeHorizontalScroll.setSmoothScrollingEnabled(true);
             treeHorizontalScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-            treeContentContainer = new FrameLayout(activity);
+            treeContentContainer = new FrameLayout(activity) {
+                @Override
+                protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                    // HorizontalScrollView may supply a viewport-constrained width spec.
+                    // The tree surface must instead honor the explicit width calculated
+                    // from the viewport and the widest row so horizontal overflow exists.
+                    ViewGroup.LayoutParams params = getLayoutParams();
+                    int requestedWidth = params != null && params.width > 0
+                        ? params.width : View.MeasureSpec.getSize(widthMeasureSpec);
+                    int exactWidthSpec = View.MeasureSpec.makeMeasureSpec(
+                        Math.max(1, requestedWidth), View.MeasureSpec.EXACTLY);
+                    super.onMeasure(exactWidthSpec, heightMeasureSpec);
+                }
+            };
             treeContentContainer.setLayoutParams(
                 new HorizontalScrollView.LayoutParams(treeViewportWidth, -1));
             treeContentContainer.addView(listView,
@@ -1898,15 +1934,9 @@ public final class FileManagerController {
             requiredTreeContentWidth = requiredWidth;
             applyTreeContentWidth(measuredViewportWidth);
 
-            // Also reconcile once on the next UI turn. The layout-change listener
-            // above remains the source of truth for later viewport size changes.
-            treeHorizontalScroll.post(() -> {
-                if (treeHorizontalScroll == null || treeContentContainer == null) return;
-                int actualViewportWidth = treeHorizontalScroll.getWidth();
-                if (actualViewportWidth <= 0) return;
-                treeViewportWidth = actualViewportWidth;
-                applyTreeContentWidth(actualViewportWidth);
-            });
+            // Viewport changes are handled by the layout-change listener. Avoid an
+            // additional post()/requestLayout cycle on every tree refresh so ListView
+            // can keep its native vertical fling and scroll behavior.
             scheduleTreeWidthDebug();
         }
 
@@ -1924,29 +1954,25 @@ public final class FileManagerController {
             ViewGroup.LayoutParams contentParams = treeContentContainer.getLayoutParams();
             if (contentParams == null) {
                 contentParams = new HorizontalScrollView.LayoutParams(targetWidth, -1);
-            }
-            if (contentParams.width != targetWidth || contentParams.height != -1) {
+                treeContentContainer.setLayoutParams(contentParams);
+            } else if (contentParams.width != targetWidth || contentParams.height != -1) {
                 contentParams.width = targetWidth;
                 contentParams.height = -1;
                 treeContentContainer.setLayoutParams(contentParams);
             }
 
-            // ListView fills the explicit-width wrapper, so each row receives the
-            // full horizontal canvas instead of shrinking to the initial panel width.
+            // ListView fills the explicitly measured wrapper. Only update its params
+            // when they actually differ; resetting them on every layout pass causes
+            // unnecessary measure/layout work and makes vertical scrolling feel rough.
             ViewGroup.LayoutParams listParams = listView.getLayoutParams();
             if (listParams == null) {
-                listParams = new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            } else {
+                listView.setLayoutParams(new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            } else if (listParams.width != ViewGroup.LayoutParams.MATCH_PARENT
+                || listParams.height != ViewGroup.LayoutParams.MATCH_PARENT) {
                 listParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
                 listParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
-            }
-            listView.setLayoutParams(listParams);
-            listView.requestLayout();
-            treeContentContainer.requestLayout();
-            if (treeHorizontalScroll != null) {
-                treeHorizontalScroll.requestLayout();
-                treeHorizontalScroll.invalidate();
+                listView.setLayoutParams(listParams);
             }
         }
 
@@ -1976,10 +2002,13 @@ public final class FileManagerController {
                 info.append("TREE WIDTH DEBUG\n\n")
                     .append("Viewport: ").append(treeHorizontalScroll.getWidth()).append(" px\n")
                     .append("Content: ").append(treeContentContainer.getWidth()).append(" px\n")
+                    .append("Content measured: ").append(treeContentContainer.getMeasuredWidth()).append(" px\n")
                     .append("Content LP: ").append(treeContentContainer.getLayoutParams() == null
                         ? "null" : treeContentContainer.getLayoutParams().width).append(" px\n")
                     .append("RightPane: ").append(rightPane == null ? 0 : rightPane.getWidth()).append(" px\n")
                     .append("ListView: ").append(listView.getWidth()).append(" px\n")
+                    .append("ListView measured: ").append(listView.getMeasuredWidth()).append(" px\n")
+                    .append("Can scroll right: ").append(treeHorizontalScroll.canScrollHorizontally(1)).append('\n')
                     .append("ScrollX: ").append(treeHorizontalScroll.getScrollX()).append(" px\n")
                     .append("Visible rows: ").append(listView.getChildCount()).append('\n');
 
