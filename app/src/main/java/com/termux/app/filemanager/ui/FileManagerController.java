@@ -883,7 +883,7 @@ public final class FileManagerController {
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         input.setTypeface(nunitoTypeface(false));
-        input.setTextColor(0xFFFA0A0A0);
+        input.setTextColor(0xFFA0A0A0);
         input.setHintTextColor(0xFFA0A0A0);
         input.setHint(hint);
         input.setPadding(dp(16), 0, dp(16), 0);
