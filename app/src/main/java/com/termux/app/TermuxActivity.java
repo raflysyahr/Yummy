@@ -26,13 +26,10 @@ import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
-import android.os.Build;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
-
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.editor.EditorController;
+import com.termux.app.AppSystemUiController;
 import com.termux.app.filemanager.ui.FileManagerController;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -254,7 +251,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return insets;
         });
 
-        if (mProperties.isUsingFullScreen()) {
+        if (mProperties.isUsingFullScreen()
+                && AppSystemUiController.isStatusBarHidden(this)) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         }
 
@@ -535,25 +533,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void hideStatusBar() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        WindowInsetsController controller =
-                getWindow().getInsetsController();
-
-        if (controller != null) {
-            controller.hide(WindowInsets.Type.statusBars());
-
-            controller.setSystemBarsBehavior(
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            );
-        }
-    } else {
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        );
+        AppSystemUiController.apply(this);
     }
-}
 
 
 

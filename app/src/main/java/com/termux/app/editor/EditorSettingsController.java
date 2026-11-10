@@ -26,6 +26,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.AppSystemUiController;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
 
@@ -37,6 +38,8 @@ public final class EditorSettingsController {
 
     private static final String PREFS_NAME = "yummy_editor_settings";
     private static final String KEY_WORD_WRAP = "word_wrap";
+    private static final String KEY_EDITOR_ZOOM = "editor_zoom_enabled";
+    private static final String KEY_HIDE_STATUS_BAR = "hide_status_bar";
     private static final String KEY_LINE_NUMBERS = "line_numbers";
     private static final String KEY_CURRENT_LINE = "current_line_highlight";
     private static final String KEY_FONT_SIZE = "font_size_sp";
@@ -87,6 +90,7 @@ public final class EditorSettingsController {
     public static void applySavedSettings(@NonNull Activity activity, @NonNull CodeEditor editor) {
         SharedPreferences preferences = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         editor.setWordwrap(preferences.getBoolean(KEY_WORD_WRAP, false));
+        editor.setScalable(preferences.getBoolean(KEY_EDITOR_ZOOM, true));
         editor.setLineNumberEnabled(preferences.getBoolean(KEY_LINE_NUMBERS, true));
         editor.setHighlightCurrentLine(preferences.getBoolean(KEY_CURRENT_LINE, true));
         editor.setTextSize(clampFontSize(preferences.getInt(KEY_FONT_SIZE, DEFAULT_FONT_SIZE)));
@@ -118,7 +122,8 @@ public final class EditorSettingsController {
             window.setStatusBarColor(BACKGROUND);
             window.setNavigationBarColor(BACKGROUND);
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-            window.getDecorView().setSystemUiVisibility(0);
+            AppSystemUiController.apply(window,
+                AppSystemUiController.isStatusBarHidden(activity));
         }
     }
 
@@ -188,6 +193,9 @@ public final class EditorSettingsController {
         addDivider(displayCard);
         addSwitchRow(displayCard, "Highlight current line", "Highlight the line containing the cursor.",
             KEY_CURRENT_LINE, true);
+        addDivider(displayCard);
+        addSwitchRow(displayCard, "Editor zoom", "Allow pinch gestures to zoom code text.",
+            KEY_EDITOR_ZOOM, true);
 
         TextView typeSection = label("TYPOGRAPHY", 11, ACCENT, true);
         LinearLayout.LayoutParams typeSectionParams = new LinearLayout.LayoutParams(-1, -2);
@@ -212,6 +220,19 @@ public final class EditorSettingsController {
         spacingCardParams.topMargin = dp(12);
         content.addView(spacingCard, spacingCardParams);
         addTabWidthRow(spacingCard);
+
+        TextView systemSection = label("SYSTEM", 11, ACCENT, true);
+        LinearLayout.LayoutParams systemSectionParams = new LinearLayout.LayoutParams(-1, -2);
+        systemSectionParams.topMargin = dp(26);
+        content.addView(systemSection, systemSectionParams);
+
+        LinearLayout systemCard = card();
+        LinearLayout.LayoutParams systemCardParams = new LinearLayout.LayoutParams(-1, -2);
+        systemCardParams.topMargin = dp(12);
+        content.addView(systemCard, systemCardParams);
+        addSwitchRow(systemCard, "Hide status bar",
+            "Hide the Android status bar across all Yummy screens.",
+            KEY_HIDE_STATUS_BAR, true);
 
         TextView previewLabel = label("PREVIEW", 11, ACCENT, true);
         LinearLayout.LayoutParams previewLabelParams = new LinearLayout.LayoutParams(-1, -2);
@@ -280,6 +301,10 @@ public final class EditorSettingsController {
         row.addView(toggle, toggleParams);
         toggle.setOnCheckedChangeListener((button, value) -> {
             preferences.edit().putBoolean(key, value).apply();
+            if (KEY_HIDE_STATUS_BAR.equals(key)) {
+                AppSystemUiController.setStatusBarHidden(activity,
+                    pageDialog == null ? null : pageDialog.getWindow(), value);
+            }
             applySettings();
         });
         row.setBackground(rippleBackground(Color.TRANSPARENT, 0));
@@ -287,7 +312,7 @@ public final class EditorSettingsController {
     }
 
     private void addFontSizeRow(LinearLayout parent) {
-        LinearLayout row = optionRow(parent, "Font size", "Zoom the editor text in or out.");
+        LinearLayout row = optionRow(parent, "Font size", "Set the default size of code text.");
         LinearLayout controls = new LinearLayout(activity);
         controls.setGravity(Gravity.CENTER_VERTICAL);
         row.addView(controls, new LinearLayout.LayoutParams(-2, dp(36)));
@@ -404,6 +429,8 @@ public final class EditorSettingsController {
             window.setLayout(Math.min(dp(360), screenWidth - dp(40)),
                 WindowManager.LayoutParams.WRAP_CONTENT);
             window.setGravity(Gravity.CENTER);
+            AppSystemUiController.apply(window,
+                AppSystemUiController.isStatusBarHidden(activity));
         }
     }
 
@@ -417,6 +444,7 @@ public final class EditorSettingsController {
     private void applySettings() {
         if (editor != null) {
             editor.setWordwrap(preferences.getBoolean(KEY_WORD_WRAP, false));
+            editor.setScalable(preferences.getBoolean(KEY_EDITOR_ZOOM, true));
             editor.setLineNumberEnabled(preferences.getBoolean(KEY_LINE_NUMBERS, true));
             editor.setHighlightCurrentLine(preferences.getBoolean(KEY_CURRENT_LINE, true));
             editor.setTextSize(fontSize);
@@ -431,6 +459,7 @@ public final class EditorSettingsController {
 
     private void resetDefaults() {
         preferences.edit().clear().apply();
+        AppSystemUiController.apply(activity);
         fontSize = DEFAULT_FONT_SIZE;
         tabWidth = DEFAULT_TAB_WIDTH;
         fontFamily = FONT_JETBRAINS;

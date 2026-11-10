@@ -23,6 +23,7 @@ public class TermuxApplication extends Application {
 
     public void onCreate() {
         super.onCreate();
+        AppSystemUiController.register(this);
 
         Context context = getApplicationContext();
 
