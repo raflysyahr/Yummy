@@ -58,6 +58,7 @@ import androidx.core.content.FileProvider;
 
 import com.termux.R;
 import com.termux.app.editor.EditorController;
+import com.termux.app.editor.EditorSettingsController;
 import com.termux.app.session.WorkspaceSessionManager;
 import com.termux.app.filemanager.storage.StorageRegistry;
 import com.termux.app.filemanager.storage.StorageTreePicker;
@@ -2859,6 +2860,7 @@ public final class FileManagerController {
 
             PopupMenu menu = new PopupMenu(new ContextThemeWrapper(activity, android.R.style.Theme_Material), anchor);
 
+            menu.getMenu().add("Editor settings");
             menu.getMenu().add(showHidden ? "Hide hidden files" : "Show hidden files");
             menu.getMenu().add("Refresh");
             menu.getMenu().add("Locations");
@@ -2866,7 +2868,8 @@ public final class FileManagerController {
             if (currentProvider instanceof SafTreeStorageProvider) menu.getMenu().add("Remove current storage");
             menu.setOnMenuItemClickListener(item -> {
                 String action = item.getTitle().toString();
-                if (action.startsWith("Show hidden") || action.startsWith("Hide hidden")) {
+                if ("Editor settings".equals(action)) EditorSettingsController.show(activity);
+                else if (action.startsWith("Show hidden") || action.startsWith("Hide hidden")) {
                     showHidden = !showHidden;
                     preferences.edit().putBoolean(KEY_SHOW_HIDDEN, showHidden).apply();
                     persistSession();

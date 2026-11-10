@@ -194,6 +194,7 @@ public class EditorController {
 
         configureEditor();
         initializeTextMateSupport();
+        EditorSettingsController.applySavedSettings(mActivity, mEditor);
         bindKeys();
         bindEditorActionButtons();
 
@@ -1102,7 +1103,7 @@ public class EditorController {
         if (!mTextMateReady) return;
         try {
             TextMateLanguage language = TextMateLanguage.create(info.scopeName, true);
-            language.setTabSize(4);
+            language.setTabSize(mEditor.getTabWidth());
             language.useTab(false);
             mEditor.setEditorLanguage(language);
             mEditor.getProps().autoIndent = true;
@@ -1117,7 +1118,7 @@ public class EditorController {
             // sehingga dokumen tak dikenal tidak mewarisi syntax dokumen sebelumnya.
             try {
                 TextMateLanguage fallback = TextMateLanguage.create("text.plain", true);
-                fallback.setTabSize(4);
+                fallback.setTabSize(mEditor.getTabWidth());
                 fallback.useTab(false);
                 mEditor.setEditorLanguage(fallback);
             } catch (Exception fallbackError) {
