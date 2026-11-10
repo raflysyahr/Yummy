@@ -235,6 +235,16 @@ public final class EditorSettingsController {
         return card;
     }
 
+    /** Adds a subtle separator between settings rows. */
+    private void addDivider(@NonNull LinearLayout parent) {
+        View divider = new View(activity);
+        divider.setBackgroundColor(BORDER);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(1));
+        params.leftMargin = dp(16);
+        params.rightMargin = dp(16);
+        parent.addView(divider, params);
+    }
+
     private void addSwitchRow(LinearLayout parent, String title, String subtitle,
                               String key, boolean defaultValue) {
         LinearLayout row = new LinearLayout(activity);
