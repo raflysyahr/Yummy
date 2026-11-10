@@ -1758,6 +1758,7 @@ public final class FileManagerController {
             item.setGravity(Gravity.CENTER);
             item.setPadding(dp(2), dp(5), dp(2), dp(5));
             item.setBackgroundColor(Color.TRANSPARENT);
+            applySidebarRipple(item);
             LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(dp(64), dp(72));
             itemLp.setMargins(0, dp(3), 0, dp(4));
             storageNavContainer.addView(item, itemLp);
@@ -2633,6 +2634,46 @@ public final class FileManagerController {
             return values.isEmpty() ? "Read-only/unknown" : android.text.TextUtils.join(", ", values);
         }
 
+        private void addCreatedEntryToTree(StorageProvider provider, StorageEntry parent,
+                                            StorageEntry created,
+                                            @Nullable List<StorageEntry> refreshedChildren) {
+            if (currentProvider == null || !provider.getId().equals(currentProvider.getId())) return;
+
+            String parentKey = treeKey(parent);
+            treeEntries.put(treeKey(created), created);
+
+            if (refreshedChildren != null) {
+                List<StorageEntry> visibleChildren = new ArrayList<>();
+                for (StorageEntry child : refreshedChildren) {
+                    if (showHidden || !child.getName().startsWith(".")) visibleChildren.add(child);
+                    treeEntries.put(treeKey(child), child);
+                }
+                sortEntries(visibleChildren, sortMode);
+                treeChildren.put(parentKey, visibleChildren);
+            } else {
+                List<StorageEntry> cachedChildren = treeChildren.get(parentKey);
+                if (cachedChildren != null) {
+                    cachedChildren.removeIf(child -> sameEntry(child, created));
+                    if (showHidden || !created.getName().startsWith(".")) cachedChildren.add(created);
+                    sortEntries(cachedChildren, sortMode);
+                }
+            }
+
+            if (!activeQuery.isEmpty()) {
+                String query = activeQuery.toLowerCase(Locale.ROOT);
+                currentEntries.removeIf(entry -> sameEntry(entry, created));
+                if ((showHidden || !created.getName().startsWith("."))
+                    && created.getName().toLowerCase(Locale.ROOT).contains(query)) {
+                    currentEntries.add(created);
+                    sortEntries(currentEntries, sortMode);
+                }
+            }
+
+            rebuildTreeRows();
+            updateEmptyState();
+            persistSession();
+        }
+
         private void createNew(boolean directory) {
             if (currentProvider == null || currentDirectory == null) {
                 toast("Pilih folder tujuan terlebih dahulu");
@@ -2656,6 +2697,14 @@ public final class FileManagerController {
                             StorageEntry created = directory
                                 ? fileOperations.createDirectory(targetProvider.getId(), targetDirectory, name)
                                 : fileOperations.createFile(targetProvider.getId(), targetDirectory, name);
+                            List<StorageEntry> refreshedChildren = null;
+                            try {
+                                refreshedChildren = targetProvider.list(targetDirectory);
+                            } catch (IOException | RuntimeException refreshError) {
+                                android.util.Log.w("YummyFileManager",
+                                    "Item dibuat, tetapi daftar folder belum dapat dimuat ulang", refreshError);
+                            }
+                            final List<StorageEntry> childrenSnapshot = refreshedChildren;
                             mainHandler.post(() -> {
                                 if (destroyed) return;
                                 if (!directory) {
@@ -2664,8 +2713,8 @@ public final class FileManagerController {
                                     editorController.openStorageDocument(documentId, "", created.getName(),
                                         WorkspaceSessionManager.sha256(new byte[0]));
                                     syncActiveFile(documentId);
-                                    dismiss();
-                                } else refreshVisible();
+                                }
+                                addCreatedEntryToTree(targetProvider, targetDirectory, created, childrenSnapshot);
                                 toast((directory ? "Folder" : "File") + " dibuat: " + name);
                             });
                         } catch (IOException | RuntimeException error) {
@@ -2961,6 +3010,7 @@ public final class FileManagerController {
                     check.setVisibility(View.INVISIBLE);
                     container.setPadding(dp(8), dp(5), dp(8), dp(5));
                     container.setBackgroundColor(Color.TRANSPARENT);
+                    applySidebarRipple(container);
                     return container;
                 }
 
@@ -3004,17 +3054,7 @@ public final class FileManagerController {
                 else container.setBackgroundColor(Color.TRANSPARENT);
 
 
-                // Temporary click feedback
-                if (android.os.Build.VERSION.SDK_INT >= 23) {
-                    RippleDrawable ripple = new RippleDrawable(
-                        ColorStateList.valueOf(0x33969EA7),
-                        null,
-                        new ColorDrawable(Color.WHITE)
-                    );
-
-                    container.setForeground(ripple);
-                }
-
+                applySidebarRipple(container);
                 return container;
             }
         }
@@ -3057,10 +3097,28 @@ public final class FileManagerController {
         return view;
     }
 
+    private static final int SIDEBAR_RIPPLE_COLOR = 0x3300D65A;
+
+    private Drawable sidebarRipple(@Nullable Drawable content) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return content;
+        return new RippleDrawable(ColorStateList.valueOf(SIDEBAR_RIPPLE_COLOR), content, null);
+    }
+
+    private void applySidebarRipple(View view) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            view.setForeground(new RippleDrawable(
+                ColorStateList.valueOf(SIDEBAR_RIPPLE_COLOR), null, new ColorDrawable(Color.WHITE)
+            ));
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+            && !(view.getBackground() instanceof RippleDrawable)) {
+            view.setBackground(sidebarRipple(view.getBackground()));
+        }
+    }
+
     private TextView textButton(String value, int sizeSp, int color) {
         TextView view = text(value, sizeSp, color, true);
         view.setGravity(Gravity.CENTER);
-        view.setBackgroundResource(android.R.drawable.list_selector_background);
+        view.setBackground(sidebarRipple(new ColorDrawable(Color.TRANSPARENT)));
         return view;
     }
 
@@ -3077,7 +3135,7 @@ public final class FileManagerController {
         button.setImageResource(iconResource);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         button.setPadding(dp(13), dp(13), dp(13), dp(13)); // 18dp icon; touch target remains unchanged.
-        button.setBackgroundResource(android.R.drawable.list_selector_background);
+        button.setBackground(sidebarRipple(new ColorDrawable(Color.TRANSPARENT)));
         button.setContentDescription(description);
         return button;
     }
@@ -3089,7 +3147,7 @@ public final class FileManagerController {
         button.setTypeface(nunitoTypeface(true));
         button.setTextColor(0xFF07110C);
         button.setAllCaps(false);
-        button.setBackground(roundRect(0xFF3DDC84, dp(9)));
+        button.setBackground(sidebarRipple(roundRect(0xFF3DDC84, dp(9))));
         return button;
     }
 
