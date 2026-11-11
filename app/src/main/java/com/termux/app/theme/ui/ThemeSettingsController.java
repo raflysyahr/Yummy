@@ -2,6 +2,7 @@ package com.termux.app.theme.ui;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -34,6 +35,7 @@ import com.termux.app.theme.model.ThemeTarget;
 import com.termux.app.theme.registry.ThemeRegistrySnapshot;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.settings.ThemeSelectionStore;
+import com.termux.app.theme.storage.ThemePackageStorage;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -74,6 +76,7 @@ public final class ThemeSettingsController {
     private ThemeRegistrySnapshot snapshot = ThemeRegistrySnapshot.empty();
     private ThemeSelection selection = ThemeSelection.defaults();
     private Dialog activeDialog;
+    private ThemeImportController themeImportController;
 
     public ThemeSettingsController(
         Activity activity,
@@ -145,6 +148,10 @@ public final class ThemeSettingsController {
     /** Dismisses the current settings/preview dialog, for example from Activity.onDestroy(). */
     public void dismiss() {
         requireMainThread();
+        if (themeImportController != null) {
+            themeImportController.release();
+            themeImportController = null;
+        }
         if (activeDialog != null) {
             Dialog dialog = activeDialog;
             activeDialog = null;
@@ -154,6 +161,38 @@ public final class ThemeSettingsController {
 
     public ThemeSelection getSelection() {
         return selection;
+    }
+
+    /**
+     * Forward Activity.onActivityResult to this method. Returns true when the result belongs
+     * to the standalone VS Code JSON importer.
+     */
+    public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
+        requireMainThread();
+        return themeImportController != null
+            && themeImportController.onActivityResult(requestCode, resultCode, data);
+    }
+
+    private void startThemeImport() {
+        requireMainThread();
+        if (themeImportController == null) {
+            themeImportController = new ThemeImportController(
+                activity,
+                registry,
+                new ThemePackageStorage(activity),
+                appThemeController,
+                uiTypeface,
+                importedId -> {
+                    snapshot = registry.reload();
+                    selection = selectionStore.read(snapshot);
+                    Toast.makeText(activity,
+                        "Theme imported. Choose it from the appropriate theme selector.",
+                        Toast.LENGTH_LONG).show();
+                    showSettingsDialog();
+                }
+            );
+        }
+        themeImportController.launchPicker();
     }
 
     private void showSettingsDialog() {
@@ -177,6 +216,12 @@ public final class ThemeSettingsController {
             ThemeTarget.EDITOR_SYNTAX,
             selection.getEditorSyntaxThemeId()
         );
+
+        TextView importTheme = action("Import VS Code Theme JSON", true, this::startThemeImport);
+        root.addView(importTheme, marginParams(0, dp(18), 0, 0));
+        root.addView(text(
+            "Import a standalone .json Color Theme. Yummy validates it and creates package metadata.",
+            11, mutedColor(), false), marginParams(0, dp(5), 0, 0));
 
         TextView close = action("Close", false, dialog::dismiss);
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
