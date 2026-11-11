@@ -71,6 +71,7 @@ public final class ThemeSettingsController {
     private final AppThemeController appThemeController;
     private final EditorSyntaxThemeApplier editorSyntaxThemeApplier;
     private final ThemeSelectionStore selectionStore;
+    private final ThemePackageStorage packageStorage;
     private final Typeface uiTypeface;
 
     private ThemeRegistrySnapshot snapshot = ThemeRegistrySnapshot.empty();
@@ -92,6 +93,7 @@ public final class ThemeSettingsController {
         this.appThemeController = appThemeController;
         this.editorSyntaxThemeApplier = editorSyntaxThemeApplier;
         this.selectionStore = new ThemeSelectionStore(activity);
+        this.packageStorage = new ThemePackageStorage(activity);
         this.uiTypeface = uiTypeface;
     }
 
@@ -179,7 +181,7 @@ public final class ThemeSettingsController {
             themeImportController = new ThemeImportController(
                 activity,
                 registry,
-                new ThemePackageStorage(activity),
+                packageStorage,
                 appThemeController,
                 uiTypeface,
                 importedId -> {
@@ -223,6 +225,10 @@ public final class ThemeSettingsController {
             "Import a standalone .json Color Theme. Yummy validates it and creates package metadata.",
             11, mutedColor(), false), marginParams(0, dp(5), 0, 0));
 
+        TextView manageThemes = action(
+            "Manage imported themes", false, this::showImportedThemes);
+        root.addView(manageThemes, marginParams(0, dp(12), 0, 0));
+
         TextView close = action("Close", false, dialog::dismiss);
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -235,6 +241,160 @@ public final class ThemeSettingsController {
         scroll.addView(root);
         dialog.setContentView(scroll);
         showDialog(dialog, 560);
+    }
+
+    /** Shows only user-imported packages; bundled themes are never offered for removal. */
+    private void showImportedThemes() {
+        requireMainThread();
+        snapshot = registry.reload();
+
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        root.addView(text("Manage imported themes", 20, textColor(), true));
+        root.addView(text(
+            "Remove theme packages stored by Yummy. Built-in themes cannot be removed.",
+            12, mutedColor(), false), marginParams(0, dp(5), 0, dp(14)));
+
+        List<LoadedTheme> imported = snapshot.getThemesFrom(ThemeSource.IMPORTED);
+        if (imported.isEmpty()) {
+            root.addView(text("No imported themes installed.", 13, mutedColor(), false));
+        } else {
+            for (LoadedTheme theme : imported) {
+                addImportedThemeRow(root, dialog, theme);
+            }
+        }
+
+        TextView back = action("Back", false, () -> {
+            dialog.dismiss();
+            showSettingsDialog();
+        });
+        root.addView(back, marginParams(0, dp(14), 0, 0));
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(backgroundColor());
+        scroll.addView(root);
+        dialog.setContentView(scroll);
+        showDialog(dialog, 560);
+    }
+
+    private void addImportedThemeRow(
+        LinearLayout root,
+        Dialog listDialog,
+        LoadedTheme theme
+    ) {
+        String id = theme.getMetadata().getId();
+        StringBuilder details = new StringBuilder();
+        details.append(appearanceLabel(theme)).append(" · ").append(id);
+        if (theme.getMetadata().supports(ThemeTarget.APP_UI)) {
+            details.append("\nApplication UI");
+        }
+        if (theme.getMetadata().supports(ThemeTarget.EDITOR_SYNTAX)) {
+            if (details.charAt(details.length() - 1) != '\n') details.append(" · ");
+            details.append("Editor Syntax");
+        }
+        String author = theme.getMetadata().getAuthor();
+        String license = theme.getMetadata().getLicense();
+        if (author != null) details.append("\nAuthor: ").append(author);
+        if (license != null) details.append("\nLicense: ").append(license);
+
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        card.setBackground(rect(surfaceColor(), borderColor()));
+        card.addView(text(theme.getMetadata().getLabel(), 15, textColor(), true));
+        card.addView(text(details.toString(), 11, mutedColor(), false),
+            marginParams(0, dp(4), 0, dp(8)));
+
+        TextView remove = action("Remove", false, () -> {
+            listDialog.dismiss();
+            confirmRemoveTheme(theme);
+        });
+        card.addView(remove);
+        root.addView(card, marginParams(0, 0, 0, dp(8)));
+    }
+
+    private void confirmRemoveTheme(LoadedTheme theme) {
+        String id = theme.getMetadata().getId();
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        root.addView(text("Remove theme?", 19, textColor(), true));
+        root.addView(text(
+            "'" + theme.getMetadata().getLabel() + "' will be removed from Yummy's imported theme storage. "
+                + "This cannot be undone.",
+            13, mutedColor(), false), marginParams(0, dp(7), 0, dp(16)));
+
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView cancel = action("Cancel", false, dialog::dismiss);
+        TextView remove = action("Remove theme", true, () -> {
+            dialog.dismiss();
+            removeImportedTheme(id);
+        });
+        actions.addView(cancel, new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        removeParams.leftMargin = dp(8);
+        actions.addView(remove, removeParams);
+        root.addView(actions);
+
+        dialog.setContentView(root);
+        showDialog(dialog, 440);
+    }
+
+    private void removeImportedTheme(String themeId) {
+        ThemeSelection before = selectionStore.read(snapshot);
+        try {
+            packageStorage.removeImportedTheme(themeId);
+        } catch (Exception error) {
+            Toast.makeText(activity,
+                "Could not remove theme: " + safeMessage(error), Toast.LENGTH_LONG).show();
+            showImportedThemes();
+            return;
+        }
+
+        snapshot = registry.reload();
+        selection = selectionStore.read(snapshot);
+        List<String> failures = new java.util.ArrayList<>();
+
+        if (!before.getAppColorSchemeId().equals(selection.getAppColorSchemeId())) {
+            try {
+                LoadedTheme fallback = snapshot.findById(selection.getAppColorSchemeId());
+                if (fallback == null || !fallback.getMetadata().supports(ThemeTarget.APP_UI)) {
+                    throw new IllegalStateException("No replacement App UI theme is available");
+                }
+                if (appThemeController == null) {
+                    throw new IllegalStateException("App UI theme controller is unavailable");
+                }
+                appThemeController.applyTheme(fallback);
+            } catch (Exception error) {
+                failures.add("Application UI: " + safeMessage(error));
+            }
+        }
+
+        if (!before.getEditorSyntaxThemeId().equals(selection.getEditorSyntaxThemeId())) {
+            try {
+                LoadedTheme fallback = snapshot.findById(selection.getEditorSyntaxThemeId());
+                if (fallback == null || !fallback.getMetadata().supports(ThemeTarget.EDITOR_SYNTAX)) {
+                    throw new IllegalStateException("No replacement Editor Syntax theme is available");
+                }
+                if (editorSyntaxThemeApplier == null) {
+                    throw new IllegalStateException("Editor Syntax applier is unavailable");
+                }
+                editorSyntaxThemeApplier.apply(fallback);
+            } catch (Exception error) {
+                failures.add("Editor Syntax: " + safeMessage(error));
+            }
+        }
+
+        String message = "Theme removed";
+        if (!failures.isEmpty()) {
+            message += ". Some active colors could not be refreshed: "
+                + android.text.TextUtils.join("; ", failures);
+        }
+        Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
+        showImportedThemes();
     }
 
     private void addSelectionSection(
