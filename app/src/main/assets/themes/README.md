@@ -107,3 +107,64 @@ Use `snapshot.getAppUiThemes()` and `snapshot.getEditorSyntaxThemes()` to popula
 separate App UI and Editor Syntax theme lists. `snapshot.getDefaultThemeFor(target)`
 returns the declared default, preferring a built-in default when conflicting defaults
 exist. The current `yummy-default` package remains the declared default for both targets.
+
+## Theme package storage (Stage 5)
+
+`ThemePackageStorage` owns the lifecycle of imported package directories. Imported packages
+are stored in app-private internal storage at:
+
+```text
+<filesDir>/themes/imported/<theme-id>/
+```
+
+This location is deliberately private to Yummy. It does not require shared-storage permission
+and it is the directory that should be supplied to `YummyThemeRegistry` for imported-theme
+discovery.
+
+A normalized imported package has this shape:
+
+```text
+my-theme/
+├── metadata.json
+├── theme.json
+├── LICENSE                 # optional
+└── resources/              # optional theme resources
+```
+
+`metadata.json` must declare `source: "imported"`; `themeFile` and optional `licenseFile`
+paths are relative to the package root. The Color Theme document remains an unmodified VS Code
+Color Theme JSON document. The storage layer copies the complete package, then loads and
+validates it before publishing the package directory.
+
+Example:
+
+```java
+ThemePackageStorage storage = new ThemePackageStorage(context);
+LoadedTheme imported = storage.importPackage(unpackedPackageDirectory);
+
+// Explicit replacement is allowed only for an already-installed imported theme with the
+// same ID. Built-in IDs are reserved and can never be replaced.
+LoadedTheme updated = storage.replacePackage(unpackedPackageDirectory);
+
+storage.removeImportedTheme("my-theme");
+```
+
+Install and replace operations first copy into a hidden `.staging/` directory on the same
+filesystem. They validate the staged package before renaming it into its final ID directory.
+Replacement temporarily moves the previous package to a backup and restores it if promotion
+of the new package fails. Built-in IDs are checked against `assets/themes/builtin/` and cannot
+be installed or replaced by imported packages.
+
+Storage limits are intentionally conservative: at most 128 filesystem entries, nesting up to
+8 directories, 2 MiB per file, and 8 MiB total per package. Symbolic links, unsafe relative
+paths, special filesystem entries, and entries escaping the source package directory are
+rejected. The optional `licenseFile` must exist inside the package. Third-party license text is
+preserved as part of the package; this storage layer does not assert that a license permits
+redistribution.
+
+The storage API accepts an already-unpacked package directory. After a successful import, replace,
+or removal, call `YummyThemeRegistry.reload()` so the in-memory snapshot reflects the updated
+package directory. Document-picker integration, ZIP/VSIX extraction, and user-facing import UI
+remain outside Stage 5 and are reserved for the later import stage. Removing a package does not
+rewrite the user's active theme selection; selection fallback will be handled by the Theme
+Manager/settings integration.

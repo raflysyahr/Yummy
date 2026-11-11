@@ -8,6 +8,7 @@ on:
       - feature/storage-provider-system
       - feature/undo-redo-manager
       - feature/editor-settings
+      - feature/theme-schema
 
   workflow_dispatch:
 
