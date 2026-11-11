@@ -33,6 +33,7 @@ import com.termux.app.theme.model.ThemeAppearance;
 import com.termux.app.theme.model.ThemeSelection;
 import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.model.ThemeTarget;
+import com.termux.app.theme.model.ThemeVersion;
 import com.termux.app.theme.registry.ThemeRegistrySnapshot;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.settings.ThemeSelectionStore;
@@ -335,6 +336,7 @@ public final class ThemeSettingsController {
         String id = theme.getMetadata().getId();
         StringBuilder details = new StringBuilder();
         details.append(appearanceLabel(theme)).append(" · ").append(id);
+        details.append("\nVersion: ").append(theme.getMetadata().getVersion());
         if (theme.getMetadata().supports(ThemeTarget.APP_UI)) {
             details.append("\nApplication UI");
         }
@@ -354,6 +356,22 @@ public final class ThemeSettingsController {
         card.addView(text(theme.getMetadata().getLabel(), 15, textColor(), true));
         card.addView(text(details.toString(), 11, mutedColor(), false),
             marginParams(0, dp(4), 0, dp(8)));
+
+        try {
+            List<ThemePackageStorage.BackupInfo> backups = packageStorage.listBackups(id);
+            if (!backups.isEmpty()) {
+                card.addView(text("VERSION BACKUPS", 10, mutedColor(), true),
+                    marginParams(0, 0, 0, dp(3)));
+                for (ThemePackageStorage.BackupInfo backup : backups) {
+                    TextView restore = action("Restore backup · v" + backup.getVersion(), false,
+                        () -> confirmRestoreBackup(theme, backup));
+                    card.addView(restore, marginParams(0, 0, 0, dp(3)));
+                }
+            }
+        } catch (Exception error) {
+            card.addView(text("Backups unavailable: " + safeMessage(error), 10, mutedColor(), false),
+                marginParams(0, 0, 0, dp(4)));
+        }
 
         TextView export = action("Export package (.zip)", false,
             () -> launchThemeExport(theme));
@@ -436,7 +454,20 @@ public final class ThemeSettingsController {
             pendingPackageRestore = result;
             if ((collision != null && collision.getMetadata().getSource() == ThemeSource.IMPORTED)
                 || packageExists) {
-                confirmPackageReplacement(result);
+                if (collision == null || collision.getMetadata().getSource() != ThemeSource.IMPORTED) {
+                    throw new IllegalStateException(
+                        "An imported package with this ID exists but its installed version cannot be validated. "
+                            + "Remove or repair that package before updating it.");
+                }
+                ThemeVersion incoming = ThemeVersion.parse(result.getTheme().getMetadata().getVersion());
+                ThemeVersion installed = ThemeVersion.parse(collision.getMetadata().getVersion());
+                int comparison = incoming.compareTo(installed);
+                if (comparison <= 0) {
+                    throw new IllegalStateException(comparison == 0
+                        ? "This theme version is already installed (v" + installed + ")."
+                        : "Downgrade blocked. Installed v" + installed + " is newer than incoming v" + incoming + ".");
+                }
+                confirmPackageUpdate(result, collision);
             } else {
                 installExtractedPackage(result, false);
             }
@@ -480,12 +511,17 @@ public final class ThemeSettingsController {
         }
     }
 
-    private void confirmPackageReplacement(ThemePackageArchiveImporter.Result result) {
+    private void confirmPackageUpdate(
+        ThemePackageArchiveImporter.Result result, LoadedTheme installedTheme
+    ) {
+        String incomingVersion = result.getTheme().getMetadata().getVersion();
+        String installedVersion = installedTheme.getMetadata().getVersion();
         Dialog dialog = createDialog();
         LinearLayout root = createRoot();
-        root.addView(text("Replace imported theme?", 19, textColor(), true));
-        root.addView(text("A theme with ID '" + result.getTheme().getMetadata().getId()
-            + "' is already installed. Replace its package with this ZIP?",
+        root.addView(text("Update theme package?", 19, textColor(), true));
+        root.addView(text("'" + result.getTheme().getMetadata().getLabel() + "' will be updated from v"
+            + installedVersion + " to v" + incomingVersion
+            + ". Yummy will save the installed version as a backup before replacing it.",
             13, mutedColor(), false), marginParams(0, dp(7), 0, dp(16)));
         LinearLayout actions = new LinearLayout(activity);
         actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -494,16 +530,16 @@ public final class ThemeSettingsController {
             if (pendingPackageRestore == result) pendingPackageRestore = null;
             ThemePackageArchiveImporter.deleteTree(result.getPackageDirectory());
         });
-        TextView replace = action("Replace", true, () -> {
+        TextView update = action("Back up & update", true, () -> {
             dialog.dismiss();
             installExtractedPackage(result, true);
         });
         actions.addView(cancel, new LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        LinearLayout.LayoutParams replaceParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        replaceParams.leftMargin = dp(8);
-        actions.addView(replace, replaceParams);
+        updateParams.leftMargin = dp(8);
+        actions.addView(update, updateParams);
         root.addView(actions);
         dialog.setContentView(root);
         showDialog(dialog, 460);
@@ -520,16 +556,23 @@ public final class ThemeSettingsController {
         if (pendingPackageRestore == result) pendingPackageRestore = null;
         packageIoExecutor.execute(() -> {
             String id = result.getTheme().getMetadata().getId();
+            String version = result.getTheme().getMetadata().getVersion();
             Exception failure = null;
+            ThemePackageStorage.BackupInfo backup = null;
             try {
-                if (replaceExisting) packageStorage.replacePackage(result.getPackageDirectory());
-                else packageStorage.importPackage(result.getPackageDirectory());
+                if (replaceExisting) {
+                    backup = packageStorage.backupImportedTheme(id);
+                    packageStorage.replacePackage(result.getPackageDirectory());
+                } else {
+                    packageStorage.importPackage(result.getPackageDirectory());
+                }
             } catch (Exception error) {
                 failure = error;
             } finally {
                 ThemePackageArchiveImporter.deleteTree(result.getPackageDirectory());
             }
             Exception installFailure = failure;
+            ThemePackageStorage.BackupInfo createdBackup = backup;
             postPackageResult(() -> {
                 if (installFailure != null) {
                     Toast.makeText(activity, "Could not install theme package: "
@@ -537,8 +580,12 @@ public final class ThemeSettingsController {
                 } else {
                     snapshot = registry.reload();
                     selection = selectionStore.read(snapshot);
-                    Toast.makeText(activity, "Theme package restored: " + id
-                        + ". Select it in the appropriate theme section.", Toast.LENGTH_LONG).show();
+                    if (replaceExisting) applySavedThemes();
+                    String message = replaceExisting
+                        ? "Theme updated to v" + version + ". Backup v"
+                            + (createdBackup == null ? "?" : createdBackup.getVersion()) + " saved."
+                        : "Theme package restored: " + id + ". Select it in the appropriate theme section.";
+                    Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
                 }
                 showSettingsDialog();
             });
@@ -549,6 +596,55 @@ public final class ThemeSettingsController {
         activity.runOnUiThread(() -> {
             if (!released && !activity.isFinishing()) action.run();
         });
+    }
+
+    private void confirmRestoreBackup(
+        LoadedTheme theme, ThemePackageStorage.BackupInfo backup
+    ) {
+        String id = theme.getMetadata().getId();
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        root.addView(text("Restore theme backup?", 19, textColor(), true));
+        root.addView(text("Restore '" + theme.getMetadata().getLabel() + "' to version v"
+            + backup.getVersion() + "? The currently installed version will first be saved as another backup.",
+            13, mutedColor(), false), marginParams(0, dp(7), 0, dp(16)));
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView cancel = action("Cancel", false, dialog::dismiss);
+        TextView restore = action("Restore", true, () -> {
+            dialog.dismiss();
+            packageIoExecutor.execute(() -> {
+                Exception failure = null;
+                try {
+                    packageStorage.restoreBackup(id, backup.getBackupId());
+                } catch (Exception error) {
+                    failure = error;
+                }
+                Exception restoreFailure = failure;
+                postPackageResult(() -> {
+                    if (restoreFailure != null) {
+                        Toast.makeText(activity, "Could not restore theme backup: "
+                            + safeMessage(restoreFailure), Toast.LENGTH_LONG).show();
+                    } else {
+                        snapshot = registry.reload();
+                        selection = selectionStore.read(snapshot);
+                        applySavedThemes();
+                        Toast.makeText(activity, "Theme restored to v" + backup.getVersion(),
+                            Toast.LENGTH_LONG).show();
+                    }
+                    showImportedThemes();
+                });
+            });
+        });
+        actions.addView(cancel, new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams restoreParams = new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        restoreParams.leftMargin = dp(8);
+        actions.addView(restore, restoreParams);
+        root.addView(actions);
+        dialog.setContentView(root);
+        showDialog(dialog, 460);
     }
 
     private void launchThemeExport(LoadedTheme theme) {

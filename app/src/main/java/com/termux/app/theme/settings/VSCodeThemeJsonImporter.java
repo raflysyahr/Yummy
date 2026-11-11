@@ -268,6 +268,7 @@ public final class VSCodeThemeJsonImporter {
 
         JSONObject metadata = new JSONObject();
         metadata.put("schemaVersion", 1);
+        metadata.put("version", "1.0.0");
         metadata.put("id", id);
         metadata.put("label", preview.getName());
         metadata.put("type", appearance.getVscodeValue());

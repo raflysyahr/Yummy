@@ -11,6 +11,7 @@ import com.termux.app.theme.model.ThemeAppearance;
 import com.termux.app.theme.model.ThemeMetadata;
 import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.model.ThemeTarget;
+import com.termux.app.theme.model.ThemeVersion;
 import com.termux.app.theme.model.VSCodeColorTheme;
 
 import org.json.JSONArray;
@@ -166,6 +167,10 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
             String license = optionalString(root, "license");
             String licenseFile = optionalString(root, "licenseFile");
             String sourceUrl = optionalString(root, "sourceUrl");
+            String version = optionalString(root, "version");
+            if (version == null) version = "0.0.0"; // Legacy packages remain readable.
+            if (version.length() > 64) throw new ThemeLoadException("Theme version exceeds 64 characters");
+            ThemeVersion.parse(version);
             if (author != null && author.length() > 160) {
                 throw new ThemeLoadException("Theme author exceeds 160 characters");
             }
@@ -188,7 +193,8 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
                 licenseFile,
                 sourceUrl,
                 supportedTargets,
-                defaultTargets
+                defaultTargets,
+                version
             );
         } catch (JSONException | IllegalArgumentException error) {
             throw new ThemeLoadException("Invalid theme metadata: " + error.getMessage(), error);
@@ -213,7 +219,7 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
     private static void rejectUnknownMetadataFields(JSONObject root) throws ThemeLoadException {
         Set<String> allowed = new java.util.HashSet<>(java.util.Arrays.asList(
             "$schema", "schemaVersion", "id", "label", "type", "source", "themeFile",
-            "author", "license", "licenseFile", "sourceUrl", "capabilities", "defaultFor"
+            "author", "license", "licenseFile", "sourceUrl", "version", "capabilities", "defaultFor"
         ));
         Iterator<String> keys = root.keys();
         while (keys.hasNext()) {

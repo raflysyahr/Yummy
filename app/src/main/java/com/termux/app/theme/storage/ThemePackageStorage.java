@@ -9,16 +9,22 @@ import com.termux.app.theme.loader.ThemePackageSourceLoader;
 import com.termux.app.theme.loader.ThemeLoadException;
 import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.ThemeMetadata;
+import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -30,16 +36,19 @@ import java.util.regex.Pattern;
  * before the resulting directory is passed to this storage layer.</p>
  *
  * <p>Install and replace operations are staged and validated before the destination package
- * is changed. A replacement keeps a temporary backup until the new directory is promoted.</p>
+ * is changed. Version snapshots are kept separately under themes/backups so the registry never
+ * treats backup copies as installed themes.</p>
  */
 public final class ThemePackageStorage {
     public static final String THEMES_DIRECTORY_NAME = "themes";
     public static final String IMPORTED_DIRECTORY_NAME = "imported";
     public static final String STAGING_DIRECTORY_NAME = ".staging";
+    public static final String BACKUPS_DIRECTORY_NAME = "backups";
 
     private static final Pattern VALID_THEME_ID =
         Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
     private static final int MAX_PACKAGE_FILES = 128;
+    private static final int MAX_BACKUPS_PER_THEME = 5;
     private static final int MAX_DIRECTORY_DEPTH = 8;
     private static final long MAX_FILE_BYTES = 2L * 1024L * 1024L;
     private static final long MAX_PACKAGE_BYTES = 8L * 1024L * 1024L;
@@ -110,6 +119,11 @@ public final class ThemePackageStorage {
             );
         }
         requireDirectChild(directories.importedRoot, target, "Imported theme directory");
+        File backupRoot = new File(directories.backupsRoot, id);
+        if (backupRoot.exists()) {
+            requireDirectChild(directories.backupsRoot, backupRoot, "Theme backup directory");
+            deleteTree(backupRoot, directories.backupsRoot);
+        }
         deleteTree(target, directories.importedRoot);
     }
 
@@ -121,6 +135,177 @@ public final class ThemePackageStorage {
         if (!target.exists()) return false;
         requireDirectChild(directories.importedRoot, target, "Imported theme directory");
         return target.isDirectory();
+    }
+
+    /**
+     * Creates a durable, validated snapshot of the currently installed imported package.
+     * The backup is stored outside the registry-scanned imported directory.
+     */
+    public synchronized BackupInfo backupImportedTheme(String themeId) throws ThemeStorageException {
+        String id = requireThemeId(themeId);
+        StorageDirectories directories = ensureStorageDirectories();
+        File installed = new File(directories.importedRoot, id);
+        if (!installed.isDirectory()) {
+            throw new ThemeStorageException(ThemeStorageException.Code.PACKAGE_NOT_FOUND,
+                "Imported theme does not exist: " + id);
+        }
+        requireDirectChild(directories.importedRoot, installed, "Imported theme directory");
+
+        final LoadedTheme current;
+        try {
+            current = packageLoader.loadImported(installed);
+            validateOptionalLicenseFile(installed, current.getMetadata());
+        } catch (ThemeLoadException error) {
+            throw new ThemeStorageException(ThemeStorageException.Code.INVALID_PACKAGE,
+                "Cannot back up an invalid installed theme: " + error.getMessage(), error);
+        }
+        if (!id.equals(current.getMetadata().getId())) {
+            throw new ThemeStorageException(ThemeStorageException.Code.INVALID_PACKAGE,
+                "Installed theme metadata ID does not match its storage directory");
+        }
+
+        File themeBackupRoot = new File(directories.backupsRoot, id);
+        if (!themeBackupRoot.exists() && !themeBackupRoot.mkdir()) {
+            throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
+                "Could not create theme backup directory");
+        }
+        requireDirectChild(directories.backupsRoot, themeBackupRoot, "Theme backup directory");
+        String backupId = "backup-" + System.currentTimeMillis() + "-" + nextOperationSuffix();
+        File backupDirectory = new File(themeBackupRoot, backupId);
+        try {
+            if (!backupDirectory.mkdir()) throw new IOException("Could not create backup snapshot directory");
+            CopyStats stats = new CopyStats();
+            copyDirectoryContents(installed, installed, backupDirectory, "", stats, 0);
+            LoadedTheme verified = packageLoader.loadImported(backupDirectory);
+            validateOptionalLicenseFile(backupDirectory, verified.getMetadata());
+            if (!id.equals(verified.getMetadata().getId())) {
+                throw new IOException("Backup snapshot changed the theme ID");
+            }
+            backupDirectory.setLastModified(System.currentTimeMillis());
+            pruneOldBackups(themeBackupRoot, backupDirectory);
+            return new BackupInfo(backupId, verified.getMetadata().getVersion(), backupDirectory.lastModified());
+        } catch (IOException | ThemeLoadException | SecurityException error) {
+            cleanupStagingDirectory(backupDirectory, themeBackupRoot);
+            throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
+                "Could not create theme backup: " + error.getMessage(), error);
+        } catch (ThemeStorageException error) {
+            cleanupStagingDirectory(backupDirectory, themeBackupRoot);
+            throw error;
+        }
+    }
+
+    /** Lists metadata-valid backups for one installed theme, newest first. Full contents are validated on restore. */
+    public synchronized List<BackupInfo> listBackups(String themeId) throws ThemeStorageException {
+        String id = requireThemeId(themeId);
+        StorageDirectories directories = ensureStorageDirectories();
+        File themeBackupRoot = new File(directories.backupsRoot, id);
+        if (!themeBackupRoot.exists()) return Collections.emptyList();
+        requireDirectChild(directories.backupsRoot, themeBackupRoot, "Theme backup directory");
+        File[] entries = themeBackupRoot.listFiles();
+        if (entries == null) {
+            throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
+                "Could not list theme backups");
+        }
+        List<BackupInfo> result = new ArrayList<>();
+        for (File entry : entries) {
+            if (!entry.isDirectory()) continue;
+            requireDirectChild(themeBackupRoot, entry, "Theme backup snapshot");
+            try {
+                ThemeMetadata metadata = readBackupMetadata(entry);
+                if (metadata.getSource() != ThemeSource.IMPORTED
+                    || !id.equals(metadata.getId())) continue;
+                result.add(new BackupInfo(entry.getName(), metadata.getVersion(), entry.lastModified()));
+            } catch (IOException | ThemeLoadException ignored) {
+                // Keep snapshots with invalid metadata on disk for diagnosis, but hide them from restore.
+            }
+        }
+        Collections.sort(result, (left, right) -> Long.compare(right.getCreatedAt(), left.getCreatedAt()));
+        return Collections.unmodifiableList(result);
+    }
+
+    /** Restores one validated backup and snapshots the currently installed package first. */
+    public synchronized LoadedTheme restoreBackup(String themeId, String backupId)
+        throws ThemeStorageException {
+        String id = requireThemeId(themeId);
+        if (backupId == null || !backupId.matches("[a-z0-9][a-z0-9._-]{0,127}")) {
+            throw new ThemeStorageException(ThemeStorageException.Code.UNSAFE_PATH,
+                "Invalid theme backup identifier");
+        }
+        StorageDirectories directories = ensureStorageDirectories();
+        File themeBackupRoot = new File(directories.backupsRoot, id);
+        File backupDirectory = new File(themeBackupRoot, backupId);
+        if (!themeBackupRoot.isDirectory() || !backupDirectory.isDirectory()) {
+            throw new ThemeStorageException(ThemeStorageException.Code.PACKAGE_NOT_FOUND,
+                "Theme backup does not exist");
+        }
+        requireDirectChild(directories.backupsRoot, themeBackupRoot, "Theme backup directory");
+        requireDirectChild(themeBackupRoot, backupDirectory, "Theme backup snapshot");
+        File stagedRestore = new File(directories.stagingRoot,
+            id + ".restore-" + nextOperationSuffix());
+        try {
+            LoadedTheme backup = packageLoader.loadImported(backupDirectory);
+            if (!id.equals(backup.getMetadata().getId())) {
+                throw new ThemeStorageException(ThemeStorageException.Code.INVALID_PACKAGE,
+                    "Backup theme ID does not match the selected theme");
+            }
+            validateOptionalLicenseFile(backupDirectory, backup.getMetadata());
+            if (!stagedRestore.mkdir()) throw new IOException("Could not stage selected backup");
+            CopyStats stats = new CopyStats();
+            copyDirectoryContents(backupDirectory, backupDirectory, stagedRestore, "", stats, 0);
+            packageLoader.loadImported(stagedRestore);
+            backupImportedTheme(id);
+            return replacePackage(stagedRestore);
+        } catch (ThemeLoadException error) {
+            throw new ThemeStorageException(ThemeStorageException.Code.INVALID_PACKAGE,
+                "Selected theme backup is invalid: " + error.getMessage(), error);
+        } catch (IOException error) {
+            throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
+                "Could not stage selected theme backup: " + error.getMessage(), error);
+        } finally {
+            cleanupStagingDirectory(stagedRestore, directories.stagingRoot);
+        }
+    }
+
+    private static ThemeMetadata readBackupMetadata(File backupDirectory)
+        throws IOException, ThemeLoadException {
+        File root = backupDirectory.getCanonicalFile();
+        File metadataFile = new File(root, "metadata.json");
+        File canonicalMetadata = metadataFile.getCanonicalFile();
+        if (!canonicalMetadata.isFile() || !root.equals(canonicalMetadata.getParentFile())
+            || !canonicalMetadata.equals(metadataFile.getAbsoluteFile())) {
+            throw new IOException("Backup metadata file is missing or unsafe");
+        }
+        if (canonicalMetadata.length() > 128L * 1024L) {
+            throw new IOException("Backup metadata exceeds the 128 KiB limit");
+        }
+        try (InputStream input = new FileInputStream(canonicalMetadata);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            return new ThemePackageLoader().parseMetadata(
+                new String(output.toByteArray(), StandardCharsets.UTF_8));
+        }
+    }
+
+    private void pruneOldBackups(File themeBackupRoot, File keepBackup) {
+        File[] entries = themeBackupRoot.listFiles();
+        if (entries == null) return;
+        List<File> removable = new ArrayList<>();
+        int backupCount = 0;
+        for (File entry : entries) {
+            if (entry.isDirectory()) {
+                backupCount++;
+                if (!entry.equals(keepBackup)) removable.add(entry);
+            }
+        }
+        int removeCount = backupCount - MAX_BACKUPS_PER_THEME;
+        if (removeCount <= 0) return;
+        Collections.sort(removable, Comparator.comparingLong(File::lastModified));
+        for (int i = 0; i < removeCount && i < removable.size(); i++) {
+            try { deleteTree(removable.get(i), themeBackupRoot); }
+            catch (ThemeStorageException ignored) { /* Keep a snapshot if safe cleanup fails. */ }
+        }
     }
 
     private LoadedTheme installPackage(File sourcePackageDirectory, boolean replace)
@@ -303,7 +488,18 @@ public final class ThemePackageStorage {
                 || !canonicalImportedRoot.equals(canonicalStagingRoot.getParentFile())) {
                 throw new IOException("Theme staging directory resolves outside its parent");
             }
-            return new StorageDirectories(canonicalImportedRoot, canonicalStagingRoot);
+
+            File backupsRoot = new File(canonicalThemesRoot, BACKUPS_DIRECTORY_NAME);
+            if (!backupsRoot.exists() && !backupsRoot.mkdir()) {
+                throw new IOException("Could not create the theme backups directory");
+            }
+            File canonicalBackupsRoot = backupsRoot.getCanonicalFile();
+            if (!canonicalBackupsRoot.isDirectory()
+                || !canonicalThemesRoot.equals(canonicalBackupsRoot.getParentFile())) {
+                throw new IOException("Theme backups directory resolves outside its parent");
+            }
+            return new StorageDirectories(canonicalImportedRoot, canonicalStagingRoot,
+                canonicalBackupsRoot);
         } catch (IOException | SecurityException error) {
             throw new ThemeStorageException(
                 ThemeStorageException.Code.STORAGE_UNAVAILABLE,
@@ -580,10 +776,29 @@ public final class ThemePackageStorage {
     private static final class StorageDirectories {
         final File importedRoot;
         final File stagingRoot;
+        final File backupsRoot;
 
-        StorageDirectories(File importedRoot, File stagingRoot) {
+        StorageDirectories(File importedRoot, File stagingRoot, File backupsRoot) {
             this.importedRoot = importedRoot;
             this.stagingRoot = stagingRoot;
+            this.backupsRoot = backupsRoot;
         }
+    }
+
+    /** Immutable description of one validated backup snapshot. */
+    public static final class BackupInfo {
+        private final String backupId;
+        private final String version;
+        private final long createdAt;
+
+        BackupInfo(String backupId, String version, long createdAt) {
+            this.backupId = backupId;
+            this.version = version;
+            this.createdAt = createdAt;
+        }
+
+        public String getBackupId() { return backupId; }
+        public String getVersion() { return version; }
+        public long getCreatedAt() { return createdAt; }
     }
 }

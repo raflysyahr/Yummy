@@ -24,6 +24,7 @@ public final class ThemeMetadata {
     private final String license;
     private final String licenseFile;
     private final String sourceUrl;
+    private final String version;
     private final Set<ThemeTarget> supportedTargets;
     private final Set<ThemeTarget> defaultTargets;
 
@@ -40,6 +41,24 @@ public final class ThemeMetadata {
         Set<ThemeTarget> supportedTargets,
         Set<ThemeTarget> defaultTargets
     ) {
+        this(id, label, appearance, source, themeFile, author, license, licenseFile,
+            sourceUrl, supportedTargets, defaultTargets, "0.0.0");
+    }
+
+    public ThemeMetadata(
+        String id,
+        String label,
+        ThemeAppearance appearance,
+        ThemeSource source,
+        String themeFile,
+        String author,
+        String license,
+        String licenseFile,
+        String sourceUrl,
+        Set<ThemeTarget> supportedTargets,
+        Set<ThemeTarget> defaultTargets,
+        String version
+    ) {
         this.id = requireId(id);
         this.label = requireText(label, "Theme label");
         this.appearance = requireValue(appearance, "Theme appearance");
@@ -49,6 +68,7 @@ public final class ThemeMetadata {
         this.license = optionalText(license);
         this.licenseFile = optionalRelativePath(licenseFile, "License file");
         this.sourceUrl = optionalText(sourceUrl);
+        this.version = ThemeVersion.parse(version).getValue();
         this.supportedTargets = immutableTargets(supportedTargets, "Supported targets");
         this.defaultTargets = immutableTargetsAllowEmpty(defaultTargets, "Default targets");
 
@@ -128,6 +148,7 @@ public final class ThemeMetadata {
     public String getLicense() { return license; }
     public String getLicenseFile() { return licenseFile; }
     public String getSourceUrl() { return sourceUrl; }
+    public String getVersion() { return version; }
 
     public Set<ThemeTarget> getSupportedTargets() {
         return supportedTargets;

@@ -1,6 +1,7 @@
 {
   "$schema": "../../schema/yummy-theme-metadata.schema.json",
   "schemaVersion": 1,
+  "version": "1.0.0",
   "id": "yummy-default",
   "label": "Yummy Default",
   "type": "dark",
