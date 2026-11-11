@@ -3,6 +3,7 @@ package com.termux.app.theme.ui;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Intent;
+import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -40,7 +41,14 @@ import com.termux.app.theme.storage.ThemePackageStorage;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import java.util.Locale;
 
 /**
@@ -65,6 +73,7 @@ public final class ThemeSettingsController {
     private static final int COLOR_TEXT = Color.rgb(239, 240, 242);
     private static final int COLOR_MUTED = Color.rgb(145, 150, 158);
     private static final int COLOR_ACCENT = Color.rgb(34, 197, 94);
+    private static final int REQUEST_EXPORT_THEME = 0x594D;
 
     private final Activity activity;
     private final YummyThemeRegistry registry;
@@ -78,6 +87,7 @@ public final class ThemeSettingsController {
     private ThemeSelection selection = ThemeSelection.defaults();
     private Dialog activeDialog;
     private ThemeImportController themeImportController;
+    private String pendingExportThemeId;
 
     public ThemeSettingsController(
         Activity activity,
@@ -171,6 +181,15 @@ public final class ThemeSettingsController {
      */
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
         requireMainThread();
+        if (requestCode == REQUEST_EXPORT_THEME) {
+            String themeId = pendingExportThemeId;
+            pendingExportThemeId = null;
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null
+                && themeId != null) {
+                exportThemeToUri(themeId, data.getData());
+            }
+            return true;
+        }
         return themeImportController != null
             && themeImportController.onActivityResult(requestCode, resultCode, data);
     }
@@ -306,12 +325,96 @@ public final class ThemeSettingsController {
         card.addView(text(details.toString(), 11, mutedColor(), false),
             marginParams(0, dp(4), 0, dp(8)));
 
+        TextView export = action("Export package (.zip)", false,
+            () -> launchThemeExport(theme));
+        card.addView(export, marginParams(0, 0, 0, dp(4)));
+
         TextView remove = action("Remove", false, () -> {
             listDialog.dismiss();
             confirmRemoveTheme(theme);
         });
         card.addView(remove);
         root.addView(card, marginParams(0, 0, 0, dp(8)));
+    }
+
+    private void launchThemeExport(LoadedTheme theme) {
+        requireMainThread();
+        String id = theme.getMetadata().getId();
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/zip");
+        intent.putExtra(Intent.EXTRA_TITLE, id + ".yummy-theme.zip");
+        pendingExportThemeId = id;
+        try {
+            activity.startActivityForResult(intent, REQUEST_EXPORT_THEME);
+        } catch (Exception error) {
+            pendingExportThemeId = null;
+            Toast.makeText(activity, "Could not open destination picker: "
+                + safeMessage(error), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void exportThemeToUri(String themeId, Uri destination) {
+        try {
+            File root = packageStorage.getImportedThemesDirectory().getCanonicalFile();
+            File packageDirectory = new File(root, themeId).getCanonicalFile();
+            if (!packageDirectory.isDirectory()
+                || !root.equals(packageDirectory.getParentFile())) {
+                throw new IOException("Imported theme package is missing or unsafe");
+            }
+
+            OutputStream output = activity.getContentResolver().openOutputStream(destination, "w");
+            if (output == null) throw new IOException("Could not open destination document");
+            try (ZipOutputStream zip = new ZipOutputStream(output)) {
+                addDirectoryToZip(packageDirectory, packageDirectory, zip);
+            }
+            Toast.makeText(activity, "Theme exported: " + themeId,
+                Toast.LENGTH_LONG).show();
+        } catch (Exception error) {
+            Toast.makeText(activity, "Could not export theme: " + safeMessage(error),
+                Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private static void addDirectoryToZip(
+        File current,
+        File packageDirectory,
+        ZipOutputStream zip
+    ) throws IOException {
+        File canonical = current.getCanonicalFile();
+        String packagePath = packageDirectory.getCanonicalPath();
+        if (!canonical.getPath().equals(packagePath)
+            && !canonical.getPath().startsWith(packagePath + File.separator)) {
+            throw new IOException("Theme package contains an unsafe path");
+        }
+        File[] children = canonical.listFiles();
+        if (children == null) throw new IOException("Could not read theme package");
+        java.util.Arrays.sort(children, (left, right) -> left.getName().compareTo(right.getName()));
+        for (File child : children) {
+            File safeChild = child.getCanonicalFile();
+            if (!safeChild.getPath().equals(packagePath)
+                && !safeChild.getPath().startsWith(packagePath + File.separator)) {
+                throw new IOException("Theme package contains a symbolic-link escape");
+            }
+            if (safeChild.isDirectory()) {
+                addDirectoryToZip(safeChild, packageDirectory, zip);
+            } else if (safeChild.isFile()) {
+                String relative = packageDirectory.toURI().relativize(safeChild.toURI()).getPath();
+                if (relative.length() == 0 || relative.startsWith("../")) {
+                    throw new IOException("Invalid theme package entry");
+                }
+                zip.putNextEntry(new ZipEntry(relative));
+                try (BufferedInputStream input = new BufferedInputStream(
+                    new FileInputStream(safeChild))) {
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) zip.write(buffer, 0, count);
+                }
+                zip.closeEntry();
+            } else {
+                throw new IOException("Theme package contains an unsupported file type");
+            }
+        }
     }
 
     private void confirmRemoveTheme(LoadedTheme theme) {
