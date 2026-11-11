@@ -84,7 +84,7 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
             String themeJson = resources.readUtf8(metadata.getThemeFile());
             VSCodeColorTheme colorTheme = documentParser.parse(themeJson, metadata);
             validateCapabilities(metadata, colorTheme);
-            return new LoadedTheme(metadata, colorTheme);
+            return new LoadedTheme(metadata, colorTheme, resources);
         } catch (IOException | IllegalArgumentException error) {
             throw new ThemeLoadException(
                 "Could not read Color Theme for '" + metadata.getId() + "': " + error.getMessage(),
