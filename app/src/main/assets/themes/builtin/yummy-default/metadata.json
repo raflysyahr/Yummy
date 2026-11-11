@@ -1,0 +1,18 @@
+{
+  "$schema": "../../schema/yummy-theme-metadata.schema.json",
+  "schemaVersion": 1,
+  "id": "yummy-default",
+  "label": "Yummy Default",
+  "type": "dark",
+  "source": "builtin",
+  "themeFile": "textmate/yummy-dark.json",
+  "author": "Yummy",
+  "capabilities": {
+    "appUi": true,
+    "editorSyntax": true
+  },
+  "defaultFor": [
+    "app",
+    "editor"
+  ]
+}

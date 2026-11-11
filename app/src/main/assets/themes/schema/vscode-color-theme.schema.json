@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Yummy VS Code Color Theme",
+  "description": "Structural JSON Schema for VS Code-compatible Color Theme files. The schema follows Microsoft's Color Theme and semantic token styling definitions while keeping workbench color identifiers extensible.",
+  "type": "object",
+  "properties": {
+    "colors": {
+      "$ref": "#/definitions/workbenchColors",
+      "description": "Workbench/UI colors. Yummy's Application Theme adapter consumes this section."
+    },
+    "tokenColors": {
+      "description": "TextMate syntax highlighting rules, or a relative path to a tmTheme file.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/textMateTokenRule"
+          }
+        }
+      ]
+    },
+    "semanticHighlighting": {
+      "type": "boolean",
+      "description": "Whether the theme enables semantic highlighting."
+    },
+    "semanticTokenColors": {
+      "$ref": "#/definitions/semanticTokenColors",
+      "description": "Semantic token selectors and their styles. Yummy's Editor Theme adapter consumes this section when semantic highlighting is supported."
+    }
+  },
+  "definitions": {
+    "colorValue": {
+      "type": "string",
+      "format": "color-hex",
+      "pattern": "^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+      "description": "Hexadecimal color in #RGB, #RGBA, #RRGGBB, or #RRGGBBAA form."
+    },
+    "workbenchColors": {
+      "type": "object",
+      "description": "VS Code workbench color identifiers. Unknown identifiers are accepted so themes remain forward-compatible; Yummy applies only identifiers it implements.",
+      "additionalProperties": {
+        "$ref": "#/definitions/workbenchColorValue"
+      }
+    },
+    "textMateTokenSettings": {
+      "type": "object",
+      "description": "Colors and styles for a TextMate token rule.",
+      "properties": {
+        "foreground": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "background": {
+          "type": "string",
+          "description": "Deprecated by VS Code for token rules; retained for compatibility with source theme files."
+        },
+        "fontStyle": {
+          "type": "string",
+          "pattern": "^(\\s*\\b(italic|bold|underline|strikethrough))*\\s*$",
+          "description": "A space-separated combination of italic, bold, underline, and strikethrough. An empty string clears inherited styles."
+        },
+        "fontFamily": {
+          "type": "string",
+          "description": "Font family for the token."
+        },
+        "fontSize": {
+          "type": "number",
+          "description": "Font size multiplier for the token."
+        },
+        "lineHeight": {
+          "type": "number",
+          "description": "Line height multiplier for the token."
+        }
+      },
+      "additionalProperties": false
+    },
+    "textMateTokenRule": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Optional description of the rule."
+        },
+        "scope": {
+          "description": "TextMate scope selector. A selector may be a single string or an array of strings.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "settings": {
+          "$ref": "#/definitions/textMateTokenSettings"
+        }
+      },
+      "required": [
+        "settings"
+      ],
+      "additionalProperties": false
+    },
+    "semanticTokenStyle": {
+      "type": "object",
+      "description": "Style for a semantic token selector.",
+      "properties": {
+        "foreground": {
+          "$ref": "#/definitions/colorValue"
+        },
+        "background": {
+          "type": "string",
+          "description": "Deprecated by VS Code for semantic token styles; retained for compatibility with source theme files."
+        },
+        "fontStyle": {
+          "type": "string",
+          "pattern": "^(\\s*(italic|bold|underline|strikethrough))*\\s*$",
+          "description": "A space-separated combination of italic, bold, underline, and strikethrough. An empty string clears all styles."
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": "boolean"
+        },
+        "strikethrough": {
+          "type": "boolean"
+        }
+      }
+    },
+    "semanticTokenStyleValue": {
+      "description": "A hexadecimal color or a style object.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/colorValue"
+        },
+        {
+          "$ref": "#/definitions/semanticTokenStyle"
+        }
+      ]
+    },
+    "semanticTokenColors": {
+      "type": "object",
+      "description": "Selectors use the VS Code form tokenType.modifier:language. The wildcard token type is also supported.",
+      "patternProperties": {
+        "^(?:\\w+[-_\\w+]*|\\*)(?:\\.\\w+[-_\\w+]*)*(?::\\w+[-_\\w+]*)?$": {
+          "$ref": "#/definitions/semanticTokenStyleValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "workbenchColorValue": {
+      "description": "A hexadecimal color or the VS Code default-color sentinel.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/colorValue"
+        },
+        {
+          "type": "string",
+          "const": "default"
+        }
+      ]
+    }
+  }
+}

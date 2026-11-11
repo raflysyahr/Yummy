@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://yummy.app/schemas/theme-metadata.schema.json",
+  "title": "Yummy Theme Metadata",
+  "description": "Yummy sidecar metadata for a VS Code-compatible Color Theme JSON file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "label",
+    "type",
+    "source",
+    "themeFile",
+    "capabilities",
+    "defaultFor"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "type": {
+      "enum": ["dark", "light", "hcDark", "hcLight"]
+    },
+    "source": {
+      "enum": ["builtin", "imported"]
+    },
+    "themeFile": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\.\\./)[A-Za-z0-9._/-]+$"
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "licenseFile": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\.\\./)[A-Za-z0-9._/-]+$"
+    },
+    "sourceUrl": {
+      "type": "string",
+      "format": "uri"
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appUi", "editorSyntax"],
+      "properties": {
+        "appUi": { "type": "boolean" },
+        "editorSyntax": { "type": "boolean" }
+      }
+    },
+    "defaultFor": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2,
+      "items": {
+        "enum": ["app", "editor"]
+      }
+    }
+  }
+}
