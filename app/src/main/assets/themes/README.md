@@ -23,11 +23,13 @@ The initial default keeps the current Yummy appearance and the existing TextMate
 - Existing editor theme asset: `textmate/yummy-dark.json`
 
 The current theme file contains the VS Code-compatible `colors` and `tokenColors`
-sections. A future App UI adapter will only map identifiers it explicitly supports;
-missing identifiers must retain the existing Yummy UI colors. This prevents the first
-integration from unexpectedly changing components that do not yet have a color mapping.
-The existing asset and UI colors are intentionally not modified. Stage 3 adds package
-loading and parsing; registry and adapters remain later stages.
+sections. `AppThemeAdapter` maps supported workbench identifiers from `colors` into
+Yummy semantic UI roles. Missing identifiers are filled from `AppThemeFallbacks`, which
+can read the existing `yummy_*` color resources. This keeps the current Yummy appearance
+as the fallback while themes are integrated into the UI incrementally. The adapter does
+not change Android resources or Views; applying the palette remains a later integration
+step. TextMate `tokenColors` and semantic token colors are not consumed by the App Theme
+adapter, and terminal colors are deliberately excluded.
 
 ## Metadata fields
 
@@ -168,3 +170,44 @@ package directory. Document-picker integration, ZIP/VSIX extraction, and user-fa
 remain outside Stage 5 and are reserved for the later import stage. Removing a package does not
 rewrite the user's active theme selection; selection fallback will be handled by the Theme
 Manager/settings integration.
+
+## App Theme adapter (Stage 6)
+
+`AppThemeAdapter` converts VS Code workbench colors into an immutable `ResolvedAppTheme`
+palette. The mapping is semantic and is not tied to resource IDs or layout IDs. Examples:
+
+- `sideBar.background` / `editor.background` -> `APP_BACKGROUND`
+- `titleBar.activeBackground` / `activityBar.background` -> `TOOLBAR_BACKGROUND`
+- `sideBar.foreground` / `foreground` -> `SIDEBAR_FOREGROUND`
+- `editorGroupHeader.tabsBackground` -> `TAB_BAR_BACKGROUND`
+- `statusBar.background` -> `STATUS_BAR_BACKGROUND`
+- `panel.border` / `sideBar.border` -> `DIVIDER`
+- `focusBorder` -> `ACCENT`
+
+Each role has an ordered identifier fallback list. A theme may define only a subset; roles
+that are not defined by the theme are copied from the supplied `AppThemeFallbacks`. The
+`default` color sentinel skips that role's remaining theme aliases and uses the fallback
+value. Unrecognized workbench identifiers remain in the source `VSCodeColorTheme` document
+and are not discarded by this adapter.
+
+Use the existing Yummy color resources as fallback values:
+
+```java
+AppThemeFallbacks fallbacks = AppThemeFallbacks.fromCurrentYummyResources(
+    context.getResources(),
+    context.getPackageName()
+);
+ResolvedAppTheme palette = new AppThemeAdapter().resolve(loadedTheme, fallbacks);
+```
+
+A caller can instead build a fallback palette explicitly with
+`AppThemeFallbacks.builder().put(role, argbColor).build()`. Colors are represented as
+Android ARGB integers. The parser accepts VS Code's `#RGB`, `#RGBA`, `#RRGGBB`, and
+`#RRGGBBAA` formats and correctly moves the trailing alpha channel into Android's ARGB
+position. A missing role remains absent when neither the theme nor the fallback palette
+provides it; consumers should then leave the existing View/resource color unchanged.
+
+`ResolvedAppTheme.getSourceColorIdentifier(role)` identifies the VS Code key used for a
+resolved role. It returns null when the value came from the current-Yummy fallback palette.
+The palette is immutable. Stage 6 does not apply colors, persist selections, alter the
+existing layouts, or change terminal colors.
