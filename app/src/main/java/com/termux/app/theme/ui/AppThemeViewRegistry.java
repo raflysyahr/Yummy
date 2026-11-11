@@ -1,0 +1,175 @@
+package com.termux.app.theme.ui;
+
+import android.content.res.ColorStateList;
+import android.os.Looper;
+import android.view.View;
+import android.widget.CompoundButton;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+
+import com.termux.app.theme.model.AppThemeColorRole;
+import com.termux.app.theme.model.ResolvedAppTheme;
+
+import java.util.Map;
+import java.util.WeakHashMap;
+
+/**
+ * Applies semantic App UI colors to explicitly registered Android Views.
+ *
+ * <p>Bindings are deliberately explicit: this class never walks the view tree, changes
+ * arbitrary backgrounds, or guesses a component's role. Backgrounds are tinted rather
+ * than replaced, preserving existing shapes, ripples, and drawable geometry.</p>
+ *
+ * <p>All methods must be called on the main thread. Weak keys avoid keeping detached
+ * Views alive when an owner forgets to unbind them.</p>
+ */
+public final class AppThemeViewRegistry {
+    private final WeakHashMap<View, Binding> bindings = new WeakHashMap<>();
+    private ResolvedAppTheme currentTheme;
+
+    public void bindBackgroundTint(View view, AppThemeColorRole role) {
+        bind(view, role, Property.BACKGROUND_TINT);
+    }
+
+    public void bindTextColor(TextView view, AppThemeColorRole role) {
+        bind(view, role, Property.TEXT_COLOR);
+    }
+
+    public void bindImageTint(ImageView view, AppThemeColorRole role) {
+        bind(view, role, Property.IMAGE_TINT);
+    }
+
+    public void bindButtonTint(CompoundButton view, AppThemeColorRole role) {
+        bind(view, role, Property.BUTTON_TINT);
+    }
+
+    public void bindProgressTint(ProgressBar view, AppThemeColorRole role) {
+        bind(view, role, Property.PROGRESS_TINT);
+    }
+
+    /** Applies the palette to all live bindings. A missing role restores the original color. */
+    public void apply(ResolvedAppTheme theme) {
+        requireMainThread();
+        currentTheme = theme;
+        for (Map.Entry<View, Binding> entry : bindings.entrySet()) {
+            View view = entry.getKey();
+            Binding binding = entry.getValue();
+            if (view != null && binding != null) binding.apply(view, currentTheme);
+        }
+    }
+
+    /** Removes one binding and restores the View's color state captured at bind time. */
+    public void unbind(View view) {
+        requireMainThread();
+        if (view == null) return;
+        Binding binding = bindings.remove(view);
+        if (binding != null) binding.restore(view);
+    }
+
+    /** Restores all bound Views and forgets every binding. */
+    public void clear() {
+        requireMainThread();
+        for (Map.Entry<View, Binding> entry : bindings.entrySet()) {
+            View view = entry.getKey();
+            Binding binding = entry.getValue();
+            if (view != null && binding != null) binding.restore(view);
+        }
+        bindings.clear();
+        currentTheme = null;
+    }
+
+    public int getBindingCount() {
+        requireMainThread();
+        return bindings.size();
+    }
+
+    private void bind(View view, AppThemeColorRole role, Property property) {
+        requireMainThread();
+        if (view == null) throw new IllegalArgumentException("View is required");
+        if (role == null) throw new IllegalArgumentException("Theme color role is required");
+
+        Binding previous = bindings.remove(view);
+        if (previous != null) previous.restore(view);
+
+        Binding binding = new Binding(role, property, readOriginal(view, property));
+        bindings.put(view, binding);
+        binding.apply(view, currentTheme);
+    }
+
+    private static ColorStateList readOriginal(View view, Property property) {
+        switch (property) {
+            case BACKGROUND_TINT:
+                return view.getBackgroundTintList();
+            case TEXT_COLOR:
+                return ((TextView) view).getTextColors();
+            case IMAGE_TINT:
+                return ((ImageView) view).getImageTintList();
+            case BUTTON_TINT:
+                return ((CompoundButton) view).getButtonTintList();
+            case PROGRESS_TINT:
+                return ((ProgressBar) view).getProgressTintList();
+            default:
+                throw new IllegalStateException("Unsupported theme binding property: " + property);
+        }
+    }
+
+    private static void writeColor(View view, Property property, ColorStateList color) {
+        switch (property) {
+            case BACKGROUND_TINT:
+                view.setBackgroundTintList(color);
+                break;
+            case TEXT_COLOR:
+                ((TextView) view).setTextColor(color);
+                break;
+            case IMAGE_TINT:
+                ((ImageView) view).setImageTintList(color);
+                break;
+            case BUTTON_TINT:
+                ((CompoundButton) view).setButtonTintList(color);
+                break;
+            case PROGRESS_TINT:
+                ((ProgressBar) view).setProgressTintList(color);
+                break;
+            default:
+                throw new IllegalStateException("Unsupported theme binding property: " + property);
+        }
+    }
+
+    private static void requireMainThread() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            throw new IllegalStateException("App theme View bindings must be used on the main thread");
+        }
+    }
+
+    private enum Property {
+        BACKGROUND_TINT,
+        TEXT_COLOR,
+        IMAGE_TINT,
+        BUTTON_TINT,
+        PROGRESS_TINT
+    }
+
+    /** Does not retain a reference to its View, allowing the registry's weak key to work. */
+    private static final class Binding {
+        final AppThemeColorRole role;
+        final Property property;
+        final ColorStateList originalColor;
+
+        Binding(AppThemeColorRole role, Property property, ColorStateList originalColor) {
+            this.role = role;
+            this.property = property;
+            this.originalColor = originalColor;
+        }
+
+        void apply(View view, ResolvedAppTheme theme) {
+            Integer color = theme == null ? null : theme.getColor(role);
+            writeColor(view, property,
+                color == null ? originalColor : ColorStateList.valueOf(color));
+        }
+
+        void restore(View view) {
+            writeColor(view, property, originalColor);
+        }
+    }
+}
