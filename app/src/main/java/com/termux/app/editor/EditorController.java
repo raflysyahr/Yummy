@@ -49,6 +49,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import com.termux.app.session.WorkspaceSessionManager;
 import com.termux.app.filemanager.ui.FileManagerIconResolver;
+import com.termux.app.theme.model.AppThemeColorRole;
+import com.termux.app.theme.ui.AppThemeController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -109,6 +111,7 @@ public class EditorController {
     private final Handler mSessionHandler = new Handler(Looper.getMainLooper());
     private final Runnable mPendingSessionSave = this::persistEditorSessionNow;
     private WorkspaceSessionManager mWorkspaceSessionManager;
+    private AppThemeController mAppThemeController;
 
     private final List<EditorDocument> mDocuments = new ArrayList<>();
     private EditorDocument mActiveDocument;
@@ -426,6 +429,12 @@ public class EditorController {
     public void setDocumentActionListener(@Nullable DocumentActionListener listener) {
         mDocumentActionListener = listener;
         notifyActiveDocumentChanged();
+    }
+
+    /** Supplies the App UI theme bridge for dynamically recreated editor tabs. */
+    public void setAppThemeController(@Nullable AppThemeController controller) {
+        mAppThemeController = controller;
+        renderTabs();
     }
 
     /** Membuat tab Untitled baru hanya ketika pengguna menekan tombol +. */
@@ -931,12 +940,26 @@ public class EditorController {
             nameParams.setMargins(dpInt(8), 0, dpInt(5), 0);
             tab.addView(name, nameParams);
 
+            if (mAppThemeController != null) {
+                mAppThemeController.bindBackground(tab, active
+                    ? AppThemeColorRole.TAB_ACTIVE_BACKGROUND
+                    : AppThemeColorRole.TAB_INACTIVE_BACKGROUND);
+                mAppThemeController.bindText(name, active
+                    ? AppThemeColorRole.TAB_ACTIVE_FOREGROUND
+                    : AppThemeColorRole.TAB_INACTIVE_FOREGROUND);
+            }
+
             if (document.isDirty()) {
                 TextView dirty = new TextView(mActivity);
                 dirty.setText("•");
                 dirty.setTextColor(ContextCompat.getColor(mActivity, R.color.yummy_text));
                 dirty.setTextSize(16f);
                 dirty.setTypeface(nunitoTypeface(true));
+                if (mAppThemeController != null) {
+                    mAppThemeController.bindText(dirty, active
+                        ? AppThemeColorRole.TAB_ACTIVE_FOREGROUND
+                        : AppThemeColorRole.TAB_INACTIVE_FOREGROUND);
+                }
                 tab.addView(dirty, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
             }
@@ -948,6 +971,11 @@ public class EditorController {
             close.setTypeface(nunitoTypeface(false));
             close.setGravity(android.view.Gravity.CENTER);
             close.setContentDescription("Tutup " + document.name);
+            if (mAppThemeController != null) {
+                mAppThemeController.bindText(close, active
+                    ? AppThemeColorRole.TAB_ACTIVE_FOREGROUND
+                    : AppThemeColorRole.TAB_INACTIVE_FOREGROUND);
+            }
             LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dpInt(27), -1);
             closeParams.setMargins(dpInt(4), 0, 0, 0);
             tab.addView(close, closeParams);

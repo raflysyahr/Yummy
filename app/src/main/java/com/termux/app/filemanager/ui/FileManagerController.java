@@ -60,6 +60,8 @@ import com.termux.R;
 import com.termux.app.editor.EditorController;
 import com.termux.app.editor.EditorSettingsController;
 import com.termux.app.session.WorkspaceSessionManager;
+import com.termux.app.theme.model.AppThemeColorRole;
+import com.termux.app.theme.ui.AppThemeController;
 import com.termux.app.filemanager.storage.StorageRegistry;
 import com.termux.app.filemanager.storage.StorageTreePicker;
 import com.termux.app.filemanager.storage.model.StorageCapability;
@@ -142,6 +144,7 @@ public final class FileManagerController {
 
     private final Activity activity;
     private final EditorController editorController;
+    @Nullable private AppThemeController appThemeController;
     private final StorageRegistry registry;
     private final FileOperationService fileOperations;
     private final StorageTransferService transferService = new StorageTransferService();
@@ -429,6 +432,12 @@ public final class FileManagerController {
                 saveActiveFile(null);
             }
         });
+    }
+
+    /** Connects the App UI palette to File Manager surfaces; terminal Views are not involved. */
+    public void setAppThemeController(@Nullable AppThemeController controller) {
+        appThemeController = controller;
+        if (managerDialog != null) managerDialog.bindThemeViews();
     }
 
     public void show() {
@@ -1066,6 +1075,7 @@ public final class FileManagerController {
         private LinearLayout storageRail;
         private LinearLayout storageNavContainer;
         private LinearLayout rightPane;
+        private LinearLayout header;
         private TextView titleView;
         private TextView breadcrumbView;
         private TextView emptyView;
@@ -1478,7 +1488,7 @@ public final class FileManagerController {
             drawerPanel.addView(rightPane, new LinearLayout.LayoutParams(0, -1, 1));
 
             // Toolbar: current location + search + overflow.
-            LinearLayout header = new LinearLayout(activity);
+            header = new LinearLayout(activity);
             header.setGravity(Gravity.CENTER_VERTICAL);
             header.setPadding(dp(12), 0, dp(8), 0);
             header.setBackgroundColor(0xFF13151B);
@@ -1492,6 +1502,9 @@ public final class FileManagerController {
 
             ImageButton searchButton = iconButton(R.drawable.ic_fm_search, "Search files and folders");
             header.addView(searchButton, new LinearLayout.LayoutParams(dp(44), -1));
+            if (appThemeController != null) {
+                appThemeController.bindIcon(searchButton, AppThemeColorRole.ICON_FOREGROUND);
+            }
             searchButton.setOnClickListener(v -> {
                 searchView.setVisibility(searchView.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
                 if (searchView.getVisibility() == View.VISIBLE) {
@@ -1508,6 +1521,9 @@ public final class FileManagerController {
 
             ImageButton moreButton = iconButton(R.drawable.ic_fm_more, "More file manager actions");
             header.addView(moreButton, new LinearLayout.LayoutParams(dp(38), -1));
+            if (appThemeController != null) {
+                appThemeController.bindIcon(moreButton, AppThemeColorRole.ICON_FOREGROUND);
+            }
             moreButton.setOnClickListener(v -> showMoreMenu());
 
             searchView = new EditText(activity);
@@ -1693,6 +1709,36 @@ public final class FileManagerController {
             rebuildActionBar();
             rebuildStorageRail();
             dialog.setContentView(root);
+            bindThemeViews();
+        }
+
+        private void bindThemeViews() {
+            if (appThemeController == null) return;
+            bindSidebarBackground(drawerPanel, AppThemeColorRole.SIDEBAR_BACKGROUND);
+            bindSidebarBackground(storageRail, AppThemeColorRole.SIDEBAR_BACKGROUND);
+            bindSidebarBackground(rightPane, AppThemeColorRole.SIDEBAR_BACKGROUND);
+            bindSidebarBackground(header, AppThemeColorRole.TOOLBAR_BACKGROUND);
+            bindSidebarBackground(actionBar, AppThemeColorRole.TOOLBAR_BACKGROUND);
+            bindSidebarBackground(listView, AppThemeColorRole.SIDEBAR_BACKGROUND);
+            bindSidebarBackground(selectionBar, AppThemeColorRole.SIDEBAR_BACKGROUND);
+            bindSidebarBackground(searchView, AppThemeColorRole.INPUT_BACKGROUND);
+            bindSidebarText(titleView, AppThemeColorRole.SIDEBAR_FOREGROUND);
+            bindSidebarText(breadcrumbView, AppThemeColorRole.SECONDARY_TEXT);
+            bindSidebarText(searchView, AppThemeColorRole.INPUT_FOREGROUND);
+            bindSidebarText(emptyView, AppThemeColorRole.SECONDARY_TEXT);
+            bindSidebarProgress(progressBar, AppThemeColorRole.ACCENT);
+        }
+
+        private void bindSidebarBackground(@Nullable View view, AppThemeColorRole role) {
+            if (view != null) appThemeController.bindBackground(view, role);
+        }
+
+        private void bindSidebarText(@Nullable TextView view, AppThemeColorRole role) {
+            if (view != null) appThemeController.bindText(view, role);
+        }
+
+        private void bindSidebarProgress(@Nullable ProgressBar view, AppThemeColorRole role) {
+            if (view != null) appThemeController.bindProgress(view, role);
         }
 
         private void rebuildStorageRail() {
@@ -1779,6 +1825,13 @@ public final class FileManagerController {
             name.setMaxLines(2);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             item.addView(name, new LinearLayout.LayoutParams(-1, dp(25)));
+            if (appThemeController != null) {
+                appThemeController.bindIcon(icon, AppThemeColorRole.ICON_FOREGROUND);
+                appThemeController.bindText(name, AppThemeColorRole.SIDEBAR_FOREGROUND);
+                if (selected) {
+                    appThemeController.bindBackground(icon, AppThemeColorRole.SELECTION_BACKGROUND);
+                }
+            }
             item.setOnClickListener(v -> action.run());
             item.setContentDescription(label);
         }
@@ -1822,6 +1875,9 @@ public final class FileManagerController {
             button.setPadding(dp(9), 0, dp(9), 0);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -1);
             actionBar.addView(button, lp);
+            if (appThemeController != null) {
+                appThemeController.bindText(button, AppThemeColorRole.TOOLBAR_FOREGROUND);
+            }
             button.setOnClickListener(v -> action.run());
         }
 
@@ -1838,6 +1894,10 @@ public final class FileManagerController {
                 selectionBar.addView(label, new LinearLayout.LayoutParams(0, -1, 1));
                 useFolderButton = button(pendingTransfer != PendingTransfer.NONE ? "Gunakan folder ini" : "Simpan di sini");
                 selectionBar.addView(useFolderButton, new LinearLayout.LayoutParams(-2, dp(40)));
+                if (appThemeController != null) {
+                    appThemeController.bindBackground(useFolderButton, AppThemeColorRole.BUTTON_BACKGROUND);
+                    appThemeController.bindText(useFolderButton, AppThemeColorRole.BUTTON_FOREGROUND);
+                }
                 useFolderButton.setEnabled(currentProvider != null && currentDirectory != null);
                 useFolderButton.setOnClickListener(v -> {
                     if (pendingTransfer != PendingTransfer.NONE) executeTransfer();
@@ -1847,6 +1907,9 @@ public final class FileManagerController {
             }
             selectionCountView = text(selection.size() + " selected", 12, 0xFFE8EAED, true);
             selectionBar.addView(selectionCountView, new LinearLayout.LayoutParams(0, -1, 1));
+            if (appThemeController != null) {
+                appThemeController.bindText(selectionCountView, AppThemeColorRole.SIDEBAR_FOREGROUND);
+            }
             addFooterAction("Copy", R.drawable.ic_fm_copy, () -> beginTransfer(PendingTransfer.COPY));
             addFooterAction("Move", R.drawable.ic_fm_move, () -> beginTransfer(PendingTransfer.MOVE));
             addFooterAction("Delete", R.drawable.ic_fm_delete, this::deleteSelection);
@@ -1863,6 +1926,9 @@ public final class FileManagerController {
             button.setCompoundDrawablePadding(dp(5));
             button.setPadding(dp(6), 0, dp(6), 0);
             selectionBar.addView(button, new LinearLayout.LayoutParams(-2, -1));
+            if (appThemeController != null) {
+                appThemeController.bindText(button, AppThemeColorRole.SIDEBAR_FOREGROUND);
+            }
             button.setOnClickListener(v -> action.run());
         }
 
@@ -2922,6 +2988,9 @@ public final class FileManagerController {
                 progressBar = new ProgressBar(activity);
                 progressBar.setIndeterminate(true);
                 progressBar.setVisibility(View.GONE);
+                if (appThemeController != null) {
+                    appThemeController.bindProgress(progressBar, AppThemeColorRole.ACCENT);
+                }
                 FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER);
                 // listView is hosted by HorizontalScrollView, which only accepts one child.
                 // Add the loading overlay to listFrame (the parent of the scroll container).
@@ -2947,6 +3016,10 @@ public final class FileManagerController {
                     section.setPadding(dp(14), dp(12), dp(12), dp(7));
                     section.setText(row.label);
                     section.setBackgroundColor(0xFF13151B);
+                    if (appThemeController != null) {
+                        appThemeController.bindText(section, AppThemeColorRole.SECONDARY_TEXT);
+                        appThemeController.bindBackground(section, AppThemeColorRole.SIDEBAR_BACKGROUND);
+                    }
                     return section;
                 }
 
@@ -2999,6 +3072,8 @@ public final class FileManagerController {
                     container.addView(check, new LinearLayout.LayoutParams(dp(20), dp(38)));
                 }
 
+                if (appThemeController != null) appThemeController.unbind(container);
+
                 if (row.kind == RowKind.LOCATION) {
                     disclosure.setImageResource(R.drawable.ic_fm_chevron_right);
                     disclosure.setVisibility(View.VISIBLE);
@@ -3013,6 +3088,11 @@ public final class FileManagerController {
                     check.setVisibility(View.INVISIBLE);
                     container.setPadding(dp(8), dp(5), dp(8), dp(5));
                     container.setBackgroundColor(Color.TRANSPARENT);
+                    if (appThemeController != null) {
+                        appThemeController.bindText(name, AppThemeColorRole.SIDEBAR_FOREGROUND);
+                        appThemeController.bindText(subtitle, AppThemeColorRole.SECONDARY_TEXT);
+                        appThemeController.bindIcon(disclosure, AppThemeColorRole.ICON_FOREGROUND);
+                    }
                     applySidebarRipple(container);
                     return container;
                 }
@@ -3055,6 +3135,18 @@ public final class FileManagerController {
                 if (selected) container.setBackgroundColor(0xFF13151B);
                 else if (current) container.setBackgroundColor(0xFF13151B);
                 else container.setBackgroundColor(Color.TRANSPARENT);
+
+                if (appThemeController != null) {
+                    appThemeController.bindText(name, AppThemeColorRole.SIDEBAR_FOREGROUND);
+                    appThemeController.bindText(subtitle, AppThemeColorRole.SECONDARY_TEXT);
+                    appThemeController.bindIcon(disclosure, AppThemeColorRole.ICON_FOREGROUND);
+                    if (check.getVisibility() == View.VISIBLE) {
+                        appThemeController.bindIcon(check, AppThemeColorRole.ACCENT);
+                    }
+                    if (selected || current) {
+                        appThemeController.bindBackground(container, AppThemeColorRole.SELECTION_BACKGROUND);
+                    }
+                }
 
 
                 applySidebarRipple(container);

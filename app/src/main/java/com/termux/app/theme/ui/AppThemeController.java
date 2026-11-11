@@ -23,10 +23,16 @@ import com.termux.app.theme.model.ResolvedAppTheme;
  * <p>Terminal Views must never be registered here.</p>
  */
 public final class AppThemeController {
+    /** Receives the active App UI palette so non-View surfaces can follow the same theme. */
+    public interface PaletteListener {
+        void onPaletteChanged(ResolvedAppTheme theme);
+    }
+
     private final AppThemeAdapter adapter;
     private final AppThemeFallbacks fallbacks;
     private final AppThemeViewRegistry viewRegistry;
     private ResolvedAppTheme currentTheme;
+    private PaletteListener paletteListener;
 
     public AppThemeController(Context context) {
         if (context == null) throw new IllegalArgumentException("Context is required");
@@ -43,6 +49,7 @@ public final class AppThemeController {
         ResolvedAppTheme resolved = adapter.resolve(loadedTheme, fallbacks);
         viewRegistry.apply(resolved);
         currentTheme = resolved;
+        notifyPaletteChanged();
         return resolved;
     }
 
@@ -50,10 +57,25 @@ public final class AppThemeController {
     public void clearTheme() {
         viewRegistry.apply(null);
         currentTheme = null;
+        notifyPaletteChanged();
     }
 
     public ResolvedAppTheme getCurrentTheme() {
         return currentTheme;
+    }
+
+    /**
+     * Registers an owner for themed surfaces that are not ordinary Android View properties,
+     * such as the Sora editor canvas. The current palette is delivered immediately.
+     */
+    public void setPaletteListener(PaletteListener listener) {
+        paletteListener = listener;
+        notifyPaletteChanged();
+    }
+
+    private void notifyPaletteChanged() {
+        PaletteListener listener = paletteListener;
+        if (listener != null) listener.onPaletteChanged(currentTheme);
     }
 
     public void bindBackground(View view, AppThemeColorRole role) {
@@ -84,5 +106,6 @@ public final class AppThemeController {
     public void release() {
         viewRegistry.clear();
         currentTheme = null;
+        paletteListener = null;
     }
 }

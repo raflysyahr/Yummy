@@ -10,6 +10,7 @@
 
     <!-- App bar -->
     <LinearLayout
+        android:id="@+id/yummy_app_bar"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:orientation="horizontal"
@@ -107,6 +108,7 @@
 
     <!-- Tab file -->
     <LinearLayout
+        android:id="@+id/yummy_tab_bar"
         android:layout_width="match_parent"
         android:layout_height="35dp"
         android:orientation="horizontal"
@@ -194,6 +196,7 @@
             android:gravity="center"
             android:orientation="vertical">
             <TextView
+                android:id="@+id/yummy_status_label_ln"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
@@ -220,6 +223,7 @@
             android:gravity="center"
             android:orientation="vertical">
             <TextView
+                android:id="@+id/yummy_status_label_col"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
@@ -246,6 +250,7 @@
             android:gravity="center"
             android:orientation="vertical">
             <TextView
+                android:id="@+id/yummy_status_label_spaces"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
@@ -316,6 +321,7 @@
                 android:fontFamily="@font/nunito_regular"
                 android:textSize="10sp" />
             <ImageView
+                android:id="@+id/yummy_status_encoding_chevron"
                 android:layout_width="12dp"
                 android:layout_height="12dp"
                 android:layout_marginStart="5dp"

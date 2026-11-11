@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -22,8 +23,10 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.termux.R;
@@ -49,6 +52,17 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.app.terminal.TermuxSessionsListViewController;
 import com.termux.app.terminal.io.TerminalToolbarViewPager;
 import com.termux.app.terminal.TermuxTerminalViewClient;
+import com.termux.app.theme.adapter.EditorThemeAdapter;
+import com.termux.app.theme.io.AssetThemeResourceReader;
+import com.termux.app.theme.model.AppThemeColorRole;
+import com.termux.app.theme.model.LoadedTheme;
+import com.termux.app.theme.model.ResolvedAppTheme;
+import com.termux.app.theme.model.ResolvedEditorTheme;
+import com.termux.app.theme.registry.YummyThemeRegistry;
+import com.termux.app.theme.sora.SoraEditorThemeApplier;
+import com.termux.app.theme.storage.ThemePackageStorage;
+import com.termux.app.theme.ui.AppThemeController;
+import com.termux.app.theme.ui.ThemeSettingsController;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.logger.Logger;
@@ -69,6 +83,9 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
 
 import java.util.Arrays;
+
+import io.github.rosemoe.sora.widget.CodeEditor;
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 /**
  * A terminal emulator activity.
@@ -238,6 +255,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
+        initializeThemeSystem();
+
         setMargins();
 
         mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
@@ -386,6 +405,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     public void onDestroy() {
+        if (mThemeSettingsController != null) {
+            mThemeSettingsController.dismiss();
+            mThemeSettingsController = null;
+        }
+        if (mAppThemeController != null) {
+            mAppThemeController.release();
+            mAppThemeController = null;
+        }
         if (mFileManagerController != null) {
             mFileManagerController.destroy();
             mFileManagerController = null;
@@ -676,11 +703,155 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.editor.EditorLayoutController mEditorLayoutController;
     private EditorController mEditorController;
     private FileManagerController mFileManagerController;
+    private AppThemeController mAppThemeController;
+    private ThemeSettingsController mThemeSettingsController;
     private boolean mBootstrapSetupRunning = false;
     private boolean mPendingFailsafeSession = false;
 
     public com.termux.app.editor.EditorLayoutController getEditorLayoutController() {
         return mEditorLayoutController;
+    }
+
+    /** Opens the Yummy Theme Manager from Editor Settings. */
+    public void showThemeSettings() {
+        if (mIsInvalidState || isFinishing()) return;
+        if (mThemeSettingsController == null) {
+            Toast.makeText(this, "Theme settings are not initialized", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        mThemeSettingsController.show();
+    }
+
+    /** Initializes the independent App UI and Editor Syntax theme targets. */
+    private void initializeThemeSystem() {
+        mAppThemeController = new AppThemeController(this);
+        bindApplicationThemeViews();
+        mAppThemeController.setPaletteListener(this::applyEditorAppTheme);
+        if (mEditorController != null) {
+            mEditorController.setAppThemeController(mAppThemeController);
+        }
+        if (mFileManagerController != null) {
+            mFileManagerController.setAppThemeController(mAppThemeController);
+        }
+
+        ThemePackageStorage storage = new ThemePackageStorage(getApplicationContext());
+        YummyThemeRegistry registry = new YummyThemeRegistry(
+            getAssets(), storage.getImportedThemesDirectory());
+
+        Typeface uiTypeface;
+        try {
+            uiTypeface = Typeface.createFromAsset(getAssets(), "fonts/Nunito-Regular.ttf");
+        } catch (RuntimeException missingFont) {
+            uiTypeface = Typeface.DEFAULT;
+        }
+
+        CodeEditor editor = findViewById(R.id.yummy_code_editor);
+        mThemeSettingsController = new ThemeSettingsController(
+            this,
+            registry,
+            mAppThemeController,
+            theme -> applyEditorSyntaxTheme(editor, theme),
+            uiTypeface
+        );
+
+        // TextMate support is initialized synchronously by EditorController.setup(), so both
+        // independently stored selections can now be restored without changing terminal colors.
+        mThemeSettingsController.applySavedThemes();
+    }
+
+    private void applyEditorSyntaxTheme(CodeEditor editor, LoadedTheme theme) throws Exception {
+        if (editor == null) throw new IllegalStateException("Sora CodeEditor is not available");
+        if (theme == null) throw new IllegalArgumentException("Editor Syntax theme is required");
+
+        ResolvedEditorTheme resolved = new EditorThemeAdapter().resolve(theme);
+        String baseThemeJson = new AssetThemeResourceReader(getAssets())
+            .readUtf8("textmate/yummy-dark.json");
+        new SoraEditorThemeApplier().apply(
+            editor, resolved, theme.getResourceReader(), baseThemeJson);
+
+        // Sora's TextMate activation restores colors from the base TextMate document. Reapply
+        // the separately selected App UI editor surface after syntax activation.
+        applyEditorAppTheme(mAppThemeController == null
+            ? null : mAppThemeController.getCurrentTheme());
+    }
+
+    /** Applies only the app/editor canvas colors; TextMate token colors remain separate. */
+    private void applyEditorAppTheme(ResolvedAppTheme theme) {
+        CodeEditor editor = findViewById(R.id.yummy_code_editor);
+        if (editor == null || editor.getColorScheme() == null || theme == null) return;
+
+        EditorColorScheme scheme = editor.getColorScheme();
+        // Leave the existing Yummy TextMate base colors untouched unless the selected VS Code
+        // workbench theme explicitly supplies the matching editor surface color. This keeps
+        // yummy-default visually identical to the current editor theme.
+        if (theme.isFromTheme(AppThemeColorRole.EDITOR_BACKGROUND)) {
+            int background = theme.getColor(AppThemeColorRole.EDITOR_BACKGROUND);
+            scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, background);
+            // The gutter stays in sync with the editor surface, but line-highlight and active
+            // line-number colors remain owned by Sora/TextMate (not the app palette).
+            scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND, background);
+        }
+        if (theme.isFromTheme(AppThemeColorRole.EDITOR_FOREGROUND)) {
+            scheme.setColor(EditorColorScheme.TEXT_NORMAL,
+                theme.getColor(AppThemeColorRole.EDITOR_FOREGROUND));
+        }
+    }
+
+    /** Binds only Yummy editor chrome. No terminal panel/View is registered here. */
+    private void bindApplicationThemeViews() {
+        if (mAppThemeController == null) return;
+
+        bindAppBackground(R.id.yummy_editor_screen, AppThemeColorRole.APP_BACKGROUND);
+        bindAppBackground(R.id.yummy_app_bar, AppThemeColorRole.TOOLBAR_BACKGROUND);
+        bindAppBackground(R.id.yummy_tab_bar, AppThemeColorRole.TAB_BAR_BACKGROUND);
+        bindAppBackground(R.id.yummy_editor_status_bar, AppThemeColorRole.STATUS_BAR_BACKGROUND);
+        bindAppBackground(R.id.yummy_keys_row, AppThemeColorRole.TOOLBAR_BACKGROUND);
+
+        bindAppText(R.id.yummy_title, AppThemeColorRole.TOOLBAR_FOREGROUND);
+        bindAppText(R.id.yummy_status_label_ln, AppThemeColorRole.SECONDARY_TEXT);
+        bindAppText(R.id.yummy_status_label_col, AppThemeColorRole.SECONDARY_TEXT);
+        bindAppText(R.id.yummy_status_label_spaces, AppThemeColorRole.SECONDARY_TEXT);
+        bindAppText(R.id.yummy_status_pos, AppThemeColorRole.STATUS_BAR_FOREGROUND);
+        bindAppText(R.id.yummy_status_col, AppThemeColorRole.STATUS_BAR_FOREGROUND);
+        bindAppText(R.id.yummy_status_indent, AppThemeColorRole.STATUS_BAR_FOREGROUND);
+        bindAppText(R.id.yummy_status_lang, AppThemeColorRole.STATUS_BAR_FOREGROUND);
+        bindAppText(R.id.yummy_status_enc, AppThemeColorRole.STATUS_BAR_FOREGROUND);
+
+        bindAppIcon(R.id.yummy_status_encoding_chevron, AppThemeColorRole.SECONDARY_TEXT);
+        bindAppIcon(R.id.yummy_btn_menu, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_btn_terminal, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_btn_search, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_btn_run, AppThemeColorRole.ACCENT);
+        bindAppIcon(R.id.yummy_btn_save, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_btn_new_tab, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_btn_tabs_menu, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_key_tab, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_key_up, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_key_down, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_key_left, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_key_right, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_key_undo, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_key_redo, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_key_paste, AppThemeColorRole.ICON_FOREGROUND);
+
+        bindAppBackground(R.id.yummy_editor_top_divider, AppThemeColorRole.DIVIDER);
+        bindAppBackground(R.id.yummy_editor_bottom_divider, AppThemeColorRole.DIVIDER);
+        bindAppBackground(R.id.yummy_editor_status_divider, AppThemeColorRole.DIVIDER);
+    }
+
+    private void bindAppBackground(int viewId, AppThemeColorRole role) {
+        View view = findViewById(viewId);
+        if (view != null) mAppThemeController.bindBackground(view, role);
+    }
+
+    private void bindAppText(int viewId, AppThemeColorRole role) {
+        TextView view = findViewById(viewId);
+        if (view != null) mAppThemeController.bindText(view, role);
+    }
+
+    private void bindAppIcon(int viewId, AppThemeColorRole role) {
+        ImageView view = findViewById(viewId);
+        if (view != null) mAppThemeController.bindIcon(view, role);
     }
 
     /** Buat sesi terminal pertama hanya saat pengguna membuka panel terminal. */
@@ -893,6 +1064,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: "  + resultCode + ", data: "  + IntentUtils.getIntentString(data));
+        if (mThemeSettingsController != null) {
+            mThemeSettingsController.onActivityResult(requestCode, resultCode, data);
+        }
         if (mFileManagerController != null) {
             mFileManagerController.onActivityResult(requestCode, resultCode, data);
         }

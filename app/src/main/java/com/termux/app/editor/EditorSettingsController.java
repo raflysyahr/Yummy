@@ -27,6 +27,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.AppSystemUiController;
+import com.termux.app.TermuxActivity;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
 
@@ -221,6 +222,17 @@ public final class EditorSettingsController {
         content.addView(spacingCard, spacingCardParams);
         addTabWidthRow(spacingCard);
 
+        TextView themesSection = label("THEMES", 11, ACCENT, true);
+        LinearLayout.LayoutParams themesSectionParams = new LinearLayout.LayoutParams(-1, -2);
+        themesSectionParams.topMargin = dp(26);
+        content.addView(themesSection, themesSectionParams);
+
+        LinearLayout themesCard = card();
+        LinearLayout.LayoutParams themesCardParams = new LinearLayout.LayoutParams(-1, -2);
+        themesCardParams.topMargin = dp(12);
+        content.addView(themesCard, themesCardParams);
+        addThemeSettingsRow(themesCard);
+
         TextView systemSection = label("SYSTEM", 11, ACCENT, true);
         LinearLayout.LayoutParams systemSectionParams = new LinearLayout.LayoutParams(-1, -2);
         systemSectionParams.topMargin = dp(26);
@@ -247,6 +259,26 @@ public final class EditorSettingsController {
         content.addView(preview, previewParams);
 
         return root;
+    }
+
+    private void addThemeSettingsRow(LinearLayout parent) {
+        LinearLayout row = optionRow(parent, "Color themes",
+            "Choose Application UI and Editor Syntax themes independently.");
+        TextView open = label("OPEN  ›", 12, ACCENT, true);
+        open.setGravity(Gravity.CENTER);
+        row.addView(open, new LinearLayout.LayoutParams(-2, dp(42)));
+        row.setBackground(rippleBackground(Color.TRANSPARENT, 0));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(view -> {
+            dismissPage();
+            if (activity instanceof TermuxActivity) {
+                activity.getWindow().getDecorView().post(
+                    () -> ((TermuxActivity) activity).showThemeSettings());
+            } else {
+                Toast.makeText(activity, "Theme settings are unavailable", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private LinearLayout card() {
