@@ -26,7 +26,8 @@ import java.util.regex.Pattern;
  *
  * <p>Packages are installed from an already-unpacked directory containing metadata.json,
  * the referenced VS Code Color Theme JSON, and any optional resources such as LICENSE or
- * TextMate files. Archive/document-picker import is deliberately handled by a later stage.</p>
+ * TextMate files. ZIP archives are validated and extracted by ThemePackageArchiveImporter
+ * before the resulting directory is passed to this storage layer.</p>
  *
  * <p>Install and replace operations are staged and validated before the destination package
  * is changed. A replacement keeps a temporary backup until the new directory is promoted.</p>

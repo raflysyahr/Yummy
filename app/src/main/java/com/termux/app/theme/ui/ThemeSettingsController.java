@@ -36,6 +36,8 @@ import com.termux.app.theme.model.ThemeTarget;
 import com.termux.app.theme.registry.ThemeRegistrySnapshot;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.settings.ThemeSelectionStore;
+import com.termux.app.theme.settings.ThemePackageArchiveImporter;
+import com.termux.app.theme.loader.ThemePackageLoader;
 import com.termux.app.theme.storage.ThemePackageStorage;
 
 import org.json.JSONArray;
@@ -44,12 +46,17 @@ import org.json.JSONObject;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Yummy theme settings and preview UI.
@@ -73,7 +80,8 @@ public final class ThemeSettingsController {
     private static final int COLOR_TEXT = Color.rgb(239, 240, 242);
     private static final int COLOR_MUTED = Color.rgb(145, 150, 158);
     private static final int COLOR_ACCENT = Color.rgb(34, 197, 94);
-    private static final int REQUEST_EXPORT_THEME = 0x594D;
+    private static final int REQUEST_IMPORT_PACKAGE = 0x594E;
+    private static final int REQUEST_EXPORT_THEME = 0x594F;
 
     private final Activity activity;
     private final YummyThemeRegistry registry;
@@ -88,6 +96,9 @@ public final class ThemeSettingsController {
     private Dialog activeDialog;
     private ThemeImportController themeImportController;
     private String pendingExportThemeId;
+    private final ExecutorService packageIoExecutor = Executors.newSingleThreadExecutor();
+    private volatile boolean released;
+    private ThemePackageArchiveImporter.Result pendingPackageRestore;
 
     public ThemeSettingsController(
         Activity activity,
@@ -160,6 +171,12 @@ public final class ThemeSettingsController {
     /** Dismisses the current settings/preview dialog, for example from Activity.onDestroy(). */
     public void dismiss() {
         requireMainThread();
+        released = true;
+        packageIoExecutor.shutdownNow();
+        if (pendingPackageRestore != null) {
+            ThemePackageArchiveImporter.deleteTree(pendingPackageRestore.getPackageDirectory());
+            pendingPackageRestore = null;
+        }
         if (themeImportController != null) {
             themeImportController.release();
             themeImportController = null;
@@ -176,11 +193,17 @@ public final class ThemeSettingsController {
     }
 
     /**
-     * Forward Activity.onActivityResult to this method. Returns true when the result belongs
-     * to the standalone VS Code JSON importer.
+     * Forward Activity.onActivityResult to this method. Returns true for theme JSON/ZIP imports
+     * and package export document creation.
      */
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
         requireMainThread();
+        if (requestCode == REQUEST_IMPORT_PACKAGE) {
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+                inspectPackageArchive(data.getData());
+            }
+            return true;
+        }
         if (requestCode == REQUEST_EXPORT_THEME) {
             String themeId = pendingExportThemeId;
             pendingExportThemeId = null;
@@ -243,6 +266,13 @@ public final class ThemeSettingsController {
         root.addView(text(
             "Import a standalone .json Color Theme. Yummy validates it and creates package metadata.",
             11, mutedColor(), false), marginParams(0, dp(5), 0, 0));
+
+        TextView importPackage = action(
+            "Import Yummy Theme Package (.zip)", false, this::launchPackageImport);
+        root.addView(importPackage, marginParams(0, dp(9), 0, 0));
+        root.addView(text(
+            "Restore a complete exported package, including metadata and bundled resources.",
+            11, mutedColor(), false), marginParams(0, dp(4), 0, 0));
 
         TextView manageThemes = action(
             "Manage imported themes", false, this::showImportedThemes);
@@ -335,6 +365,190 @@ public final class ThemeSettingsController {
         });
         card.addView(remove);
         root.addView(card, marginParams(0, 0, 0, dp(8)));
+    }
+
+    private void launchPackageImport() {
+        requireMainThread();
+        if (released) return;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/zip");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
+            "application/zip", "application/x-zip-compressed", "application/octet-stream"
+        });
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            activity.startActivityForResult(intent, REQUEST_IMPORT_PACKAGE);
+        } catch (Exception error) {
+            Toast.makeText(activity, "Could not open package picker: " + safeMessage(error),
+                Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void inspectPackageArchive(Uri uri) {
+        if (released) return;
+        Toast.makeText(activity, "Reading Yummy theme package…", Toast.LENGTH_SHORT).show();
+        packageIoExecutor.execute(() -> {
+            ThemePackageArchiveImporter.Result result;
+            try {
+                InputStream input = activity.getContentResolver().openInputStream(uri);
+                if (input == null) throw new IOException("Could not open selected ZIP document");
+                try (InputStream archive = input) {
+                    result = new ThemePackageArchiveImporter().extract(
+                        archive, new File(activity.getCacheDir(), "theme-package-restore"));
+                }
+            } catch (Exception error) {
+                postPackageResult(() -> Toast.makeText(activity,
+                    "Could not read theme package: " + safeMessage(error), Toast.LENGTH_LONG).show());
+                return;
+            }
+            ThemePackageArchiveImporter.Result extracted = result;
+            activity.runOnUiThread(() -> {
+                if (!released && !activity.isFinishing()) {
+                    prepareExtractedPackage(extracted);
+                } else {
+                    ThemePackageArchiveImporter.deleteTree(extracted.getPackageDirectory());
+                }
+            });
+        });
+    }
+
+    private void prepareExtractedPackage(ThemePackageArchiveImporter.Result result) {
+        if (released || activity.isFinishing()) {
+            ThemePackageArchiveImporter.deleteTree(result.getPackageDirectory());
+            return;
+        }
+        try {
+            snapshot = registry.reload();
+            String id = result.getTheme().getMetadata().getId();
+            LoadedTheme collision = snapshot.findById(id);
+            boolean packageExists = packageStorage.hasImportedTheme(id);
+
+            if (collision != null && collision.getMetadata().getSource() == ThemeSource.BUILT_IN) {
+                id = createAvailableImportedId(id);
+                rewritePackageId(result.getPackageDirectory(), id);
+                LoadedTheme renamed = new ThemePackageLoader().loadImported(result.getPackageDirectory());
+                result = new ThemePackageArchiveImporter.Result(result.getPackageDirectory(), renamed);
+                collision = null;
+                packageExists = false;
+            }
+
+            pendingPackageRestore = result;
+            if ((collision != null && collision.getMetadata().getSource() == ThemeSource.IMPORTED)
+                || packageExists) {
+                confirmPackageReplacement(result);
+            } else {
+                installExtractedPackage(result, false);
+            }
+        } catch (Exception error) {
+            if (pendingPackageRestore == result) pendingPackageRestore = null;
+            ThemePackageArchiveImporter.deleteTree(result.getPackageDirectory());
+            Toast.makeText(activity, "Could not prepare theme package: " + safeMessage(error),
+                Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String createAvailableImportedId(String originalId) throws Exception {
+        String base = originalId.length() > 54 ? originalId.substring(0, 54) : originalId;
+        String candidate = base + "-imported";
+        int suffix = 2;
+        while (snapshot.findById(candidate) != null || packageStorage.hasImportedTheme(candidate)) {
+            String ending = "-" + suffix++;
+            int maximumBase = 64 - ending.length();
+            String prefix = base.length() > maximumBase ? base.substring(0, maximumBase) : base;
+            candidate = prefix + ending;
+        }
+        return candidate;
+    }
+
+    private static void rewritePackageId(File packageDirectory, String newId) throws Exception {
+        File metadataFile = new File(packageDirectory, "metadata.json");
+        byte[] bytes;
+        try (InputStream input = new FileInputStream(metadataFile)) {
+            java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            bytes = output.toByteArray();
+        }
+        String json = new String(bytes, StandardCharsets.UTF_8);
+        if (json.startsWith("\uFEFF")) json = json.substring(1);
+        JSONObject metadata = new JSONObject(json);
+        metadata.put("id", newId);
+        try (FileOutputStream output = new FileOutputStream(metadataFile, false)) {
+            output.write(metadata.toString(2).getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private void confirmPackageReplacement(ThemePackageArchiveImporter.Result result) {
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        root.addView(text("Replace imported theme?", 19, textColor(), true));
+        root.addView(text("A theme with ID '" + result.getTheme().getMetadata().getId()
+            + "' is already installed. Replace its package with this ZIP?",
+            13, mutedColor(), false), marginParams(0, dp(7), 0, dp(16)));
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView cancel = action("Cancel", false, () -> {
+            dialog.dismiss();
+            if (pendingPackageRestore == result) pendingPackageRestore = null;
+            ThemePackageArchiveImporter.deleteTree(result.getPackageDirectory());
+        });
+        TextView replace = action("Replace", true, () -> {
+            dialog.dismiss();
+            installExtractedPackage(result, true);
+        });
+        actions.addView(cancel, new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams replaceParams = new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        replaceParams.leftMargin = dp(8);
+        actions.addView(replace, replaceParams);
+        root.addView(actions);
+        dialog.setContentView(root);
+        showDialog(dialog, 460);
+    }
+
+    private void installExtractedPackage(
+        ThemePackageArchiveImporter.Result result, boolean replaceExisting
+    ) {
+        if (released) {
+            if (pendingPackageRestore == result) pendingPackageRestore = null;
+            ThemePackageArchiveImporter.deleteTree(result.getPackageDirectory());
+            return;
+        }
+        if (pendingPackageRestore == result) pendingPackageRestore = null;
+        packageIoExecutor.execute(() -> {
+            String id = result.getTheme().getMetadata().getId();
+            Exception failure = null;
+            try {
+                if (replaceExisting) packageStorage.replacePackage(result.getPackageDirectory());
+                else packageStorage.importPackage(result.getPackageDirectory());
+            } catch (Exception error) {
+                failure = error;
+            } finally {
+                ThemePackageArchiveImporter.deleteTree(result.getPackageDirectory());
+            }
+            Exception installFailure = failure;
+            postPackageResult(() -> {
+                if (installFailure != null) {
+                    Toast.makeText(activity, "Could not install theme package: "
+                        + safeMessage(installFailure), Toast.LENGTH_LONG).show();
+                } else {
+                    snapshot = registry.reload();
+                    selection = selectionStore.read(snapshot);
+                    Toast.makeText(activity, "Theme package restored: " + id
+                        + ". Select it in the appropriate theme section.", Toast.LENGTH_LONG).show();
+                }
+                showSettingsDialog();
+            });
+        });
+    }
+
+    private void postPackageResult(Runnable action) {
+        activity.runOnUiThread(() -> {
+            if (!released && !activity.isFinishing()) action.run();
+        });
     }
 
     private void launchThemeExport(LoadedTheme theme) {
