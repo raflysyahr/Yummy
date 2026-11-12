@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ClipboardManager;
 import android.content.ClipData;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -48,6 +49,9 @@ import java.util.concurrent.Executors;
  */
 public final class ThemeImportController {
     public static final int REQUEST_CODE = 0x594D;
+    private static final String DEBUG_PREFS = "yummy_theme_import_debug";
+    private static final String DEBUG_REPORT_KEY = "report";
+    private static final String DEBUG_SEQUENCE_KEY = "sequence";
 
     public interface Listener {
         void onThemeImported(String themeId);
@@ -74,18 +78,53 @@ public final class ThemeImportController {
     private int debugSequence;
 
     private synchronized void debug(String stage, String detail) {
-        debugReport.append(String.format(java.util.Locale.ROOT, "%02d [%s] %s\\n",
+        debugReport.append(String.format(java.util.Locale.ROOT, "%02d [%s] %s\n",
             ++debugSequence, stage, detail == null ? "" : detail));
+        SharedPreferences preferences =
+            activity.getSharedPreferences(DEBUG_PREFS, Context.MODE_PRIVATE);
+        preferences.edit()
+            .putString(DEBUG_REPORT_KEY, debugReport.toString())
+            .putInt(DEBUG_SEQUENCE_KEY, debugSequence)
+            .apply();
+    }
+
+    private void restoreDebugReport() {
+        SharedPreferences preferences =
+            activity.getSharedPreferences(DEBUG_PREFS, Context.MODE_PRIVATE);
+        String savedReport = preferences.getString(DEBUG_REPORT_KEY, "");
+        debugReport.setLength(0);
+        if (savedReport != null) debugReport.append(savedReport);
+        debugSequence = preferences.getInt(DEBUG_SEQUENCE_KEY, 0);
+    }
+
+    private void clearDebugReport() {
+        synchronized (this) {
+            debugReport.setLength(0);
+            debugSequence = 0;
+            activity.getSharedPreferences(DEBUG_PREFS, Context.MODE_PRIVATE)
+                .edit().remove(DEBUG_REPORT_KEY).remove(DEBUG_SEQUENCE_KEY).apply();
+        }
     }
 
     private void showDebugDialog(String title, String detail) {
-        if (released || activity.isFinishing()) return;
+        showDebugDialog(title, detail, "Close", null);
+    }
+
+    private void showDebugDialog(
+        String title, String detail, String closeLabel, Runnable closeAction
+    ) {
+        if (released || activity.isFinishing()) {
+            debug("DIALOG_SKIPPED", "released=" + released
+                + ", activityFinishing=" + activity.isFinishing()
+                + ", title=" + title);
+            return;
+        }
         debug("DIALOG", title + ": " + detail);
         Dialog dialog = createDialog();
         LinearLayout root = createRoot();
         root.addView(text(title, 18, textColor(), true));
         ScrollView scroll = new ScrollView(activity);
-        TextView report = text(debugReport.toString() + "\\n" + detail, 12, textColor(), false);
+        TextView report = text(debugReport.toString() + "\n" + detail, 12, textColor(), false);
         report.setTextIsSelectable(true);
         scroll.addView(report);
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
@@ -99,11 +138,14 @@ public final class ThemeImportController {
                 activity.getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard != null) {
                 clipboard.setPrimaryClip(ClipData.newPlainText("Yummy Theme Import Debug",
-                    debugReport.toString() + "\\n" + detail));
+                    debugReport.toString() + "\n" + detail));
                 Toast.makeText(activity, "Debug report copied", Toast.LENGTH_SHORT).show();
             }
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView close = action("Close", false, dialog::dismiss);
+        TextView close = action(closeLabel, false, () -> {
+            dialog.dismiss();
+            if (closeAction != null) closeAction.run();
+        });
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         closeParams.leftMargin = dp(6);
@@ -131,14 +173,14 @@ public final class ThemeImportController {
         this.appThemeController = appThemeController;
         this.uiTypeface = uiTypeface;
         this.listener = listener;
+        restoreDebugReport();
     }
 
     /** Opens Android's document picker. The returned result is forwarded to onActivityResult. */
     public void launchPicker() {
         requireMainThread();
         if (released) return;
-        debugReport.setLength(0);
-        debugSequence = 0;
+        clearDebugReport();
         debug("PICKER", "Launching ACTION_OPEN_DOCUMENT");
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -180,6 +222,7 @@ public final class ThemeImportController {
     /** Releases dialogs and the file-reading worker when the owning Activity is destroyed. */
     public void release() {
         requireMainThread();
+        debug("CONTROLLER_RELEASE", "Import controller released with Activity lifecycle");
         released = true;
         if (activeDialog != null) {
             activeDialog.dismiss();
@@ -211,7 +254,13 @@ public final class ThemeImportController {
                 postToMain(() -> showDebugDialog("Could not read or parse theme", safeMessage(error)));
                 return;
             }
-            postToMain(() -> beginPreview(preview));
+            postToMain(() -> showDebugDialog(
+                "JSON read and parsed successfully",
+                "Theme: " + preview.getName()
+                    + "\nThe preview is ready. Continue to inspect and import this theme.",
+                "Continue to Preview",
+                () -> beginPreview(preview)
+            ));
         });
     }
 
@@ -235,7 +284,11 @@ public final class ThemeImportController {
 
     private void beginPreview(VSCodeThemeJsonImporter.Preview preview) {
         debug("PREVIEW", "Showing preview for " + preview.getName());
-        if (released || activity.isFinishing()) return;
+        if (released || activity.isFinishing()) {
+            debug("PREVIEW_SKIPPED", "released=" + released
+                + ", activityFinishing=" + activity.isFinishing());
+            return;
+        }
         dismissActiveDialog();
         if (preview.getAppearance() == ThemeAppearance.UNKNOWN) {
             showAppearanceChooser(preview);
@@ -450,9 +503,20 @@ public final class ThemeImportController {
     }
 
     private void postToMain(Runnable action) {
-        if (released) return;
+        if (released) {
+            debug("MAIN_CALLBACK_SKIPPED", "Controller was released before posting to main thread");
+            return;
+        }
         activity.runOnUiThread(() -> {
-            if (!released && !activity.isFinishing()) action.run();
+            if (released) {
+                debug("MAIN_CALLBACK_SKIPPED", "Controller was released before main-thread callback");
+                return;
+            }
+            if (activity.isFinishing()) {
+                debug("MAIN_CALLBACK_SKIPPED", "Activity was finishing before main-thread callback");
+                return;
+            }
+            action.run();
         });
     }
 
