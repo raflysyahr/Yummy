@@ -262,12 +262,16 @@ public final class ThemeSettingsController {
             }
             return true;
         }
-        return themeImportController != null
-            && themeImportController.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == ThemeImportController.REQUEST_CODE) {
+            // The Activity may be recreated while an external document picker is open.
+            // Recreate the lazy controller before forwarding the result so it is not dropped.
+            ensureThemeImportController();
+            return themeImportController.onActivityResult(requestCode, resultCode, data);
+        }
+        return false;
     }
 
-    private void startThemeImport() {
-        requireMainThread();
+    private ThemeImportController ensureThemeImportController() {
         if (themeImportController == null) {
             themeImportController = new ThemeImportController(
                 activity,
@@ -279,13 +283,18 @@ public final class ThemeSettingsController {
                     snapshot = registry.reload();
                     selection = selectionStore.read(snapshot);
                     Toast.makeText(activity,
-                        "Theme imported. Choose it from the appropriate theme selector.",
+                        "Imported theme successfully. Select it under Application UI or Editor Syntax.",
                         Toast.LENGTH_LONG).show();
                     showSettingsDialog();
                 }
             );
         }
-        themeImportController.launchPicker();
+        return themeImportController;
+    }
+
+    private void startThemeImport() {
+        requireMainThread();
+        ensureThemeImportController().launchPicker();
     }
 
     private void showSettingsDialog() {

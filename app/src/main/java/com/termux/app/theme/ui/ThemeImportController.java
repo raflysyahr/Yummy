@@ -92,9 +92,10 @@ public final class ThemeImportController {
         if (released) return;
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // Do not provide EXTRA_MIME_TYPES here. Several Android document providers
+        // incorrectly classify .json files and either disable them or return no URI.
+        // The importer validates the selected document content after it is opened.
         intent.setType("*/*");
-        intent.putExtra(Intent.EXTRA_MIME_TYPES,
-            new String[] {"application/json", "text/json", "text/plain"});
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
             activity.startActivityForResult(intent, REQUEST_CODE);
@@ -107,7 +108,11 @@ public final class ThemeImportController {
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode != REQUEST_CODE) return false;
         requireMainThread();
-        if (released || resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+        if (released) return true;
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            Toast.makeText(activity,
+                "No theme file was returned by the document picker. Please try again.",
+                Toast.LENGTH_LONG).show();
             return true;
         }
         inspectUri(data.getData());
