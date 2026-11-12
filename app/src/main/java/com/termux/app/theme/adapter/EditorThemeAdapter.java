@@ -1,5 +1,6 @@
 package com.termux.app.theme.adapter;
 
+import com.termux.app.theme.loader.ThemeCompatibilityValidator;
 import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.ResolvedEditorTheme;
 import com.termux.app.theme.model.ThemeMetadata;
@@ -65,19 +66,14 @@ public final class EditorThemeAdapter {
     private static String normalizeReference(String reference, ThemeMetadata metadata)
         throws EditorThemeAdapterException {
         if (reference == null) return null;
-        String path = reference.trim().replace('\\', '/');
-        if (path.isEmpty() || path.startsWith("/") || path.matches("^[A-Za-z]:.*")) {
+        try {
+            return ThemeCompatibilityValidator.normalizeTokenColorsReference(reference);
+        } catch (Exception error) {
             throw new EditorThemeAdapterException(
-                "Theme " + metadata.getId() + " has an invalid tokenColors reference");
+                "Theme " + metadata.getId()
+                    + " has an invalid external TextMate reference: " + reference,
+                error
+            );
         }
-        String[] segments = path.split("/", -1);
-        for (String segment : segments) {
-            if (segment.isEmpty() || "..".equals(segment)) {
-                throw new EditorThemeAdapterException(
-                    "Theme " + metadata.getId()
-                        + " has an unsafe tokenColors reference: " + reference);
-            }
-        }
-        return path;
     }
 }

@@ -106,7 +106,11 @@ public final class ThemePackageStorage {
         return installPackage(sourcePackageDirectory, true);
     }
 
-    /** Removes only an imported package whose directory is a direct child of the import root. */
+    /**
+     * Removes an imported package without exposing a half-deleted directory to the registry.
+     * The package and its backup history are first moved into the hidden staging directory.
+     * If either move fails, the operation attempts to restore the original locations.
+     */
     public synchronized void removeImportedTheme(String themeId) throws ThemeStorageException {
         String id = requireThemeId(themeId);
         StorageDirectories directories = ensureStorageDirectories();
@@ -119,12 +123,43 @@ public final class ThemePackageStorage {
             );
         }
         requireDirectChild(directories.importedRoot, target, "Imported theme directory");
+
         File backupRoot = new File(directories.backupsRoot, id);
-        if (backupRoot.exists()) {
+        boolean hasBackups = backupRoot.exists();
+        if (hasBackups) {
             requireDirectChild(directories.backupsRoot, backupRoot, "Theme backup directory");
-            deleteTree(backupRoot, directories.backupsRoot);
         }
-        deleteTree(target, directories.importedRoot);
+
+        String suffix = nextOperationSuffix();
+        File stagedTheme = new File(directories.stagingRoot, id + ".remove-theme-" + suffix);
+        File stagedBackups = new File(directories.stagingRoot, id + ".remove-backups-" + suffix);
+        boolean backupsMoved = false;
+
+        if (hasBackups) {
+            if (!backupRoot.renameTo(stagedBackups)) {
+                throw new ThemeStorageException(
+                    ThemeStorageException.Code.IO_FAILURE,
+                    "Could not stage theme backup history for removal"
+                );
+            }
+            backupsMoved = true;
+        }
+
+        if (!target.renameTo(stagedTheme)) {
+            boolean restored = !backupsMoved || stagedBackups.renameTo(backupRoot);
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.IO_FAILURE,
+                restored
+                    ? "Could not stage imported theme for removal"
+                    : "Could not stage imported theme or restore its backup history; "
+                        + "backup data remains in private staging storage"
+            );
+        }
+
+        // The package is now absent from the registry-scanned directory. Cleanup is best effort:
+        // a filesystem cleanup failure leaves only hidden staging data, never a partial package.
+        cleanupStagingDirectory(stagedTheme, directories.stagingRoot);
+        if (backupsMoved) cleanupStagingDirectory(stagedBackups, directories.stagingRoot);
     }
 
     /** Returns whether a direct imported package directory exists for the supplied ID. */

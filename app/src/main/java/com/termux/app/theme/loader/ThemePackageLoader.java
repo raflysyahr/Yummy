@@ -33,16 +33,28 @@ import java.util.Set;
 public final class ThemePackageLoader implements ThemePackageSourceLoader {
     private static final int SUPPORTED_METADATA_SCHEMA_VERSION = 1;
     private final ThemeDocumentParser documentParser;
+    private final ThemeCompatibilityValidator compatibilityValidator;
 
     public ThemePackageLoader() {
         this(new ThemeDocumentParser());
     }
 
     public ThemePackageLoader(ThemeDocumentParser documentParser) {
+        this(documentParser, new ThemeCompatibilityValidator());
+    }
+
+    public ThemePackageLoader(
+        ThemeDocumentParser documentParser,
+        ThemeCompatibilityValidator compatibilityValidator
+    ) {
         if (documentParser == null) {
             throw new IllegalArgumentException("ThemeDocumentParser is required");
         }
+        if (compatibilityValidator == null) {
+            throw new IllegalArgumentException("ThemeCompatibilityValidator is required");
+        }
         this.documentParser = documentParser;
+        this.compatibilityValidator = compatibilityValidator;
     }
 
     /** Loads a built-in package. themeFile paths are relative to the APK assets root. */
@@ -84,7 +96,7 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
         try {
             String themeJson = resources.readUtf8(metadata.getThemeFile());
             VSCodeColorTheme colorTheme = documentParser.parse(themeJson, metadata);
-            validateCapabilities(metadata, colorTheme);
+            compatibilityValidator.validate(metadata, colorTheme, resources);
             return new LoadedTheme(metadata, colorTheme, resources);
         } catch (IOException | IllegalArgumentException error) {
             throw new ThemeLoadException(
@@ -198,21 +210,6 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
             );
         } catch (JSONException | IllegalArgumentException error) {
             throw new ThemeLoadException("Invalid theme metadata: " + error.getMessage(), error);
-        }
-    }
-
-    private static void validateCapabilities(ThemeMetadata metadata, VSCodeColorTheme theme)
-        throws ThemeLoadException {
-        if (metadata.supports(ThemeTarget.APP_UI) && !theme.hasColors()) {
-            throw new ThemeLoadException(
-                "Theme '" + metadata.getId() + "' declares appUi support but has no colors object"
-            );
-        }
-        if (metadata.supports(ThemeTarget.EDITOR_SYNTAX)
-            && !theme.hasTokenColors() && !theme.hasSemanticTokenColors()) {
-            throw new ThemeLoadException(
-                "Theme '" + metadata.getId() + "' declares editorSyntax support but has no token rules"
-            );
         }
     }
 

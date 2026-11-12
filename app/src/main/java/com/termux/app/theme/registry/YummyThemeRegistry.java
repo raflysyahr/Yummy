@@ -170,6 +170,14 @@ public final class YummyThemeRegistry {
 
             try {
                 File canonicalPackage = child.getCanonicalFile();
+                if (!canonicalPackage.equals(child.getAbsoluteFile())) {
+                    issues.add(new ThemeRegistryIssue(
+                        ThemeRegistryIssue.Code.UNSAFE_PACKAGE_DIRECTORY,
+                        packageName,
+                        "Imported package directory is a symbolic link"
+                    ));
+                    continue;
+                }
                 File parent = canonicalPackage.getParentFile();
                 if (parent == null || !canonicalRoot.equals(parent)) {
                     issues.add(new ThemeRegistryIssue(

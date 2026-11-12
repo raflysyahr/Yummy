@@ -138,6 +138,7 @@ public final class ThemeSettingsController {
         snapshot = registry.reload();
         selection = selectionStore.read(snapshot);
         List<String> failures = new java.util.ArrayList<>();
+        List<String> recoveries = new java.util.ArrayList<>();
 
         LoadedTheme appTheme = snapshot.findById(selection.getAppColorSchemeId());
         if (appTheme != null && appTheme.getMetadata().supports(ThemeTarget.APP_UI)) {
@@ -147,7 +148,17 @@ public final class ThemeSettingsController {
                 }
                 appThemeController.applyTheme(appTheme);
             } catch (Exception error) {
-                failures.add("App UI: " + safeMessage(error));
+                try {
+                    LoadedTheme fallback = findRecoveryTheme(
+                        ThemeTarget.APP_UI, selection.getAppColorSchemeId());
+                    if (fallback == null || appThemeController == null) throw error;
+                    appThemeController.applyTheme(fallback);
+                    selectionStore.selectAppUiTheme(fallback.getMetadata().getId());
+                    selection = selection.withAppColorScheme(fallback.getMetadata().getId());
+                    recoveries.add("App UI restored with '" + fallback.getMetadata().getLabel() + "'");
+                } catch (Exception recoveryError) {
+                    failures.add("App UI: " + safeMessage(recoveryError));
+                }
             }
         }
 
@@ -159,14 +170,51 @@ public final class ThemeSettingsController {
                 }
                 editorSyntaxThemeApplier.apply(syntaxTheme);
             } catch (Exception error) {
-                failures.add("Editor Syntax: " + safeMessage(error));
+                try {
+                    LoadedTheme fallback = findRecoveryTheme(
+                        ThemeTarget.EDITOR_SYNTAX, selection.getEditorSyntaxThemeId());
+                    if (fallback == null || editorSyntaxThemeApplier == null) throw error;
+                    editorSyntaxThemeApplier.apply(fallback);
+                    selectionStore.selectEditorSyntaxTheme(fallback.getMetadata().getId());
+                    selection = selection.withEditorSyntaxTheme(fallback.getMetadata().getId());
+                    recoveries.add("Editor Syntax restored with '" + fallback.getMetadata().getLabel() + "'");
+                } catch (Exception recoveryError) {
+                    failures.add("Editor Syntax: " + safeMessage(recoveryError));
+                }
             }
         }
 
-        if (!failures.isEmpty()) {
-            Toast.makeText(activity, "Some saved themes could not be applied: "
-                + android.text.TextUtils.join("; ", failures), Toast.LENGTH_LONG).show();
+        if (!recoveries.isEmpty() || !failures.isEmpty()) {
+            StringBuilder message = new StringBuilder();
+            if (!recoveries.isEmpty()) {
+                message.append("Theme recovery: ").append(
+                    android.text.TextUtils.join("; ", recoveries));
+            }
+            if (!failures.isEmpty()) {
+                if (message.length() > 0) message.append(". ");
+                message.append("Some saved themes could not be applied: ").append(
+                    android.text.TextUtils.join("; ", failures));
+            }
+            Toast.makeText(activity, message.toString(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private LoadedTheme findRecoveryTheme(ThemeTarget target, String failedThemeId) {
+        LoadedTheme declaredDefault = snapshot.getDefaultThemeFor(target);
+        if (declaredDefault != null
+            && !failedThemeId.equals(declaredDefault.getMetadata().getId())
+            && declaredDefault.getMetadata().supports(target)) {
+            return declaredDefault;
+        }
+        List<LoadedTheme> available = target == ThemeTarget.APP_UI
+            ? snapshot.getAppUiThemes() : snapshot.getEditorSyntaxThemes();
+        for (LoadedTheme candidate : available) {
+            if (candidate != null && candidate.getMetadata().supports(target)
+                && !failedThemeId.equals(candidate.getMetadata().getId())) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /** Dismisses the current settings/preview dialog, for example from Activity.onDestroy(). */
