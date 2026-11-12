@@ -143,8 +143,19 @@ public final class ThemeImportController {
             }
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         TextView close = action(closeLabel, false, () -> {
+            debug("DEBUG_DIALOG_ACTION", "button=" + closeLabel);
             dialog.dismiss();
-            if (closeAction != null) closeAction.run();
+            if (closeAction != null) {
+                try {
+                    closeAction.run();
+                } catch (Throwable error) {
+                    debug("DEBUG_DIALOG_ACTION_FAILED", error.toString());
+                    for (StackTraceElement frame : error.getStackTrace()) {
+                        debug("STACK", frame.toString());
+                    }
+                    showDebugDialog("Could not open theme preview", safeMessage(error));
+                }
+            }
         });
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -289,11 +300,23 @@ public final class ThemeImportController {
                 + ", activityFinishing=" + activity.isFinishing());
             return;
         }
-        dismissActiveDialog();
-        if (preview.getAppearance() == ThemeAppearance.UNKNOWN) {
-            showAppearanceChooser(preview);
-        } else {
-            showPreview(preview, preview.getAppearance());
+        try {
+            ThemeAppearance appearance = preview.getAppearance();
+            debug("PREVIEW_APPEARANCE", String.valueOf(appearance));
+            dismissActiveDialog();
+            if (appearance == ThemeAppearance.UNKNOWN) {
+                debug("PREVIEW_ROUTE", "Opening appearance chooser");
+                showAppearanceChooser(preview);
+            } else {
+                debug("PREVIEW_ROUTE", "Opening theme preview dialog");
+                showPreview(preview, appearance);
+            }
+        } catch (Throwable error) {
+            debug("PREVIEW_TRANSITION_FAILED", error.toString());
+            for (StackTraceElement frame : error.getStackTrace()) {
+                debug("STACK", frame.toString());
+            }
+            showDebugDialog("Could not open theme preview", safeMessage(error));
         }
     }
 
@@ -330,7 +353,12 @@ public final class ThemeImportController {
     }
 
     private void showPreview(VSCodeThemeJsonImporter.Preview preview, ThemeAppearance appearance) {
-        if (released || activity.isFinishing()) return;
+        debug("PREVIEW_DIALOG", "Creating preview dialog; released=" + released
+            + ", activityFinishing=" + activity.isFinishing());
+        if (released || activity.isFinishing()) {
+            debug("PREVIEW_DIALOG_SKIPPED", "Preview dialog cannot be shown for current Activity");
+            return;
+        }
         Dialog dialog = createDialog();
         LinearLayout root = createRoot();
         root.addView(text("Import VS Code Color Theme", 19, textColor(), true));
@@ -375,6 +403,7 @@ public final class ThemeImportController {
         buttons.addView(confirm, confirmParams);
         root.addView(buttons);
         showDialog(dialog, 500);
+        debug("PREVIEW_DIALOG_SHOWN", "isShowing=" + dialog.isShowing());
     }
 
     private void prepareInstall(VSCodeThemeJsonImporter.Preview preview, ThemeAppearance appearance) {
