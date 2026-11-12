@@ -62,7 +62,7 @@ import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.sora.SoraEditorThemeApplier;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.ui.AppThemeController;
-import com.termux.app.theme.ui.ThemeSettingsController;
+import com.termux.app.theme.ui.ThemeSettingsController;\nimport com.termux.app.theme.ui.ThemeImportController;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.logger.Logger;
@@ -1064,7 +1064,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: "  + resultCode + ", data: "  + IntentUtils.getIntentString(data));
-        if (mThemeSettingsController != null) {
+        if (requestCode == ThemeImportController.REQUEST_CODE) {
+            if (mThemeSettingsController != null) {
+                mThemeSettingsController.onActivityResult(requestCode, resultCode, data);
+            } else {
+                String report = "Theme JSON import result reached TermuxActivity but "
+                    + "ThemeSettingsController is null.\\nrequestCode=" + requestCode
+                    + "\\nresultCode=" + resultCode
+                    + "\\ndata=" + (data != null)
+                    + "\\nuri=" + (data == null ? "null" : String.valueOf(data.getData()));
+                new android.app.AlertDialog.Builder(this)
+                    .setTitle("Yummy Theme Import Debug")
+                    .setMessage(report)
+                    .setPositiveButton("Copy report", (dialog, which) -> {
+                        android.content.ClipboardManager clipboard =
+                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                        if (clipboard != null) {
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+                                "Yummy Theme Import Debug", report));
+                        }
+                    })
+                    .setNegativeButton("Close", null)
+                    .show();
+            }
+        } else if (mThemeSettingsController != null) {
             mThemeSettingsController.onActivityResult(requestCode, resultCode, data);
         }
         if (mFileManagerController != null) {

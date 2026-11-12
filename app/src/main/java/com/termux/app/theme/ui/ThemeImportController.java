@@ -4,6 +4,9 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.ClipboardManager;
+import android.content.ClipData;
+import android.content.Context;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -19,6 +22,7 @@ import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ScrollView;
 
 import com.termux.app.theme.model.AppThemeColorRole;
 import com.termux.app.theme.model.LoadedTheme;
@@ -66,6 +70,49 @@ public final class ThemeImportController {
 
     private Dialog activeDialog;
     private volatile boolean released;
+    private final StringBuilder debugReport = new StringBuilder();
+    private int debugSequence;
+
+    private synchronized void debug(String stage, String detail) {
+        debugReport.append(String.format(java.util.Locale.ROOT, "%02d [%s] %s\\n",
+            ++debugSequence, stage, detail == null ? "" : detail));
+    }
+
+    private void showDebugDialog(String title, String detail) {
+        if (released || activity.isFinishing()) return;
+        debug("DIALOG", title + ": " + detail);
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        root.addView(text(title, 18, textColor(), true));
+        ScrollView scroll = new ScrollView(activity);
+        TextView report = text(debugReport.toString() + "\\n" + detail, 12, textColor(), false);
+        report.setTextIsSelectable(true);
+        scroll.addView(report);
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(260));
+        scrollParams.topMargin = dp(10);
+        root.addView(scroll, scrollParams);
+        LinearLayout buttons = new LinearLayout(activity);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.addView(action("Copy Debug Report", true, () -> {
+            ClipboardManager clipboard = (ClipboardManager)
+                activity.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("Yummy Theme Import Debug",
+                    debugReport.toString() + "\\n" + detail));
+                Toast.makeText(activity, "Debug report copied", Toast.LENGTH_SHORT).show();
+            }
+        }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView close = action("Close", false, dialog::dismiss);
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        closeParams.leftMargin = dp(6);
+        buttons.addView(close, closeParams);
+        LinearLayout.LayoutParams buttonParams = marginParams(0, dp(10), 0, 0);
+        root.addView(buttons, buttonParams);
+        dialog.setContentView(root);
+        showDialog(dialog, 520);
+    }
 
     public ThemeImportController(
         Activity activity,
@@ -90,6 +137,9 @@ public final class ThemeImportController {
     public void launchPicker() {
         requireMainThread();
         if (released) return;
+        debugReport.setLength(0);
+        debugSequence = 0;
+        debug("PICKER", "Launching ACTION_OPEN_DOCUMENT");
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         // Do not provide EXTRA_MIME_TYPES here. Several Android document providers
@@ -100,7 +150,8 @@ public final class ThemeImportController {
         try {
             activity.startActivityForResult(intent, REQUEST_CODE);
         } catch (ActivityNotFoundException error) {
-            Toast.makeText(activity, "No document picker is available", Toast.LENGTH_LONG).show();
+            debug("PICKER_FAILED", error.toString());
+            showDebugDialog("Cannot open document picker", error.toString());
         }
     }
 
@@ -108,11 +159,18 @@ public final class ThemeImportController {
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode != REQUEST_CODE) return false;
         requireMainThread();
-        if (released) return true;
+        debug("ACTIVITY_RESULT", "resultCode=" + resultCode
+            + ", data=" + (data != null)
+            + ", uri=" + (data == null ? "null" : String.valueOf(data.getData())));
+        if (released) {
+            debug("CONTROLLER_RELEASED", "Result received after release");
+            showDebugDialog("Import controller was released", debugReport.toString());
+            return true;
+        }
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
-            Toast.makeText(activity,
-                "No theme file was returned by the document picker. Please try again.",
-                Toast.LENGTH_LONG).show();
+            debug("NO_DOCUMENT", "Picker returned no usable document URI");
+            showDebugDialog("No JSON file was returned",
+                "Explorer returned resultCode=" + resultCode + ". Please retry and select a file.");
             return true;
         }
         inspectUri(data.getData());
@@ -131,16 +189,26 @@ public final class ThemeImportController {
     }
 
     private void inspectUri(Uri uri) {
+        debug("URI_RECEIVED", uri.toString());
+        debug("MIME_TYPE", String.valueOf(activity.getContentResolver().getType(uri)));
         showProgress("Reading theme JSON…");
         ioExecutor.execute(() -> {
             VSCodeThemeJsonImporter.Preview preview;
             try {
                 String displayName = queryDisplayName(uri);
+                debug("DISPLAY_NAME", displayName);
                 InputStream input = activity.getContentResolver().openInputStream(uri);
                 if (input == null) throw new IllegalStateException("Could not open selected document");
+                debug("READ", "InputStream opened");
                 preview = importer.inspect(input, displayName);
+                debug("JSON_PARSE", "SUCCESS; name=" + preview.getName()
+                    + "; id=" + preview.getSuggestedId()
+                    + "; appUi=" + preview.supportsAppUi()
+                    + "; editorSyntax=" + preview.supportsEditorSyntax());
             } catch (Exception error) {
-                postToMain(() -> showError("Could not read theme", safeMessage(error)));
+                debug("READ_OR_PARSE_FAILED", error.toString());
+                for (StackTraceElement frame : error.getStackTrace()) debug("STACK", frame.toString());
+                postToMain(() -> showDebugDialog("Could not read or parse theme", safeMessage(error)));
                 return;
             }
             postToMain(() -> beginPreview(preview));
@@ -166,6 +234,7 @@ public final class ThemeImportController {
     }
 
     private void beginPreview(VSCodeThemeJsonImporter.Preview preview) {
+        debug("PREVIEW", "Showing preview for " + preview.getName());
         if (released || activity.isFinishing()) return;
         dismissActiveDialog();
         if (preview.getAppearance() == ThemeAppearance.UNKNOWN) {
@@ -256,6 +325,7 @@ public final class ThemeImportController {
     }
 
     private void prepareInstall(VSCodeThemeJsonImporter.Preview preview, ThemeAppearance appearance) {
+        debug("INSTALL_PREPARE", "id=" + preview.getSuggestedId());
         try {
             ThemeRegistrySnapshotHolder current = refreshRegistry();
             String suggestedId = preview.getSuggestedId();
@@ -274,8 +344,9 @@ public final class ThemeImportController {
                 return;
             }
             install(preview, appearance, suggestedId, false);
-        } catch (ThemeStorageException error) {
-            showError("Could not inspect installed themes", safeMessage(error));
+        } catch (Exception error) {
+            debug("INSTALL_PREPARE_FAILED", error.toString());
+            showDebugDialog("Could not inspect installed themes", safeMessage(error));
         }
     }
 
@@ -335,21 +406,26 @@ public final class ThemeImportController {
         String themeId,
         boolean replace
     ) {
+        debug("INSTALL_START", "id=" + themeId + ", replace=" + replace);
         showProgress(replace ? "Replacing theme…" : "Importing theme…");
         ioExecutor.execute(() -> {
             try {
                 String installedId = importer.install(
                     activity, storage, preview, appearance, themeId, replace);
                 registry.reload();
+                debug("INSTALL_SUCCESS", "installedId=" + installedId);
                 postToMain(() -> {
                     dismissActiveDialog();
                     if (released) return;
-                    Toast.makeText(activity, "Imported theme: " + preview.getName(),
-                        Toast.LENGTH_LONG).show();
+                    showDebugDialog("Theme import completed",
+                        "Imported " + preview.getName() + " as " + installedId
+                            + ". Check Manage Imported Themes and choose the target theme.");
                     if (listener != null) listener.onThemeImported(installedId);
                 });
             } catch (Exception error) {
-                postToMain(() -> showError("Theme import failed", safeMessage(error)));
+                debug("INSTALL_FAILED", error.toString());
+                for (StackTraceElement frame : error.getStackTrace()) debug("STACK", frame.toString());
+                postToMain(() -> showDebugDialog("Theme import failed", safeMessage(error)));
             }
         });
     }
