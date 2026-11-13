@@ -14,6 +14,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Handler;
 import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.view.Gravity;
@@ -144,17 +145,30 @@ public final class ThemeImportController {
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         TextView close = action(closeLabel, false, () -> {
             debug("DEBUG_DIALOG_ACTION", "button=" + closeLabel);
+            // Clear the active reference before dismissing. Post the next dialog to the
+            // main queue so Android can remove this window before attaching the preview.
+            if (activeDialog == dialog) activeDialog = null;
             dialog.dismiss();
+            debug("DEBUG_DIALOG_DISMISSED", "button=" + closeLabel);
             if (closeAction != null) {
-                try {
-                    closeAction.run();
-                } catch (Throwable error) {
-                    debug("DEBUG_DIALOG_ACTION_FAILED", error.toString());
-                    for (StackTraceElement frame : error.getStackTrace()) {
-                        debug("STACK", frame.toString());
+                debug("DEBUG_DIALOG_CONTINUE_POSTED", "button=" + closeLabel);
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    if (released || activity.isFinishing()) {
+                        debug("DEBUG_DIALOG_CONTINUE_SKIPPED", "released=" + released
+                            + ", activityFinishing=" + activity.isFinishing());
+                        return;
                     }
-                    showDebugDialog("Could not open theme preview", safeMessage(error));
-                }
+                    try {
+                        debug("DEBUG_DIALOG_CONTINUE_RUNNING", "button=" + closeLabel);
+                        closeAction.run();
+                    } catch (Throwable error) {
+                        debug("DEBUG_DIALOG_ACTION_FAILED", error.toString());
+                        for (StackTraceElement frame : error.getStackTrace()) {
+                            debug("STACK", frame.toString());
+                        }
+                        showDebugDialog("Could not open theme preview", safeMessage(error));
+                    }
+                });
             }
         });
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
@@ -165,6 +179,19 @@ public final class ThemeImportController {
         root.addView(buttons, buttonParams);
         dialog.setContentView(root);
         showDialog(dialog, 520);
+    }
+
+    /** Shows the last persisted JSON-import diagnostic report from the Themes screen. */
+    public void showLastImportDebugReport() {
+        requireMainThread();
+        restoreDebugReport();
+        if (debugReport.length() == 0) {
+            Toast.makeText(activity, "No theme import debug report is available",
+                Toast.LENGTH_SHORT).show();
+            return;
+        }
+        showDebugDialog("Last Theme Import Debug Report",
+            "This report includes the most recent import and preview transition.");
     }
 
     public ThemeImportController(

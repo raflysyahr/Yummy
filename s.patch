@@ -1,0 +1,91 @@
+diff --git a/app/src/main/java/com/termux/app/theme/ui/ThemeImportController.java b/app/src/main/java/com/termux/app/theme/ui/ThemeImportController.java
+index 4f83734..9a3b9a3 100644
+--- a/app/src/main/java/com/termux/app/theme/ui/ThemeImportController.java
++++ b/app/src/main/java/com/termux/app/theme/ui/ThemeImportController.java
+@@ -14,6 +14,7 @@ import android.graphics.Typeface;
+ import android.graphics.drawable.ColorDrawable;
+ import android.graphics.drawable.GradientDrawable;
+ import android.net.Uri;
++import android.os.Handler;
+ import android.os.Looper;
+ import android.provider.OpenableColumns;
+ import android.view.Gravity;
+@@ -144,17 +145,30 @@ public final class ThemeImportController {
+         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+         TextView close = action(closeLabel, false, () -> {
+             debug("DEBUG_DIALOG_ACTION", "button=" + closeLabel);
++            // Clear the active reference before dismissing. Post the next dialog to the
++            // main queue so Android can remove this window before attaching the preview.
++            if (activeDialog == dialog) activeDialog = null;
+             dialog.dismiss();
++            debug("DEBUG_DIALOG_DISMISSED", "button=" + closeLabel);
+             if (closeAction != null) {
+-                try {
+-                    closeAction.run();
+-                } catch (Throwable error) {
+-                    debug("DEBUG_DIALOG_ACTION_FAILED", error.toString());
+-                    for (StackTraceElement frame : error.getStackTrace()) {
+-                        debug("STACK", frame.toString());
++                debug("DEBUG_DIALOG_CONTINUE_POSTED", "button=" + closeLabel);
++                new Handler(Looper.getMainLooper()).post(() -> {
++                    if (released || activity.isFinishing()) {
++                        debug("DEBUG_DIALOG_CONTINUE_SKIPPED", "released=" + released
++                            + ", activityFinishing=" + activity.isFinishing());
++                        return;
++                    }
++                    try {
++                        debug("DEBUG_DIALOG_CONTINUE_RUNNING", "button=" + closeLabel);
++                        closeAction.run();
++                    } catch (Throwable error) {
++                        debug("DEBUG_DIALOG_ACTION_FAILED", error.toString());
++                        for (StackTraceElement frame : error.getStackTrace()) {
++                            debug("STACK", frame.toString());
++                        }
++                        showDebugDialog("Could not open theme preview", safeMessage(error));
+                     }
+-                    showDebugDialog("Could not open theme preview", safeMessage(error));
+-                }
++                });
+             }
+         });
+         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
+@@ -167,6 +181,19 @@ public final class ThemeImportController {
+         showDialog(dialog, 520);
+     }
+ 
++    /** Shows the last persisted JSON-import diagnostic report from the Themes screen. */
++    public void showLastImportDebugReport() {
++        requireMainThread();
++        restoreDebugReport();
++        if (debugReport.length() == 0) {
++            Toast.makeText(activity, "No theme import debug report is available",
++                Toast.LENGTH_SHORT).show();
++            return;
++        }
++        showDebugDialog("Last Theme Import Debug Report",
++            "This report includes the most recent import and preview transition.");
++    }
++
+     public ThemeImportController(
+         Activity activity,
+         YummyThemeRegistry registry,
+diff --git a/app/src/main/java/com/termux/app/theme/ui/ThemeSettingsController.java b/app/src/main/java/com/termux/app/theme/ui/ThemeSettingsController.java
+index 67b7e6a..c81b2a9 100644
+--- a/app/src/main/java/com/termux/app/theme/ui/ThemeSettingsController.java
++++ b/app/src/main/java/com/termux/app/theme/ui/ThemeSettingsController.java
+@@ -325,6 +325,14 @@ public final class ThemeSettingsController {
+             "Import a standalone .json Color Theme. Yummy validates it and creates package metadata.",
+             11, mutedColor(), false), marginParams(0, dp(5), 0, 0));
+ 
++        TextView debugReport = action(
++            "View Last Theme Import Debug Report", false,
++            () -> ensureThemeImportController().showLastImportDebugReport());
++        root.addView(debugReport, marginParams(0, dp(9), 0, 0));
++        root.addView(text(
++            "Open and copy the latest JSON import and preview diagnostic report.",
++            11, mutedColor(), false), marginParams(0, dp(4), 0, 0));
++
+         TextView importPackage = action(
+             "Import Yummy Theme Package (.zip)", false, this::launchPackageImport);
+         root.addView(importPackage, marginParams(0, dp(9), 0, 0));
+

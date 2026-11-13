@@ -325,6 +325,14 @@ public final class ThemeSettingsController {
             "Import a standalone .json Color Theme. Yummy validates it and creates package metadata.",
             11, mutedColor(), false), marginParams(0, dp(5), 0, 0));
 
+        TextView debugReport = action(
+            "View Last Theme Import Debug Report", false,
+            () -> ensureThemeImportController().showLastImportDebugReport());
+        root.addView(debugReport, marginParams(0, dp(9), 0, 0));
+        root.addView(text(
+            "Open and copy the latest JSON import and preview diagnostic report.",
+            11, mutedColor(), false), marginParams(0, dp(4), 0, 0));
+
         TextView importPackage = action(
             "Import Yummy Theme Package (.zip)", false, this::launchPackageImport);
         root.addView(importPackage, marginParams(0, dp(9), 0, 0));
