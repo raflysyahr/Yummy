@@ -242,8 +242,8 @@ public final class ThemeDocumentParser {
     }
 
     private static void validateFontStyle(String value, String path) throws ThemeLoadException {
-        String normalized = value.trim();
-        if (normalized.isEmpty()) return; // Empty string explicitly clears inherited styles.
+        String normalizeda = value.trim();
+        if (normalized.isEmpty() || "normal".equals(normalized)) return; // Empty string explicitly clears inherited styles.
         String[] styles = normalized.split("\\s+");
         for (String style : styles) {
             if (!"italic".equals(style) && !"bold".equals(style)
