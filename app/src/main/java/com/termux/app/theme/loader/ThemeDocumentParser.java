@@ -242,7 +242,7 @@ public final class ThemeDocumentParser {
     }
 
     private static void validateFontStyle(String value, String path) throws ThemeLoadException {
-        String normalizeda = value.trim();
+        String normalized = value.trim();
         if (normalized.isEmpty() || "normal".equals(normalized)) return; // Empty string explicitly clears inherited styles.
         String[] styles = normalized.split("\\s+");
         for (String style : styles) {
