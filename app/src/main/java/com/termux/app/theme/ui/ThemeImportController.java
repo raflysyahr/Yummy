@@ -595,21 +595,55 @@ public final class ThemeImportController {
     private void showDialog(Dialog dialog, int maxWidthDp) {
         dismissActiveDialog();
         activeDialog = dialog;
+
+        // Configure the window after show(), but explicitly restore the expected centered,
+        // opaque dialog presentation. Some host Activity themes provide non-floating window
+        // defaults that can leave a Dialog technically showing without a useful visible frame.
         dialog.show();
         Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
-            int desiredWidth = Math.min(screenWidth - dp(32), dp(maxWidthDp));
-            window.setLayout(Math.max(dp(260), desiredWidth), WindowManager.LayoutParams.WRAP_CONTENT);
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        if (window == null) {
+            debug("DIALOG_WINDOW_MISSING", "Dialog.show() returned without a Window");
+            return;
         }
+
+        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        window.setDimAmount(0.55f);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.setGravity(Gravity.CENTER);
+
+        int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+        int desiredWidth = Math.min(screenWidth - dp(32), dp(maxWidthDp));
+        int dialogWidth = Math.max(dp(260), desiredWidth);
+        window.setLayout(dialogWidth, WindowManager.LayoutParams.WRAP_CONTENT);
+
+        android.view.View decor = window.getDecorView();
+        decor.setVisibility(android.view.View.VISIBLE);
+        decor.setAlpha(1f);
+        decor.post(() -> {
+            if (dialog != activeDialog || !dialog.isShowing()) {
+                debug("DIALOG_NOT_VISIBLE_AFTER_LAYOUT", "Dialog is no longer active after layout");
+                return;
+            }
+            android.graphics.Rect visibleFrame = new android.graphics.Rect();
+            decor.getWindowVisibleDisplayFrame(visibleFrame);
+            debug("DIALOG_LAYOUT", "width=" + decor.getWidth()
+                + ", height=" + decor.getHeight()
+                + ", visibility=" + decor.getVisibility()
+                + ", alpha=" + decor.getAlpha()
+                + ", visibleFrame=" + visibleFrame.flattenToString());
+            if (decor.getWidth() <= 0 || decor.getHeight() <= 0) {
+                debug("DIALOG_LAYOUT_INVALID", "Dialog decor has zero width or height");
+            }
+        });
     }
 
     private LinearLayout createRoot() {
         LinearLayout root = new LinearLayout(activity);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(18), dp(18), dp(18));
+        root.setMinimumWidth(dp(260));
+        root.setVisibility(android.view.View.VISIBLE);
+        root.setAlpha(1f);
         root.setBackground(rect(backgroundColor(), borderColor()));
         return root;
     }
