@@ -362,6 +362,7 @@ public final class ThemeImportController {
         addAppearanceChoice(root, dialog, preview, ThemeAppearance.HIGH_CONTRAST_LIGHT,
             "High Contrast Light");
         root.addView(action("Cancel", false, dialog::dismiss), marginParams(0, dp(12), 0, 0));
+        dialog.setContentView(root);
         showDialog(dialog, 420);
     }
 
@@ -429,6 +430,7 @@ public final class ThemeImportController {
         confirmParams.leftMargin = dp(8);
         buttons.addView(confirm, confirmParams);
         root.addView(buttons);
+        dialog.setContentView(root);
         showDialog(dialog, 500);
         debug("PREVIEW_DIALOG_SHOWN", "isShowing=" + dialog.isShowing());
     }
@@ -506,6 +508,7 @@ public final class ThemeImportController {
         replaceParams.leftMargin = dp(8);
         buttons.addView(replace, replaceParams);
         root.addView(buttons);
+        dialog.setContentView(root);
         showDialog(dialog, 460);
     }
 
@@ -555,6 +558,7 @@ public final class ThemeImportController {
         root.addView(text(title, 18, textColor(), true));
         root.addView(text(detail, 13, mutedColor(), false), marginParams(0, dp(8), 0, dp(14)));
         root.addView(action("Close", true, dialog::dismiss));
+        dialog.setContentView(root);
         showDialog(dialog, 440);
     }
 
