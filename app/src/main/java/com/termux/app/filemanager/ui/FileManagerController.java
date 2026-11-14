@@ -1725,6 +1725,9 @@ public final class FileManagerController {
             bindSidebarText(titleView, AppThemeColorRole.SIDEBAR_FOREGROUND);
             bindSidebarText(breadcrumbView, AppThemeColorRole.SECONDARY_TEXT);
             bindSidebarText(searchView, AppThemeColorRole.INPUT_FOREGROUND);
+            if (searchView != null) {
+                appThemeController.bindHint(searchView, AppThemeColorRole.SECONDARY_TEXT);
+            }
             bindSidebarText(emptyView, AppThemeColorRole.SECONDARY_TEXT);
             bindSidebarProgress(progressBar, AppThemeColorRole.ACCENT);
         }

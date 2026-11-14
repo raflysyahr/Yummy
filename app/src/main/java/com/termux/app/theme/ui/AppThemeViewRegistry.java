@@ -36,6 +36,11 @@ public final class AppThemeViewRegistry {
         bind(view, role, Property.TEXT_COLOR);
     }
 
+    /** Binds hint/placeholder text independently from the input's entered text. */
+    public void bindHintTextColor(TextView view, AppThemeColorRole role) {
+        bind(view, role, Property.HINT_TEXT_COLOR);
+    }
+
     public void bindImageTint(ImageView view, AppThemeColorRole role) {
         bind(view, role, Property.IMAGE_TINT);
     }
@@ -103,6 +108,8 @@ public final class AppThemeViewRegistry {
                 return view.getBackgroundTintList();
             case TEXT_COLOR:
                 return ((TextView) view).getTextColors();
+            case HINT_TEXT_COLOR:
+                return ((TextView) view).getHintTextColors();
             case IMAGE_TINT:
                 return ((ImageView) view).getImageTintList();
             case BUTTON_TINT:
@@ -121,6 +128,9 @@ public final class AppThemeViewRegistry {
                 break;
             case TEXT_COLOR:
                 ((TextView) view).setTextColor(color);
+                break;
+            case HINT_TEXT_COLOR:
+                ((TextView) view).setHintTextColor(color);
                 break;
             case IMAGE_TINT:
                 ((ImageView) view).setImageTintList(color);
@@ -145,6 +155,7 @@ public final class AppThemeViewRegistry {
     private enum Property {
         BACKGROUND_TINT,
         TEXT_COLOR,
+        HINT_TEXT_COLOR,
         IMAGE_TINT,
         BUTTON_TINT,
         PROGRESS_TINT

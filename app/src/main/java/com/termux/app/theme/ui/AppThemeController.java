@@ -86,6 +86,10 @@ public final class AppThemeController {
         viewRegistry.bindTextColor(view, role);
     }
 
+    public void bindHint(TextView view, AppThemeColorRole role) {
+        viewRegistry.bindHintTextColor(view, role);
+    }
+
     public void bindIcon(ImageView view, AppThemeColorRole role) {
         viewRegistry.bindImageTint(view, role);
     }

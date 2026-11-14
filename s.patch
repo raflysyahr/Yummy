@@ -1,0 +1,240 @@
+diff --git a/app/src/main/java/com/termux/app/filemanager/ui/FileManagerController.java b/app/src/main/java/com/termux/app/filemanager/ui/FileManagerController.java
+index 3b046d6..d327ee2 100644
+--- a/app/src/main/java/com/termux/app/filemanager/ui/FileManagerController.java
++++ b/app/src/main/java/com/termux/app/filemanager/ui/FileManagerController.java
+@@ -1725,6 +1725,9 @@ public final class FileManagerController {
+             bindSidebarText(titleView, AppThemeColorRole.SIDEBAR_FOREGROUND);
+             bindSidebarText(breadcrumbView, AppThemeColorRole.SECONDARY_TEXT);
+             bindSidebarText(searchView, AppThemeColorRole.INPUT_FOREGROUND);
++            if (searchView != null) {
++                appThemeController.bindHint(searchView, AppThemeColorRole.SECONDARY_TEXT);
++            }
+             bindSidebarText(emptyView, AppThemeColorRole.SECONDARY_TEXT);
+             bindSidebarProgress(progressBar, AppThemeColorRole.ACCENT);
+         }
+diff --git a/app/src/main/java/com/termux/app/theme/adapter/AppThemeAdapter.java b/app/src/main/java/com/termux/app/theme/adapter/AppThemeAdapter.java
+index 2f62392..2efc153 100644
+--- a/app/src/main/java/com/termux/app/theme/adapter/AppThemeAdapter.java
++++ b/app/src/main/java/com/termux/app/theme/adapter/AppThemeAdapter.java
+@@ -106,82 +106,49 @@ public final class AppThemeAdapter {
+     private static Map<AppThemeColorRole, String[]> createMappings() {
+         EnumMap<AppThemeColorRole, String[]> mappings =
+             new EnumMap<>(AppThemeColorRole.class);
+-        put(mappings, AppThemeColorRole.APP_BACKGROUND,
+-            "sideBar.background", "editor.background", "panel.background");
+-        put(mappings, AppThemeColorRole.TOOLBAR_BACKGROUND,
+-            "titleBar.activeBackground", "activityBar.background",
+-            "sideBar.background", "editor.background");
+-        put(mappings, AppThemeColorRole.TOOLBAR_FOREGROUND,
+-            "titleBar.activeForeground", "activityBar.foreground", "foreground");
+-        put(mappings, AppThemeColorRole.SIDEBAR_BACKGROUND,
+-            "sideBar.background", "panel.background", "editor.background");
+-        put(mappings, AppThemeColorRole.SIDEBAR_FOREGROUND,
+-            "sideBar.foreground", "foreground");
++
++        // Separate mapping policy: each VS Code workbench identifier belongs to one Yummy
++        // semantic role only. Missing identifiers deliberately use AppThemeFallbacks; there
++        // are no cross-role aliases here.
++        put(mappings, AppThemeColorRole.APP_BACKGROUND);
++        put(mappings, AppThemeColorRole.TOOLBAR_BACKGROUND, "titleBar.activeBackground");
++        put(mappings, AppThemeColorRole.TOOLBAR_FOREGROUND, "titleBar.activeForeground");
++        put(mappings, AppThemeColorRole.SIDEBAR_BACKGROUND, "sideBar.background");
++        put(mappings, AppThemeColorRole.SIDEBAR_FOREGROUND, "sideBar.foreground");
+         put(mappings, AppThemeColorRole.EDITOR_BACKGROUND, "editor.background");
+-        put(mappings, AppThemeColorRole.EDITOR_FOREGROUND,
+-            "editor.foreground", "foreground");
++        put(mappings, AppThemeColorRole.EDITOR_FOREGROUND, "editor.foreground");
+         put(mappings, AppThemeColorRole.TAB_BAR_BACKGROUND,
+-            "editorGroupHeader.tabsBackground", "editor.background");
+-        put(mappings, AppThemeColorRole.TAB_ACTIVE_BACKGROUND,
+-            "tab.activeBackground", "editorGroupHeader.tabsBackground", "sideBar.background");
+-        put(mappings, AppThemeColorRole.TAB_ACTIVE_FOREGROUND,
+-            "tab.activeForeground", "foreground");
+-        put(mappings, AppThemeColorRole.TAB_INACTIVE_BACKGROUND,
+-            "tab.inactiveBackground", "editorGroupHeader.tabsBackground", "editor.background");
+-        put(mappings, AppThemeColorRole.TAB_INACTIVE_FOREGROUND,
+-            "tab.inactiveForeground", "disabledForeground", "foreground");
+-        put(mappings, AppThemeColorRole.STATUS_BAR_BACKGROUND,
+-            "statusBar.background", "statusBar.noFolderBackground", "activityBar.background");
+-        put(mappings, AppThemeColorRole.STATUS_BAR_FOREGROUND,
+-            "statusBar.foreground", "statusBar.noFolderForeground", "foreground");
+-        put(mappings, AppThemeColorRole.SURFACE_BACKGROUND,
+-            "panel.background", "sideBar.background", "editorWidget.background",
+-            "editor.background");
+-        put(mappings, AppThemeColorRole.SURFACE_FOREGROUND,
+-            "panel.foreground", "sideBar.foreground", "editor.foreground", "foreground");
+-        put(mappings, AppThemeColorRole.PRIMARY_TEXT,
+-            "foreground", "editor.foreground", "sideBar.foreground");
+-        put(mappings, AppThemeColorRole.SECONDARY_TEXT,
+-            "descriptionForeground", "disabledForeground", "tab.inactiveForeground");
+-        put(mappings, AppThemeColorRole.DIVIDER,
+-            "contrastBorder", "panel.border", "sideBar.border", "editorGroup.border",
+-            "input.border");
+-        put(mappings, AppThemeColorRole.ACCENT,
+-            "focusBorder", "button.background", "activityBarBadge.background",
+-            "progressBar.background");
+-        put(mappings, AppThemeColorRole.ACCENT_FOREGROUND,
+-            "button.foreground", "activityBarBadge.foreground");
++            "editorGroupHeader.tabsBackground");
++        put(mappings, AppThemeColorRole.TAB_ACTIVE_BACKGROUND, "tab.activeBackground");
++        put(mappings, AppThemeColorRole.TAB_ACTIVE_FOREGROUND, "tab.activeForeground");
++        put(mappings, AppThemeColorRole.TAB_INACTIVE_BACKGROUND, "tab.inactiveBackground");
++        put(mappings, AppThemeColorRole.TAB_INACTIVE_FOREGROUND, "tab.inactiveForeground");
++        put(mappings, AppThemeColorRole.STATUS_BAR_BACKGROUND, "statusBar.background");
++        put(mappings, AppThemeColorRole.STATUS_BAR_FOREGROUND, "statusBar.foreground");
++        put(mappings, AppThemeColorRole.SURFACE_BACKGROUND, "panel.background");
++        put(mappings, AppThemeColorRole.SURFACE_FOREGROUND, "panel.foreground");
++        put(mappings, AppThemeColorRole.PRIMARY_TEXT, "foreground");
++        put(mappings, AppThemeColorRole.SECONDARY_TEXT, "descriptionForeground");
++        put(mappings, AppThemeColorRole.DIVIDER, "contrastBorder");
++        put(mappings, AppThemeColorRole.ACCENT, "focusBorder");
++        put(mappings, AppThemeColorRole.ACCENT_FOREGROUND, "activityBarBadge.foreground");
+         put(mappings, AppThemeColorRole.SELECTION_BACKGROUND,
+-            "list.activeSelectionBackground", "list.inactiveSelectionBackground",
+-            "editor.selectionBackground");
++            "list.activeSelectionBackground");
+         put(mappings, AppThemeColorRole.SELECTION_FOREGROUND,
+-            "list.activeSelectionForeground", "list.inactiveSelectionForeground",
+-            "editor.selectionForeground");
+-        put(mappings, AppThemeColorRole.HOVER_BACKGROUND,
+-            "list.hoverBackground", "list.focusBackground", "list.activeSelectionBackground");
+-        put(mappings, AppThemeColorRole.INPUT_BACKGROUND,
+-            "input.background", "dropdown.background", "quickInput.background");
+-        put(mappings, AppThemeColorRole.INPUT_FOREGROUND,
+-            "input.foreground", "dropdown.foreground", "quickInput.foreground", "foreground");
+-        put(mappings, AppThemeColorRole.INPUT_BORDER,
+-            "input.border", "contrastBorder", "panel.border");
+-        put(mappings, AppThemeColorRole.BUTTON_BACKGROUND,
+-            "button.background", "activityBarBadge.background");
+-        put(mappings, AppThemeColorRole.BUTTON_FOREGROUND,
+-            "button.foreground", "activityBarBadge.foreground");
+-        put(mappings, AppThemeColorRole.POPUP_BACKGROUND,
+-            "editorWidget.background", "quickInput.background", "menu.background",
+-            "dropdown.background", "sideBar.background");
+-        put(mappings, AppThemeColorRole.POPUP_FOREGROUND,
+-            "editorWidget.foreground", "quickInput.foreground", "menu.foreground",
+-            "dropdown.foreground", "foreground");
+-        put(mappings, AppThemeColorRole.ICON_FOREGROUND, "icon.foreground", "foreground");
+-        put(mappings, AppThemeColorRole.ERROR,
+-            "errorForeground", "editorError.foreground", "problemsErrorIcon.foreground");
+-        put(mappings, AppThemeColorRole.WARNING,
+-            "editorWarning.foreground", "problemsWarningIcon.foreground");
+-        put(mappings, AppThemeColorRole.INFO,
+-            "editorInfo.foreground", "problemsInfoIcon.foreground");
++            "list.activeSelectionForeground");
++        put(mappings, AppThemeColorRole.HOVER_BACKGROUND, "list.hoverBackground");
++        put(mappings, AppThemeColorRole.INPUT_BACKGROUND, "input.background");
++        put(mappings, AppThemeColorRole.INPUT_FOREGROUND, "input.foreground");
++        put(mappings, AppThemeColorRole.INPUT_BORDER, "input.border");
++        put(mappings, AppThemeColorRole.BUTTON_BACKGROUND, "button.background");
++        put(mappings, AppThemeColorRole.BUTTON_FOREGROUND, "button.foreground");
++        put(mappings, AppThemeColorRole.POPUP_BACKGROUND, "menu.background");
++        put(mappings, AppThemeColorRole.POPUP_FOREGROUND, "menu.foreground");
++        put(mappings, AppThemeColorRole.ICON_FOREGROUND, "icon.foreground");
++        put(mappings, AppThemeColorRole.ERROR, "errorForeground");
++        put(mappings, AppThemeColorRole.WARNING, "editorWarning.foreground");
++        put(mappings, AppThemeColorRole.INFO, "editorInfo.foreground");
++
+         return Collections.unmodifiableMap(mappings);
+     }
+ 
+diff --git a/app/src/main/java/com/termux/app/theme/model/AppThemeFallbacks.java b/app/src/main/java/com/termux/app/theme/model/AppThemeFallbacks.java
+index 0fd39fc..8955873 100644
+--- a/app/src/main/java/com/termux/app/theme/model/AppThemeFallbacks.java
++++ b/app/src/main/java/com/termux/app/theme/model/AppThemeFallbacks.java
+@@ -49,24 +49,32 @@ public final class AppThemeFallbacks {
+         addResource(resources, packageName, builder, AppThemeColorRole.EDITOR_BACKGROUND, "yummy_bg");
+         addResource(resources, packageName, builder, AppThemeColorRole.EDITOR_FOREGROUND, "yummy_text");
+         addResource(resources, packageName, builder, AppThemeColorRole.TAB_BAR_BACKGROUND, "yummy_bar");
+-        addResource(resources, packageName, builder, AppThemeColorRole.TAB_ACTIVE_BACKGROUND, "yummy_bar");
++        addResource(resources, packageName, builder, AppThemeColorRole.TAB_ACTIVE_BACKGROUND, "yummy_tab_active");
+         addResource(resources, packageName, builder, AppThemeColorRole.TAB_ACTIVE_FOREGROUND, "yummy_text");
+         addResource(resources, packageName, builder, AppThemeColorRole.TAB_INACTIVE_BACKGROUND, "yummy_bar");
+         addResource(resources, packageName, builder, AppThemeColorRole.TAB_INACTIVE_FOREGROUND, "yummy_text_dim");
+         addResource(resources, packageName, builder, AppThemeColorRole.STATUS_BAR_BACKGROUND, "yummy_bar");
+         addResource(resources, packageName, builder, AppThemeColorRole.STATUS_BAR_FOREGROUND, "yummy_text");
++        addResource(resources, packageName, builder, AppThemeColorRole.SURFACE_BACKGROUND, "yummy_sheet_bg");
++        addResource(resources, packageName, builder, AppThemeColorRole.SURFACE_FOREGROUND, "yummy_text");
+         addResource(resources, packageName, builder, AppThemeColorRole.PRIMARY_TEXT, "yummy_text");
+         addResource(resources, packageName, builder, AppThemeColorRole.SECONDARY_TEXT, "yummy_text_dim");
+         addResource(resources, packageName, builder, AppThemeColorRole.DIVIDER, "yummy_divider");
+         addResource(resources, packageName, builder, AppThemeColorRole.ACCENT, "yummy_accent_green");
+-        addResource(resources, packageName, builder, AppThemeColorRole.SURFACE_BACKGROUND, "yummy_bg");
+-        addResource(resources, packageName, builder, AppThemeColorRole.SURFACE_FOREGROUND, "yummy_text");
++        addResource(resources, packageName, builder, AppThemeColorRole.ACCENT_FOREGROUND, "yummy_bg");
++        addResource(resources, packageName, builder, AppThemeColorRole.SELECTION_BACKGROUND, "yummy_tab_active");
++        addResource(resources, packageName, builder, AppThemeColorRole.SELECTION_FOREGROUND, "yummy_text");
++        addResource(resources, packageName, builder, AppThemeColorRole.HOVER_BACKGROUND, "yummy_line_current");
+         addResource(resources, packageName, builder, AppThemeColorRole.INPUT_BACKGROUND, "yummy_bg");
+         addResource(resources, packageName, builder, AppThemeColorRole.INPUT_FOREGROUND, "yummy_text");
+         addResource(resources, packageName, builder, AppThemeColorRole.INPUT_BORDER, "yummy_divider");
+-        addResource(resources, packageName, builder, AppThemeColorRole.POPUP_BACKGROUND, "yummy_bg");
++        addResource(resources, packageName, builder, AppThemeColorRole.BUTTON_BACKGROUND, "yummy_accent_green");
++        addResource(resources, packageName, builder, AppThemeColorRole.BUTTON_FOREGROUND, "yummy_bg");
++        addResource(resources, packageName, builder, AppThemeColorRole.POPUP_BACKGROUND, "yummy_sheet_bg");
+         addResource(resources, packageName, builder, AppThemeColorRole.POPUP_FOREGROUND, "yummy_text");
+         addResource(resources, packageName, builder, AppThemeColorRole.ICON_FOREGROUND, "yummy_text");
++        // Yummy currently has no dedicated ERROR/WARNING/INFO color resources. Those roles
++        // intentionally remain unresolved instead of borrowing an unrelated semantic color.
+         return builder.build();
+     }
+ 
+diff --git a/app/src/main/java/com/termux/app/theme/ui/AppThemeController.java b/app/src/main/java/com/termux/app/theme/ui/AppThemeController.java
+index 5749264..2a0f4c2 100644
+--- a/app/src/main/java/com/termux/app/theme/ui/AppThemeController.java
++++ b/app/src/main/java/com/termux/app/theme/ui/AppThemeController.java
+@@ -86,6 +86,10 @@ public final class AppThemeController {
+         viewRegistry.bindTextColor(view, role);
+     }
+ 
++    public void bindHint(TextView view, AppThemeColorRole role) {
++        viewRegistry.bindHintTextColor(view, role);
++    }
++
+     public void bindIcon(ImageView view, AppThemeColorRole role) {
+         viewRegistry.bindImageTint(view, role);
+     }
+diff --git a/app/src/main/java/com/termux/app/theme/ui/AppThemeViewRegistry.java b/app/src/main/java/com/termux/app/theme/ui/AppThemeViewRegistry.java
+index bb9cd61..1d51b86 100644
+--- a/app/src/main/java/com/termux/app/theme/ui/AppThemeViewRegistry.java
++++ b/app/src/main/java/com/termux/app/theme/ui/AppThemeViewRegistry.java
+@@ -36,6 +36,11 @@ public final class AppThemeViewRegistry {
+         bind(view, role, Property.TEXT_COLOR);
+     }
+ 
++    /** Binds hint/placeholder text independently from the input's entered text. */
++    public void bindHintTextColor(TextView view, AppThemeColorRole role) {
++        bind(view, role, Property.HINT_TEXT_COLOR);
++    }
++
+     public void bindImageTint(ImageView view, AppThemeColorRole role) {
+         bind(view, role, Property.IMAGE_TINT);
+     }
+@@ -103,6 +108,8 @@ public final class AppThemeViewRegistry {
+                 return view.getBackgroundTintList();
+             case TEXT_COLOR:
+                 return ((TextView) view).getTextColors();
++            case HINT_TEXT_COLOR:
++                return ((TextView) view).getHintTextColors();
+             case IMAGE_TINT:
+                 return ((ImageView) view).getImageTintList();
+             case BUTTON_TINT:
+@@ -122,6 +129,9 @@ public final class AppThemeViewRegistry {
+             case TEXT_COLOR:
+                 ((TextView) view).setTextColor(color);
+                 break;
++            case HINT_TEXT_COLOR:
++                ((TextView) view).setHintTextColor(color);
++                break;
+             case IMAGE_TINT:
+                 ((ImageView) view).setImageTintList(color);
+                 break;
+@@ -145,6 +155,7 @@ public final class AppThemeViewRegistry {
+     private enum Property {
+         BACKGROUND_TINT,
+         TEXT_COLOR,
++        HINT_TEXT_COLOR,
+         IMAGE_TINT,
+         BUTTON_TINT,
+         PROGRESS_TINT
+

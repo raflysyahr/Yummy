@@ -49,24 +49,32 @@ public final class AppThemeFallbacks {
         addResource(resources, packageName, builder, AppThemeColorRole.EDITOR_BACKGROUND, "yummy_bg");
         addResource(resources, packageName, builder, AppThemeColorRole.EDITOR_FOREGROUND, "yummy_text");
         addResource(resources, packageName, builder, AppThemeColorRole.TAB_BAR_BACKGROUND, "yummy_bar");
-        addResource(resources, packageName, builder, AppThemeColorRole.TAB_ACTIVE_BACKGROUND, "yummy_bar");
+        addResource(resources, packageName, builder, AppThemeColorRole.TAB_ACTIVE_BACKGROUND, "yummy_tab_active");
         addResource(resources, packageName, builder, AppThemeColorRole.TAB_ACTIVE_FOREGROUND, "yummy_text");
         addResource(resources, packageName, builder, AppThemeColorRole.TAB_INACTIVE_BACKGROUND, "yummy_bar");
         addResource(resources, packageName, builder, AppThemeColorRole.TAB_INACTIVE_FOREGROUND, "yummy_text_dim");
         addResource(resources, packageName, builder, AppThemeColorRole.STATUS_BAR_BACKGROUND, "yummy_bar");
         addResource(resources, packageName, builder, AppThemeColorRole.STATUS_BAR_FOREGROUND, "yummy_text");
+        addResource(resources, packageName, builder, AppThemeColorRole.SURFACE_BACKGROUND, "yummy_sheet_bg");
+        addResource(resources, packageName, builder, AppThemeColorRole.SURFACE_FOREGROUND, "yummy_text");
         addResource(resources, packageName, builder, AppThemeColorRole.PRIMARY_TEXT, "yummy_text");
         addResource(resources, packageName, builder, AppThemeColorRole.SECONDARY_TEXT, "yummy_text_dim");
         addResource(resources, packageName, builder, AppThemeColorRole.DIVIDER, "yummy_divider");
         addResource(resources, packageName, builder, AppThemeColorRole.ACCENT, "yummy_accent_green");
-        addResource(resources, packageName, builder, AppThemeColorRole.SURFACE_BACKGROUND, "yummy_bg");
-        addResource(resources, packageName, builder, AppThemeColorRole.SURFACE_FOREGROUND, "yummy_text");
+        addResource(resources, packageName, builder, AppThemeColorRole.ACCENT_FOREGROUND, "yummy_bg");
+        addResource(resources, packageName, builder, AppThemeColorRole.SELECTION_BACKGROUND, "yummy_tab_active");
+        addResource(resources, packageName, builder, AppThemeColorRole.SELECTION_FOREGROUND, "yummy_text");
+        addResource(resources, packageName, builder, AppThemeColorRole.HOVER_BACKGROUND, "yummy_line_current");
         addResource(resources, packageName, builder, AppThemeColorRole.INPUT_BACKGROUND, "yummy_bg");
         addResource(resources, packageName, builder, AppThemeColorRole.INPUT_FOREGROUND, "yummy_text");
         addResource(resources, packageName, builder, AppThemeColorRole.INPUT_BORDER, "yummy_divider");
-        addResource(resources, packageName, builder, AppThemeColorRole.POPUP_BACKGROUND, "yummy_bg");
+        addResource(resources, packageName, builder, AppThemeColorRole.BUTTON_BACKGROUND, "yummy_accent_green");
+        addResource(resources, packageName, builder, AppThemeColorRole.BUTTON_FOREGROUND, "yummy_bg");
+        addResource(resources, packageName, builder, AppThemeColorRole.POPUP_BACKGROUND, "yummy_sheet_bg");
         addResource(resources, packageName, builder, AppThemeColorRole.POPUP_FOREGROUND, "yummy_text");
         addResource(resources, packageName, builder, AppThemeColorRole.ICON_FOREGROUND, "yummy_text");
+        // Yummy currently has no dedicated ERROR/WARNING/INFO color resources. Those roles
+        // intentionally remain unresolved instead of borrowing an unrelated semantic color.
         return builder.build();
     }
 
