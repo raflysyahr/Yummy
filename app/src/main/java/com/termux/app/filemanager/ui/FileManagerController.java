@@ -1736,17 +1736,6 @@ public final class FileManagerController {
             bindSidebarText(emptyView, AppThemeColorRole.SECONDARY_TEXT);
             bindSidebarProgress(progressBar, AppThemeColorRole.ACCENT);
 
-            // Action-bar items are TextViews with compound VectorDrawable icons.
-            // Bind text and icon tint independently on the same View.
-            for (int i = 0; i < actionBar.getChildCount(); i++) {
-                View child = actionBar.getChildAt(i);
-                if (child instanceof TextView) {
-                    TextView action = (TextView) child;
-                    appThemeController.bindText(action, AppThemeColorRole.TOOLBAR_FOREGROUND);
-                    appThemeController.bindCompoundDrawables(
-                        action, AppThemeColorRole.TOOLBAR_FOREGROUND);
-                }
-            }
         }
 
         private void bindSidebarBackground(@Nullable View view, AppThemeColorRole role) {
@@ -1895,9 +1884,9 @@ public final class FileManagerController {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -1);
             actionBar.addView(button, lp);
             if (appThemeController != null) {
+                // Theme the label only. The icon is a multi-color artwork drawable and
+                // must retain its original colors.
                 appThemeController.bindText(button, AppThemeColorRole.TOOLBAR_FOREGROUND);
-                appThemeController.bindCompoundDrawables(
-                    button, AppThemeColorRole.TOOLBAR_FOREGROUND);
             }
             button.setOnClickListener(v -> action.run());
         }

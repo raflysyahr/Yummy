@@ -10,8 +10,6 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import androidx.core.widget.TextViewCompat;
-
 import com.termux.app.theme.model.AppThemeColorRole;
 import com.termux.app.theme.model.ResolvedAppTheme;
 
@@ -56,11 +54,6 @@ public final class AppThemeViewRegistry {
 
     private static boolean isVectorDrawable(Drawable drawable) {
         return drawable instanceof VectorDrawable;
-    }
-
-    /** Tints all compound drawables on a TextView without changing its text color. */
-    public void bindCompoundDrawableTint(TextView view, AppThemeColorRole role) {
-        bind(view, role, Property.COMPOUND_DRAWABLE_TINT);
     }
 
     public void bindButtonTint(CompoundButton view, AppThemeColorRole role) {
@@ -150,8 +143,6 @@ public final class AppThemeViewRegistry {
                 return ((TextView) view).getHintTextColors();
             case IMAGE_TINT:
                 return ((ImageView) view).getImageTintList();
-            case COMPOUND_DRAWABLE_TINT:
-                return TextViewCompat.getCompoundDrawableTintList((TextView) view);
             case BUTTON_TINT:
                 return ((CompoundButton) view).getButtonTintList();
             case PROGRESS_TINT:
@@ -175,9 +166,6 @@ public final class AppThemeViewRegistry {
             case IMAGE_TINT:
                 ((ImageView) view).setImageTintList(color);
                 break;
-            case COMPOUND_DRAWABLE_TINT:
-                TextViewCompat.setCompoundDrawableTintList((TextView) view, color);
-                break;
             case BUTTON_TINT:
                 ((CompoundButton) view).setButtonTintList(color);
                 break;
@@ -200,7 +188,6 @@ public final class AppThemeViewRegistry {
         TEXT_COLOR,
         HINT_TEXT_COLOR,
         IMAGE_TINT,
-        COMPOUND_DRAWABLE_TINT,
         BUTTON_TINT,
         PROGRESS_TINT
     }

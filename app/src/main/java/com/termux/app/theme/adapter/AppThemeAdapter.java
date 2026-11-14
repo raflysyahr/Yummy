@@ -144,7 +144,7 @@ public final class AppThemeAdapter {
         put(mappings, AppThemeColorRole.BUTTON_FOREGROUND, "button.foreground");
         put(mappings, AppThemeColorRole.POPUP_BACKGROUND, "menu.background");
         put(mappings, AppThemeColorRole.POPUP_FOREGROUND, "menu.foreground");
-        put(mappings, AppThemeColorRole.ICON_FOREGROUND, "icon.foreground");
+        put(mappings, AppThemeColorRole.ICON_FOREGROUND, "activityBar.foreground");
         put(mappings, AppThemeColorRole.ERROR, "errorForeground");
         put(mappings, AppThemeColorRole.WARNING, "editorWarning.foreground");
         put(mappings, AppThemeColorRole.INFO, "editorInfo.foreground");
