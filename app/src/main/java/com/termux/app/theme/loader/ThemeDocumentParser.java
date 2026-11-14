@@ -155,12 +155,18 @@ public final class ThemeDocumentParser {
                     requireHexColor(value, path + ".foreground");
                     break;
                 case "background":
-                case "fontStyle":
                 case "fontFamily":
                     if (!(value instanceof String)) {
                         throw new ThemeLoadException(path + "." + key + " must be a string");
                     }
-                    if ("fontStyle".equals(key)) validateFontStyle((String) value, path + ".fontStyle");
+                    break;
+                case "fontStyle":
+                    if (!(value instanceof String)) {
+                        throw new ThemeLoadException(path + ".fontStyle must be a string");
+                    }
+                    // Preserve VS Code/TextMate fontStyle values. The downstream Sora TextMate
+                    // theme engine interprets supported style flags; aliases such as "normal"
+                    // and "regular" must not make an otherwise valid theme fail to import.
                     break;
                 case "fontSize":
                 case "lineHeight":
@@ -224,7 +230,8 @@ public final class ThemeDocumentParser {
                     if (!(value instanceof String)) {
                         throw new ThemeLoadException(path + ".fontStyle must be a string");
                     }
-                    validateFontStyle((String) value, path + ".fontStyle");
+                    // Semantic styles are retained for forward compatibility; keep their
+                    // fontStyle strings instead of applying a narrower Yummy-only whitelist.
                     break;
                 case "bold":
                 case "italic":
@@ -237,18 +244,6 @@ public final class ThemeDocumentParser {
                 default:
                     // Kept extensible to avoid rejecting future VS Code semantic style fields.
                     break;
-            }
-        }
-    }
-
-    private static void validateFontStyle(String value, String path) throws ThemeLoadException {
-        String normalized = value.trim();
-        if (normalized.isEmpty() || "normal".equals(normalized)) return; // Empty string explicitly clears inherited styles.
-        String[] styles = normalized.split("\\s+");
-        for (String style : styles) {
-            if (!"italic".equals(style) && !"bold".equals(style)
-                && !"underline".equals(style) && !"strikethrough".equals(style)) {
-                throw new ThemeLoadException("Unsupported font style '" + style + "' at " + path);
             }
         }
     }

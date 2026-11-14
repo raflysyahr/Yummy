@@ -7,6 +7,7 @@ import com.termux.app.theme.io.ThemeResourceReader;
 import com.termux.app.theme.model.ResolvedEditorTheme;
 
 import org.eclipse.tm4e.core.registry.IThemeSource;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -94,6 +95,7 @@ public final class SoraEditorThemeApplier {
 
         if (theme.hasInlineTokenColors()) {
             JSONObject document = theme.toTextMateThemeDocument();
+            normalizeInlineTokenFontStyles(document.optJSONArray("tokenColors"));
             if (baseColors != null) {
                 document.put("colors", new JSONObject(baseColors.toString()));
             }
@@ -129,6 +131,60 @@ public final class SoraEditorThemeApplier {
             null
         );
         return new PreparedTheme(source, registryName);
+    }
+
+    /**
+     * Normalizes VS Code fontStyle values before passing the generated document to TM4E.
+     * Sora's TextMate renderer consumes the standard TextMate flags; common aliases such as
+     * "normal" and "regular" become an empty style (clear inherited decorations), while
+     * supported flags are retained. Unknown words are ignored instead of blocking the theme.
+     * The installed source theme JSON is not modified because this operates on a defensive copy.
+     */
+    private static void normalizeInlineTokenFontStyles(JSONArray rules) throws JSONException {
+        if (rules == null) return;
+        for (int i = 0; i < rules.length(); i++) {
+            JSONObject rule = rules.optJSONObject(i);
+            if (rule == null) continue;
+            JSONObject settings = rule.optJSONObject("settings");
+            if (settings == null || !settings.has("fontStyle")) continue;
+            Object value = settings.opt("fontStyle");
+            if (value instanceof String) {
+                settings.put("fontStyle", normalizeFontStyle((String) value));
+            }
+        }
+    }
+
+    private static String normalizeFontStyle(String value) {
+        if (value == null || value.trim().isEmpty()) return "";
+        String[] words = value.trim().toLowerCase(Locale.ROOT).split("\\s+");
+        java.util.LinkedHashSet<String> flags = new java.util.LinkedHashSet<>();
+        for (String word : words) {
+            switch (word) {
+                case "bold":
+                case "italic":
+                case "underline":
+                case "strikethrough":
+                    flags.add(word);
+                    break;
+                case "oblique":
+                    flags.add("italic");
+                    break;
+                case "strike":
+                case "line-through":
+                    flags.add("strikethrough");
+                    break;
+                case "normal":
+                case "regular":
+                case "none":
+                case "plain":
+                    // No decoration; an empty result also clears inherited TextMate styles.
+                    break;
+                default:
+                    // Ignore font-style aliases that the TextMate renderer cannot represent.
+                    break;
+            }
+        }
+        return String.join(" ", flags);
     }
 
     private static JSONObject readBaseDocument(String baseThemeJson) throws JSONException {

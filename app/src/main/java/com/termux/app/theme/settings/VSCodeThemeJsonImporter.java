@@ -27,6 +27,8 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -94,6 +96,7 @@ public final class VSCodeThemeJsonImporter {
         boolean supportsEditorSyntax = tokenRules != null && tokenRules.length() > 0;
         String tokenReference = parsed.getTokenColorsReference();
         List<String> warnings = new ArrayList<>();
+        collectUnsupportedFontStyles(tokenRules, warnings);
         if (tokenReference != null) {
             warnings.add("This theme references an external TextMate file ('" + tokenReference
                 + "'). Select a complete theme package in a future package-import workflow to include it.");
@@ -123,6 +126,50 @@ public final class VSCodeThemeJsonImporter {
             tokenReference,
             warnings
         );
+    }
+
+    /**
+     * Reports fontStyle words that cannot be mapped to Sora's TextMate style flags.
+     * The import remains available: the applier keeps supported parts and ignores unknown words.
+     */
+    private static void collectUnsupportedFontStyles(
+        JSONArray tokenRules,
+        List<String> warnings
+    ) {
+        if (tokenRules == null || tokenRules.length() == 0) return;
+        Set<String> unsupported = new LinkedHashSet<>();
+        for (int i = 0; i < tokenRules.length(); i++) {
+            JSONObject rule = tokenRules.optJSONObject(i);
+            if (rule == null) continue;
+            JSONObject settings = rule.optJSONObject("settings");
+            if (settings == null || !settings.has("fontStyle")) continue;
+            String value = settings.optString("fontStyle", "").trim().toLowerCase(Locale.ROOT);
+            if (value.isEmpty()) continue;
+            for (String word : value.split("\\s+")) {
+                switch (word) {
+                    case "bold":
+                    case "italic":
+                    case "underline":
+                    case "strikethrough":
+                    case "normal":
+                    case "regular":
+                    case "none":
+                    case "plain":
+                    case "oblique":
+                    case "strike":
+                    case "line-through":
+                        break;
+                    default:
+                        unsupported.add(word);
+                        break;
+                }
+            }
+        }
+        if (!unsupported.isEmpty()) {
+            warnings.add("Some fontStyle words are not supported by Sora TextMate and will be "
+                + "ignored: " + android.text.TextUtils.join(", ", unsupported)
+                + ". Supported bold, italic, underline, and strikethrough styles are still applied.");
+        }
     }
 
     /**

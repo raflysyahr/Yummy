@@ -13,6 +13,8 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
+import android.text.style.StrikethroughSpan;
+import android.text.style.UnderlineSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -1153,10 +1155,16 @@ public final class ThemeSettingsController {
         if (start < 0 || token.isEmpty()) return;
         int end = start + token.length();
         text.setSpan(new ForegroundColorSpan(style.color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        if (style.bold) {
-            text.setSpan(new StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        } else if (style.italic) {
-            text.setSpan(new StyleSpan(Typeface.ITALIC), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        int typefaceStyle = (style.bold ? Typeface.BOLD : Typeface.NORMAL)
+            | (style.italic ? Typeface.ITALIC : Typeface.NORMAL);
+        if (typefaceStyle != Typeface.NORMAL) {
+            text.setSpan(new StyleSpan(typefaceStyle), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        if (style.underline) {
+            text.setSpan(new UnderlineSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        if (style.strikethrough) {
+            text.setSpan(new StrikethroughSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
     }
 
@@ -1178,11 +1186,55 @@ public final class ThemeSettingsController {
                     // Keep the previous matching rule or the preview fallback.
                 }
             }
-            String fontStyle = settings.optString("fontStyle", "").toLowerCase(Locale.ROOT);
-            if (fontStyle.contains("bold")) result.bold = true;
-            if (fontStyle.contains("italic")) result.italic = true;
+            if (settings.has("fontStyle")) {
+                applyPreviewFontStyle(result, settings.optString("fontStyle", ""));
+            }
         }
         return result;
+    }
+
+    /**
+     * Mirrors TextMate fontStyle flags for the lightweight preview.
+     * An explicit empty/normal/regular value clears styles from earlier matching rules.
+     * Unknown words are ignored; the original tokenColors JSON is retained for Sora.
+     */
+    private static void applyPreviewFontStyle(SyntaxStyle result, String fontStyle) {
+        result.bold = false;
+        result.italic = false;
+        result.underline = false;
+        result.strikethrough = false;
+        if (fontStyle == null || fontStyle.trim().isEmpty()) return;
+
+        String normalized = fontStyle.trim().toLowerCase(Locale.ROOT);
+        String[] styles = normalized.split("\\s+");
+        for (String style : styles) {
+            switch (style) {
+                case "bold":
+                    result.bold = true;
+                    break;
+                case "italic":
+                case "oblique":
+                    result.italic = true;
+                    break;
+                case "underline":
+                    result.underline = true;
+                    break;
+                case "strikethrough":
+                case "strike":
+                case "line-through":
+                    result.strikethrough = true;
+                    break;
+                case "normal":
+                case "regular":
+                case "none":
+                case "plain":
+                    // No decoration; flags were reset before parsing this rule.
+                    break;
+                default:
+                    // Unknown style words do not prevent the rest of the preview.
+                    break;
+            }
+        }
     }
 
     private static boolean scopeMatches(Object rawScope, String wanted) {
@@ -1431,6 +1483,8 @@ public final class ThemeSettingsController {
         int color;
         boolean bold;
         boolean italic;
+        boolean underline;
+        boolean strikethrough;
 
         SyntaxStyle(int color, boolean bold, boolean italic) {
             this.color = color;
