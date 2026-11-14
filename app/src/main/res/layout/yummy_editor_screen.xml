@@ -31,6 +31,7 @@
             tools:ignore="HardcodedText" />
 
         <ImageView
+            android:id="@+id/yummy_app_file_icon"
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:layout_marginStart="8dp"

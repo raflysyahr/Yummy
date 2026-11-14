@@ -853,6 +853,9 @@ public final class FileManagerController {
             ? R.drawable.yummy_popup_folder_icon : R.drawable.yummy_popup_file_icon);
         leadingIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         leadingIcon.setContentDescription(directoryIcon ? "Folder" : "File");
+        if (appThemeController != null) {
+            appThemeController.bindIcon(leadingIcon, AppThemeColorRole.ICON_FOREGROUND);
+        }
         heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         View divider = new View(activity);
@@ -868,8 +871,10 @@ public final class FileManagerController {
 
         ImageButton closeButton = new ImageButton(activity);
         closeButton.setImageResource(R.drawable.ic_yummy_close);
-        closeButton.setColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN);
         closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        if (appThemeController != null) {
+            appThemeController.bindIcon(closeButton, AppThemeColorRole.ICON_FOREGROUND);
+        }
         closeButton.setPadding(dp(8), dp(8), dp(8), dp(8));
         GradientDrawable closeBackground = roundRect(0x14FFFFFF, dp(16));
         closeBackground.setShape(GradientDrawable.OVAL);
@@ -1730,6 +1735,18 @@ public final class FileManagerController {
             }
             bindSidebarText(emptyView, AppThemeColorRole.SECONDARY_TEXT);
             bindSidebarProgress(progressBar, AppThemeColorRole.ACCENT);
+
+            // Action-bar items are TextViews with compound VectorDrawable icons.
+            // Bind text and icon tint independently on the same View.
+            for (int i = 0; i < actionBar.getChildCount(); i++) {
+                View child = actionBar.getChildAt(i);
+                if (child instanceof TextView) {
+                    TextView action = (TextView) child;
+                    appThemeController.bindText(action, AppThemeColorRole.TOOLBAR_FOREGROUND);
+                    appThemeController.bindCompoundDrawables(
+                        action, AppThemeColorRole.TOOLBAR_FOREGROUND);
+                }
+            }
         }
 
         private void bindSidebarBackground(@Nullable View view, AppThemeColorRole role) {
@@ -1816,7 +1833,6 @@ public final class FileManagerController {
             icon.setImageResource(iconResource);
             icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             icon.setContentDescription(label);
-            icon.setColorFilter(0xFFE8EAED, android.graphics.PorterDuff.Mode.SRC_IN);
             icon.setBackground(selected ? roundRect(0xFF292C35, dp(12)) :
                 new ColorDrawable(Color.TRANSPARENT));
             LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(38), dp(38));
@@ -1880,6 +1896,8 @@ public final class FileManagerController {
             actionBar.addView(button, lp);
             if (appThemeController != null) {
                 appThemeController.bindText(button, AppThemeColorRole.TOOLBAR_FOREGROUND);
+                appThemeController.bindCompoundDrawables(
+                    button, AppThemeColorRole.TOOLBAR_FOREGROUND);
             }
             button.setOnClickListener(v -> action.run());
         }

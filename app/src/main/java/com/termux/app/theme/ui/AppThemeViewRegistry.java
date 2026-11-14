@@ -8,9 +8,12 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.core.widget.TextViewCompat;
+
 import com.termux.app.theme.model.AppThemeColorRole;
 import com.termux.app.theme.model.ResolvedAppTheme;
 
+import java.util.EnumMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -25,7 +28,7 @@ import java.util.WeakHashMap;
  * Views alive when an owner forgets to unbind them.</p>
  */
 public final class AppThemeViewRegistry {
-    private final WeakHashMap<View, Binding> bindings = new WeakHashMap<>();
+    private final WeakHashMap<View, EnumMap<Property, Binding>> bindings = new WeakHashMap<>();
     private ResolvedAppTheme currentTheme;
 
     public void bindBackgroundTint(View view, AppThemeColorRole role) {
@@ -45,6 +48,11 @@ public final class AppThemeViewRegistry {
         bind(view, role, Property.IMAGE_TINT);
     }
 
+    /** Tints all compound drawables on a TextView without changing its text color. */
+    public void bindCompoundDrawableTint(TextView view, AppThemeColorRole role) {
+        bind(view, role, Property.COMPOUND_DRAWABLE_TINT);
+    }
+
     public void bindButtonTint(CompoundButton view, AppThemeColorRole role) {
         bind(view, role, Property.BUTTON_TINT);
     }
@@ -57,10 +65,13 @@ public final class AppThemeViewRegistry {
     public void apply(ResolvedAppTheme theme) {
         requireMainThread();
         currentTheme = theme;
-        for (Map.Entry<View, Binding> entry : bindings.entrySet()) {
+        for (Map.Entry<View, EnumMap<Property, Binding>> entry : bindings.entrySet()) {
             View view = entry.getKey();
-            Binding binding = entry.getValue();
-            if (view != null && binding != null) binding.apply(view, currentTheme);
+            EnumMap<Property, Binding> viewBindings = entry.getValue();
+            if (view == null || viewBindings == null) continue;
+            for (Binding binding : viewBindings.values()) {
+                if (binding != null) binding.apply(view, currentTheme);
+            }
         }
     }
 
@@ -68,17 +79,24 @@ public final class AppThemeViewRegistry {
     public void unbind(View view) {
         requireMainThread();
         if (view == null) return;
-        Binding binding = bindings.remove(view);
-        if (binding != null) binding.restore(view);
+        EnumMap<Property, Binding> viewBindings = bindings.remove(view);
+        if (viewBindings != null) {
+            for (Binding binding : viewBindings.values()) {
+                if (binding != null) binding.restore(view);
+            }
+        }
     }
 
     /** Restores all bound Views and forgets every binding. */
     public void clear() {
         requireMainThread();
-        for (Map.Entry<View, Binding> entry : bindings.entrySet()) {
+        for (Map.Entry<View, EnumMap<Property, Binding>> entry : bindings.entrySet()) {
             View view = entry.getKey();
-            Binding binding = entry.getValue();
-            if (view != null && binding != null) binding.restore(view);
+            EnumMap<Property, Binding> viewBindings = entry.getValue();
+            if (view == null || viewBindings == null) continue;
+            for (Binding binding : viewBindings.values()) {
+                if (binding != null) binding.restore(view);
+            }
         }
         bindings.clear();
         currentTheme = null;
@@ -86,7 +104,11 @@ public final class AppThemeViewRegistry {
 
     public int getBindingCount() {
         requireMainThread();
-        return bindings.size();
+        int count = 0;
+        for (EnumMap<Property, Binding> viewBindings : bindings.values()) {
+            if (viewBindings != null) count += viewBindings.size();
+        }
+        return count;
     }
 
     private void bind(View view, AppThemeColorRole role, Property property) {
@@ -94,11 +116,17 @@ public final class AppThemeViewRegistry {
         if (view == null) throw new IllegalArgumentException("View is required");
         if (role == null) throw new IllegalArgumentException("Theme color role is required");
 
-        Binding previous = bindings.remove(view);
+        EnumMap<Property, Binding> viewBindings = bindings.get(view);
+        if (viewBindings == null) {
+            viewBindings = new EnumMap<>(Property.class);
+            bindings.put(view, viewBindings);
+        }
+
+        Binding previous = viewBindings.remove(property);
         if (previous != null) previous.restore(view);
 
         Binding binding = new Binding(role, property, readOriginal(view, property));
-        bindings.put(view, binding);
+        viewBindings.put(property, binding);
         binding.apply(view, currentTheme);
     }
 
@@ -112,6 +140,8 @@ public final class AppThemeViewRegistry {
                 return ((TextView) view).getHintTextColors();
             case IMAGE_TINT:
                 return ((ImageView) view).getImageTintList();
+            case COMPOUND_DRAWABLE_TINT:
+                return TextViewCompat.getCompoundDrawableTintList((TextView) view);
             case BUTTON_TINT:
                 return ((CompoundButton) view).getButtonTintList();
             case PROGRESS_TINT:
@@ -135,6 +165,9 @@ public final class AppThemeViewRegistry {
             case IMAGE_TINT:
                 ((ImageView) view).setImageTintList(color);
                 break;
+            case COMPOUND_DRAWABLE_TINT:
+                TextViewCompat.setCompoundDrawableTintList((TextView) view, color);
+                break;
             case BUTTON_TINT:
                 ((CompoundButton) view).setButtonTintList(color);
                 break;
@@ -157,6 +190,7 @@ public final class AppThemeViewRegistry {
         TEXT_COLOR,
         HINT_TEXT_COLOR,
         IMAGE_TINT,
+        COMPOUND_DRAWABLE_TINT,
         BUTTON_TINT,
         PROGRESS_TINT
     }

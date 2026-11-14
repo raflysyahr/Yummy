@@ -820,6 +820,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         bindAppIcon(R.id.yummy_status_encoding_chevron, AppThemeColorRole.SECONDARY_TEXT);
         bindAppIcon(R.id.yummy_btn_menu, AppThemeColorRole.ICON_FOREGROUND);
+        bindAppIcon(R.id.yummy_app_file_icon, AppThemeColorRole.ACCENT);
         bindAppIcon(R.id.yummy_btn_terminal, AppThemeColorRole.ICON_FOREGROUND);
         bindAppIcon(R.id.yummy_btn_search, AppThemeColorRole.ICON_FOREGROUND);
         bindAppIcon(R.id.yummy_btn_run, AppThemeColorRole.ACCENT);

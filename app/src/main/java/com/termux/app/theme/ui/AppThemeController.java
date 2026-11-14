@@ -94,6 +94,11 @@ public final class AppThemeController {
         viewRegistry.bindImageTint(view, role);
     }
 
+    /** Binds compound icons on TextViews (for example File Manager action-bar items). */
+    public void bindCompoundDrawables(TextView view, AppThemeColorRole role) {
+        viewRegistry.bindCompoundDrawableTint(view, role);
+    }
+
     public void bindButton(CompoundButton view, AppThemeColorRole role) {
         viewRegistry.bindButtonTint(view, role);
     }
