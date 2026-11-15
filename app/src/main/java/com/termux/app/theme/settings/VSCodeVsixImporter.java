@@ -13,12 +13,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -28,24 +26,35 @@ import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.zip.ZipFile;
 
 /**
  * Imports VS Code extensions directly from their .vsix archive.
  *
- * <p>The importer reads extension/package.json, discovers contributes.themes, validates each
+ * <p>The importer reads extension/package.json, discovers theme contributions, validates each
  * declared Color Theme document, and installs each selected contribution as an independent
- * Yummy package. The theme document and referenced TextMate resource are retained (JSONC syntax is normalized).</p>
+ * Yummy package. Archive entries are indexed first; only declared theme documents, referenced
+ * TextMate resources, icon-theme manifests/assets, and the license are extracted. JSONC syntax
+ * is normalized for documents consumed by Yummy.</p>
  */
 public final class VSCodeVsixImporter {
     private static final long MAX_ARCHIVE_BYTES = 16L * 1024L * 1024L;
     private static final long MAX_EXPANDED_BYTES = 32L * 1024L * 1024L;
     private static final long MAX_FILE_BYTES = 4L * 1024L * 1024L;
-    private static final int MAX_ENTRIES = 512;
+    // VSIX extensions may contain thousands of SVG icons. Count every central-directory
+    // entry for safety, but extract only manifest-declared theme documents and their assets.
+    private static final int MAX_ARCHIVE_ENTRIES = 20000;
+    private static final int MAX_SELECTED_ENTRIES = 10000;
+    private static final int MAX_ICON_THEME_DOCUMENTS = 128;
     private static final int MAX_THEMES = 64;
     private static final int MAX_JSON_BYTES = 2 * 1024 * 1024;
 
@@ -232,74 +241,438 @@ public final class VSCodeVsixImporter {
         if (preview != null) deleteTree(preview.getStagingRoot());
     }
 
-    private static void extractExtension(InputStream source, File stagingRoot) throws IOException {
-        int entries = 0;
-        long expandedBytes = 0L;
-        byte[] buffer = new byte[8192];
-        try (ZipInputStream zip = new ZipInputStream(
-            new BufferedInputStream(new BoundedInputStream(source, MAX_ARCHIVE_BYTES)))) {
-            ZipEntry entry;
-            while ((entry = zip.getNextEntry()) != null) {
-                if (++entries > MAX_ENTRIES) throw new IOException("VSIX contains too many archive entries");
-                String path = validateArchivePath(entry.getName(), entry.isDirectory());
-                if (entry.isDirectory()) {
-                    if (path.startsWith("extension/") || "extension".equals(path)) {
-                        File directory = new File(stagingRoot, path);
-                        ensureInside(stagingRoot, directory);
-                        if (!directory.isDirectory() && !directory.mkdirs()) {
-                            throw new IOException("Could not create VSIX extension directory");
-                        }
-                    }
-                    if (zip.read() != -1) {
-                        throw new IOException("VSIX directory entry contains unexpected data");
-                    }
-                    zip.closeEntry();
-                    continue;
+    private void extractExtension(InputStream source, File stagingRoot)
+        throws IOException, JSONException, ThemeImportException {
+        File archiveFile = new File(stagingRoot, ".source.vsix");
+        try {
+            copyBoundedArchive(source, archiveFile);
+            try (ZipFile archive = new ZipFile(archiveFile)) {
+                Map<String, ZipEntry> entries = indexArchiveEntries(archive);
+                ZipEntry packageEntry = entries.get("extension/package.json");
+                if (packageEntry == null || packageEntry.isDirectory()) {
+                    throw new IOException("VSIX does not contain extension/package.json");
                 }
 
-                // VSIX metadata outside extension/ is not needed to load Color Themes.
-                if (!path.startsWith("extension/")) {
-                    long ignoredFileBytes = 0L;
-                    int ignoredCount;
-                    while ((ignoredCount = zip.read(buffer)) != -1) {
-                        ignoredFileBytes += ignoredCount;
-                        expandedBytes += ignoredCount;
-                        if (ignoredFileBytes > MAX_FILE_BYTES) {
-                            throw new IOException("A VSIX archive file exceeds the 4 MiB extraction limit");
-                        }
-                        if (expandedBytes > MAX_EXPANDED_BYTES) {
-                            throw new IOException("Expanded VSIX exceeds the 32 MiB extraction limit");
-                        }
-                    }
-                    zip.closeEntry();
-                    continue;
+                String manifestText = readArchiveEntryUtf8(archive, packageEntry, MAX_JSON_BYTES);
+                JSONObject manifest = new JSONObject(
+                    ThemeDocumentParser.normalizeJsonc(manifestText));
+                Set<String> requiredPaths = new LinkedHashSet<>();
+                Set<String> optionalPaths = new LinkedHashSet<>();
+                collectRequiredArchiveEntries(
+                    archive, entries, manifest, requiredPaths, optionalPaths);
+
+                if (requiredPaths.size() > MAX_SELECTED_ENTRIES) {
+                    throw new IOException("VSIX declares too many required theme resources");
                 }
 
-                File output = new File(stagingRoot, path);
-                ensureInside(stagingRoot, output);
-                File parent = output.getParentFile();
-                if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
-                    throw new IOException("Could not create VSIX resource directory");
+                long expandedBytes = 0L;
+                int extractedEntries = 0;
+                for (String path : requiredPaths) {
+                    ZipEntry entry = entries.get(path);
+                    if (entry == null || entry.isDirectory()) {
+                        throw new IOException("VSIX theme resource is missing: " + path);
+                    }
+                    expandedBytes = extractSelectedEntry(
+                        archive, entry, stagingRoot, expandedBytes);
+                    extractedEntries++;
                 }
-                if (!output.createNewFile()) throw new IOException("VSIX contains a duplicate file path");
-                long fileBytes = 0L;
-                try (FileOutputStream file = new FileOutputStream(output)) {
-                    int count;
-                    while ((count = zip.read(buffer)) != -1) {
-                        fileBytes += count;
-                        expandedBytes += count;
-                        if (fileBytes > MAX_FILE_BYTES) {
-                            throw new IOException("A VSIX file exceeds the 4 MiB extraction limit");
-                        }
-                        if (expandedBytes > MAX_EXPANDED_BYTES) {
-                            throw new IOException("Expanded VSIX exceeds the 32 MiB extraction limit");
-                        }
-                        file.write(buffer, 0, count);
+
+                // Icon assets are optional during Color Theme import. Extract them only when
+                // they fit the same per-file, total-size, and selected-entry budgets.
+                for (String path : optionalPaths) {
+                    if (requiredPaths.contains(path)) continue;
+                    if (extractedEntries >= MAX_SELECTED_ENTRIES) break;
+                    ZipEntry entry = entries.get(path);
+                    if (entry == null || entry.isDirectory()) continue;
+                    long declaredSize = entry.getSize();
+                    if (declaredSize < 0L || declaredSize > MAX_FILE_BYTES
+                        || expandedBytes + declaredSize > MAX_EXPANDED_BYTES) {
+                        continue;
+                    }
+                    try {
+                        expandedBytes = extractSelectedEntry(
+                            archive, entry, stagingRoot, expandedBytes);
+                        extractedEntries++;
+                    } catch (IOException optionalAssetError) {
+                        File incomplete = new File(stagingRoot, path);
+                        //noinspection ResultOfMethodCallIgnored
+                        incomplete.delete();
+                        // A broken/oversized optional icon must not block Color Theme import.
                     }
                 }
-                zip.closeEntry();
+            }
+        } finally {
+            // The compressed source archive is only a temporary random-access index.
+            // The staging directory retains only selected theme documents and assets.
+            //noinspection ResultOfMethodCallIgnored
+            archiveFile.delete();
+        }
+    }
+
+    private static Map<String, ZipEntry> indexArchiveEntries(ZipFile archive)
+        throws IOException {
+        Map<String, ZipEntry> entries = new LinkedHashMap<>();
+        Enumeration<? extends ZipEntry> enumeration = archive.entries();
+        int count = 0;
+        while (enumeration.hasMoreElements()) {
+            ZipEntry entry = enumeration.nextElement();
+            if (++count > MAX_ARCHIVE_ENTRIES) {
+                throw new IOException("VSIX contains too many archive entries (limit "
+                    + MAX_ARCHIVE_ENTRIES + ")");
+            }
+
+            String path = validateArchivePath(entry.getName(), entry.isDirectory());
+            if (entries.put(path, entry) != null) {
+                throw new IOException("VSIX contains a duplicate archive path: " + path);
             }
         }
+        return entries;
+    }
+
+    /**
+     * Builds a whitelist from package.json and the documents referenced by its contributions.
+     * Color theme JSON and TextMate references are required. Icon and product-icon theme
+     * documents/assets are collected opportunistically so later import stages can use them,
+     * without making a broken optional icon contribution block Color Theme import.
+     */
+    private void collectRequiredArchiveEntries(
+        ZipFile archive,
+        Map<String, ZipEntry> entries,
+        JSONObject manifest,
+        Set<String> required,
+        Set<String> optional
+    ) throws IOException, JSONException, ThemeImportException {
+        addRequiredArchiveEntry(entries, required, "extension/package.json");
+
+        String[] licenseCandidates = {
+            "extension/LICENSE", "extension/LICENSE.txt",
+            "extension/LICENSE.md", "extension/LICENSE-MIT"
+        };
+        for (String candidate : licenseCandidates) {
+            ZipEntry license = entries.get(candidate);
+            if (license != null && !license.isDirectory()) {
+                required.add(candidate);
+                break;
+            }
+        }
+
+        JSONObject contributes = manifest.optJSONObject("contributes");
+        if (contributes == null) return;
+
+        JSONArray themes = contributes.optJSONArray("themes");
+        if (themes != null) {
+            if (themes.length() > MAX_THEMES) {
+                throw new IOException("VSIX declares more than " + MAX_THEMES + " color themes");
+            }
+            for (int i = 0; i < themes.length(); i++) {
+                JSONObject contribution = themes.optJSONObject(i);
+                if (contribution == null) {
+                    throw new IOException("contributes.themes[" + i + "] must be an object");
+                }
+                String rawPath = optionalString(contribution, "path");
+                if (rawPath == null) {
+                    throw new IOException("contributes.themes[" + i + "] must declare path");
+                }
+
+                String themePath = normalizeExtensionPath(rawPath);
+                String archivePath = "extension/" + themePath;
+                ZipEntry themeEntry = entries.get(archivePath);
+                if (themeEntry == null || themeEntry.isDirectory()) {
+                    throw new IOException("Theme file declared by contributes.themes[" + i
+                        + "] does not exist: " + themePath);
+                }
+                required.add(archivePath);
+
+                String themeJson = VSCodeThemeJsonImporter.normalizeJsonc(
+                    readArchiveEntryUtf8(archive, themeEntry, MAX_JSON_BYTES));
+                com.termux.app.theme.model.VSCodeColorTheme parsed;
+                try {
+                    parsed = documentParser.parse(themeJson);
+                } catch (Exception error) {
+                    throw new IOException("Invalid Color Theme at " + themePath + ": "
+                        + safeMessage(error), error);
+                }
+
+                String tokenReference = parsed.getTokenColorsReference();
+                if (tokenReference != null) {
+                    String safeReference = normalizeResourceReference(tokenReference);
+                    addRequiredArchiveEntry(
+                        entries, required, "extension/" + safeReference);
+                }
+            }
+        }
+
+        collectIconThemeResources(
+            archive, entries, contributes.optJSONArray("iconThemes"), optional);
+        collectProductIconThemeResources(
+            archive, entries, contributes.optJSONArray("productIconThemes"), optional);
+    }
+
+    private static void collectIconThemeResources(
+        ZipFile archive,
+        Map<String, ZipEntry> entries,
+        JSONArray contributions,
+        Set<String> optional
+    ) {
+        if (contributions == null) return;
+        int limit = Math.min(contributions.length(), MAX_ICON_THEME_DOCUMENTS);
+        for (int i = 0; i < limit; i++) {
+            JSONObject contribution = contributions.optJSONObject(i);
+            String rawPath = optionalString(contribution, "path");
+            if (rawPath == null) continue;
+
+            final String themePath;
+            try {
+                themePath = normalizeExtensionPath(rawPath);
+            } catch (IOException ignored) {
+                continue;
+            }
+
+            String archivePath = "extension/" + themePath;
+            ZipEntry themeEntry = entries.get(archivePath);
+            if (themeEntry == null || themeEntry.isDirectory()) continue;
+            optional.add(archivePath);
+
+            final JSONObject iconTheme;
+            try {
+                iconTheme = new JSONObject(ThemeDocumentParser.normalizeJsonc(
+                    readArchiveEntryUtf8(archive, themeEntry, MAX_JSON_BYTES)));
+            } catch (Exception ignored) {
+                // A malformed optional icon theme must not prevent Color Theme import.
+                continue;
+            }
+
+            JSONObject definitions = iconTheme.optJSONObject("iconDefinitions");
+            if (definitions == null) continue;
+            java.util.Iterator<String> keys = definitions.keys();
+            while (keys.hasNext()) {
+                JSONObject definition = definitions.optJSONObject(keys.next());
+                String iconPath = optionalString(definition, "iconPath");
+                if (iconPath == null) continue;
+
+                try {
+                    String relativePath = resolveContributionResourcePath(themePath, iconPath);
+                    if (relativePath == null) continue;
+                    addOptionalArchiveEntry(entries, optional, "extension/" + relativePath);
+                } catch (IOException ignored) {
+                    // Unsafe or external icon references are not extracted.
+                }
+            }
+        }
+    }
+
+    private static void collectProductIconThemeResources(
+        ZipFile archive,
+        Map<String, ZipEntry> entries,
+        JSONArray contributions,
+        Set<String> optional
+    ) {
+        if (contributions == null) return;
+        int limit = Math.min(contributions.length(), MAX_ICON_THEME_DOCUMENTS);
+        for (int i = 0; i < limit; i++) {
+            JSONObject contribution = contributions.optJSONObject(i);
+            String rawPath = optionalString(contribution, "path");
+            if (rawPath == null) continue;
+
+            final String themePath;
+            try {
+                themePath = normalizeExtensionPath(rawPath);
+            } catch (IOException ignored) {
+                continue;
+            }
+
+            String archivePath = "extension/" + themePath;
+            ZipEntry themeEntry = entries.get(archivePath);
+            if (themeEntry == null || themeEntry.isDirectory()) continue;
+            optional.add(archivePath);
+
+            final JSONObject productTheme;
+            try {
+                productTheme = new JSONObject(ThemeDocumentParser.normalizeJsonc(
+                    readArchiveEntryUtf8(archive, themeEntry, MAX_JSON_BYTES)));
+            } catch (Exception ignored) {
+                continue;
+            }
+
+            JSONArray fonts = productTheme.optJSONArray("fonts");
+            if (fonts == null) continue;
+            for (int fontIndex = 0; fontIndex < fonts.length(); fontIndex++) {
+                JSONObject font = fonts.optJSONObject(fontIndex);
+                JSONArray sources = font == null ? null : font.optJSONArray("src");
+                if (sources == null) continue;
+                for (int sourceIndex = 0; sourceIndex < sources.length(); sourceIndex++) {
+                    JSONObject fontSource = sources.optJSONObject(sourceIndex);
+                    String fontPath = optionalString(fontSource, "path");
+                    if (fontPath == null) continue;
+                    try {
+                        String relativePath = resolveContributionResourcePath(themePath, fontPath);
+                        if (relativePath != null) {
+                            addOptionalArchiveEntry(
+                                entries, optional, "extension/" + relativePath);
+                        }
+                    } catch (IOException ignored) {
+                        // Unsafe or external font references are not extracted.
+                    }
+                }
+            }
+        }
+    }
+
+    private static void addRequiredArchiveEntry(
+        Map<String, ZipEntry> entries, Set<String> selected, String path
+    ) throws IOException {
+        ZipEntry entry = entries.get(path);
+        if (entry == null || entry.isDirectory()) {
+            throw new IOException("VSIX theme resource is missing: " + path);
+        }
+        selected.add(path);
+    }
+
+    private static void addOptionalArchiveEntry(
+        Map<String, ZipEntry> entries, Set<String> selected, String path
+    ) {
+        ZipEntry entry = entries.get(path);
+        if (entry != null && !entry.isDirectory()) selected.add(path);
+    }
+
+    /**
+     * Resolve a resource path relative to a contribution JSON document. Parent segments are
+     * allowed only while they remain inside the extension root (for example ../icons/a.svg).
+     * External URI references are returned as null and are never downloaded.
+     */
+    private static String resolveContributionResourcePath(
+        String contributionPath, String rawReference
+    ) throws IOException {
+        if (rawReference == null) return null;
+        String reference = rawReference.trim();
+        if (reference.isEmpty()) return null;
+        if (reference.startsWith("//")
+            || reference.matches("^[A-Za-z][A-Za-z0-9+.-]*:.*")) {
+            return null;
+        }
+        if (reference.startsWith("/") || reference.indexOf('\\') >= 0
+            || reference.indexOf('\0') >= 0) {
+            throw new IOException("Icon resource path must be relative");
+        }
+
+        int slash = contributionPath.lastIndexOf('/');
+        String base = slash < 0 ? "" : contributionPath.substring(0, slash);
+        String combined = base.isEmpty() ? reference : base + "/" + reference;
+        List<String> segments = new ArrayList<>();
+        for (String segment : combined.split("/", -1)) {
+            if (segment.isEmpty() || ".".equals(segment)) continue;
+            if ("..".equals(segment)) {
+                if (segments.isEmpty()) {
+                    throw new IOException("Icon resource path escapes extension directory");
+                }
+                segments.remove(segments.size() - 1);
+            } else {
+                if (segment.indexOf(':') >= 0) {
+                    throw new IOException("Icon resource path contains an invalid segment");
+                }
+                segments.add(segment);
+            }
+        }
+        if (segments.isEmpty()) throw new IOException("Icon resource path is empty");
+        StringBuilder normalized = new StringBuilder();
+        for (String segment : segments) {
+            if (normalized.length() > 0) normalized.append('/');
+            normalized.append(segment);
+        }
+        return normalized.toString();
+    }
+
+    private static void copyBoundedArchive(InputStream source, File archiveFile)
+        throws IOException {
+        try (InputStream input = source;
+             FileOutputStream output = new FileOutputStream(archiveFile)) {
+            byte[] buffer = new byte[8192];
+            long total = 0L;
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                total += count;
+                if (total > MAX_ARCHIVE_BYTES) {
+                    throw new IOException("VSIX archive exceeds the 16 MiB compressed size limit");
+                }
+                output.write(buffer, 0, count);
+            }
+            output.flush();
+            output.getFD().sync();
+        }
+    }
+
+    private static String readArchiveEntryUtf8(
+        ZipFile archive, ZipEntry entry, int maximumBytes
+    ) throws IOException {
+        if (entry.getSize() > maximumBytes) {
+            throw new IOException("VSIX JSON exceeds the 2 MiB limit");
+        }
+        try (InputStream input = archive.getInputStream(entry);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int total = 0;
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                total += count;
+                if (total > maximumBytes) {
+                    throw new IOException("VSIX JSON exceeds the 2 MiB limit");
+                }
+                output.write(buffer, 0, count);
+            }
+            try {
+                return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(output.toByteArray())).toString();
+            } catch (CharacterCodingException error) {
+                throw new IOException("VSIX JSON is not valid UTF-8", error);
+            }
+        }
+    }
+
+    private static long extractSelectedEntry(
+        ZipFile archive, ZipEntry entry, File stagingRoot, long expandedBytes
+    ) throws IOException {
+        if (entry.getSize() > MAX_FILE_BYTES) {
+            throw new IOException("A selected VSIX resource exceeds the 4 MiB extraction limit");
+        }
+        if (entry.getSize() > 0L && expandedBytes + entry.getSize() > MAX_EXPANDED_BYTES) {
+            throw new IOException("Selected VSIX resources exceed the 32 MiB extraction limit");
+        }
+
+        String path = validateArchivePath(entry.getName(), false);
+        if (!path.startsWith("extension/")) {
+            throw new IOException("Refusing to extract VSIX content outside extension/");
+        }
+        File output = new File(stagingRoot, path);
+        ensureInside(stagingRoot, output);
+        File parent = output.getParentFile();
+        if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
+            throw new IOException("Could not create VSIX resource directory");
+        }
+        if (!output.createNewFile()) {
+            throw new IOException("VSIX contains a duplicate selected resource: " + path);
+        }
+
+        long fileBytes = 0L;
+        try (InputStream input = archive.getInputStream(entry);
+             FileOutputStream file = new FileOutputStream(output)) {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                fileBytes += count;
+                if (fileBytes > MAX_FILE_BYTES) {
+                    throw new IOException("A VSIX file exceeds the 4 MiB extraction limit");
+                }
+                if (expandedBytes + fileBytes > MAX_EXPANDED_BYTES) {
+                    throw new IOException("Selected VSIX resources exceed the 32 MiB extraction limit");
+                }
+                file.write(buffer, 0, count);
+            }
+            file.flush();
+            file.getFD().sync();
+        }
+        return expandedBytes + fileBytes;
     }
 
     private static String validateArchivePath(String raw, boolean directory) throws IOException {
@@ -497,33 +870,6 @@ public final class VSCodeVsixImporter {
         return message == null || message.trim().isEmpty()
             ? error == null ? "Unknown error" : error.getClass().getSimpleName()
             : message;
-    }
-
-    private static final class BoundedInputStream extends FilterInputStream {
-        private final long maximum;
-        private long consumed;
-
-        BoundedInputStream(InputStream input, long maximum) {
-            super(input);
-            this.maximum = maximum;
-        }
-
-        @Override public int read() throws IOException {
-            int value = super.read();
-            if (value >= 0) account(1);
-            return value;
-        }
-
-        @Override public int read(byte[] buffer, int offset, int length) throws IOException {
-            int count = super.read(buffer, offset, length);
-            if (count > 0) account(count);
-            return count;
-        }
-
-        private void account(int count) throws IOException {
-            consumed += count;
-            if (consumed > maximum) throw new IOException("VSIX archive exceeds the 16 MiB limit");
-        }
     }
 
     public static final class Preview {
