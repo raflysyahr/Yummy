@@ -5,7 +5,9 @@ import android.content.Context;
 import com.termux.app.theme.io.ThemeResourcePaths;
 import com.termux.app.theme.loader.ThemeCompatibilityValidator;
 import com.termux.app.theme.loader.ThemeDocumentParser;
+import com.termux.app.theme.loader.VSCodeIconThemeParser;
 import com.termux.app.theme.model.ThemeAppearance;
+import com.termux.app.theme.model.VSCodeIconTheme;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.storage.ThemeStorageException;
 
@@ -59,6 +61,7 @@ public final class VSCodeVsixImporter {
     private static final int MAX_JSON_BYTES = 2 * 1024 * 1024;
 
     private final ThemeDocumentParser documentParser = new ThemeDocumentParser();
+    private final VSCodeIconThemeParser iconThemeParser = new VSCodeIconThemeParser();
 
     /** Extracts and inspects a VSIX without installing or modifying the selected file. */
     public Preview inspect(InputStream source, File cacheDirectory) throws ThemeImportException {
@@ -169,13 +172,81 @@ public final class VSCodeVsixImporter {
             }
 
             if (entries.isEmpty()) throw new IOException("VSIX contains no importable color themes");
+
+            // Icon Themes are optional for the Color Theme import flow. Parse each declared
+            // contribution independently so an unsupported/malformed icon manifest does not
+            // prevent the Color Themes in the same VSIX from being previewed or installed.
+            List<IconThemeEntry> iconEntries = new ArrayList<>();
+            List<String> iconThemeWarnings = new ArrayList<>();
+            inspectIconThemes(extensionRoot, contributes == null ? null
+                : contributes.optJSONArray("iconThemes"), publisher, extensionName,
+                iconEntries, iconThemeWarnings);
+
             success = true;
             return new Preview(stagingRoot, displayName, publisher, extensionName, version,
-                license, licenseFile, sourceUrl, entries);
+                license, licenseFile, sourceUrl, entries, iconEntries, iconThemeWarnings);
         } catch (IOException | JSONException | IllegalArgumentException error) {
             throw new ThemeImportException("Could not inspect VSIX: " + safeMessage(error), error);
         } finally {
             if (!success) deleteTree(stagingRoot);
+        }
+    }
+
+    private void inspectIconThemes(
+        File extensionRoot,
+        JSONArray contributions,
+        String publisher,
+        String extensionName,
+        List<IconThemeEntry> entries,
+        List<String> warnings
+    ) {
+        if (contributions == null) return;
+        int limit = Math.min(contributions.length(), MAX_ICON_THEME_DOCUMENTS);
+        if (contributions.length() > limit) {
+            warnings.add("Only the first " + MAX_ICON_THEME_DOCUMENTS
+                + " Icon Theme contributions were inspected");
+        }
+
+        for (int i = 0; i < limit; i++) {
+            JSONObject contribution = contributions.optJSONObject(i);
+            String label = optionalString(contribution, "label");
+            String contributionId = optionalString(contribution, "id");
+            String rawPath = optionalString(contribution, "path");
+            if (label == null || contributionId == null || rawPath == null) {
+                warnings.add("contributes.iconThemes[" + i
+                    + "] must declare id, label, and path; contribution was skipped");
+                continue;
+            }
+
+            try {
+                String themePath = normalizeExtensionPath(rawPath);
+                File themeFile = resolveInside(extensionRoot, themePath);
+                if (!themeFile.isFile()) {
+                    warnings.add("Icon Theme '" + label + "' manifest was not extracted: "
+                        + themePath);
+                    continue;
+                }
+
+                String normalizedJson = ThemeDocumentParser.normalizeJsonc(
+                    readUtf8Limited(themeFile, MAX_JSON_BYTES));
+                VSCodeIconTheme parsed = iconThemeParser.parse(normalizedJson, themePath);
+                List<String> resourcePaths = parsed.getReferencedResourcePaths(themePath);
+                List<String> entryWarnings = new ArrayList<>(parsed.getWarnings());
+                for (String resourcePath : resourcePaths) {
+                    File resource = resolveInside(extensionRoot, resourcePath);
+                    if (!resource.isFile()) {
+                        entryWarnings.add("Referenced icon asset is unavailable: " + resourcePath);
+                    }
+                }
+
+                String effectiveLabel = label.length() > 120 ? label.substring(0, 120) : label;
+                String suggestedId = createThemeId(
+                    publisher + "-" + extensionName + "-" + contributionId);
+                entries.add(new IconThemeEntry(effectiveLabel, contributionId, suggestedId,
+                    themePath, normalizedJson, parsed, resourcePaths, entryWarnings));
+            } catch (Exception error) {
+                warnings.add("Icon Theme '" + label + "' was skipped: " + safeMessage(error));
+            }
         }
     }
 
@@ -443,19 +514,44 @@ public final class VSCodeVsixImporter {
             }
 
             JSONObject definitions = iconTheme.optJSONObject("iconDefinitions");
-            if (definitions == null) continue;
-            java.util.Iterator<String> keys = definitions.keys();
-            while (keys.hasNext()) {
-                JSONObject definition = definitions.optJSONObject(keys.next());
-                String iconPath = optionalString(definition, "iconPath");
-                if (iconPath == null) continue;
+            if (definitions != null) {
+                java.util.Iterator<String> keys = definitions.keys();
+                while (keys.hasNext()) {
+                    JSONObject definition = definitions.optJSONObject(keys.next());
+                    String iconPath = optionalString(definition, "iconPath");
+                    if (iconPath == null) continue;
 
-                try {
-                    String relativePath = resolveContributionResourcePath(themePath, iconPath);
-                    if (relativePath == null) continue;
-                    addOptionalArchiveEntry(entries, optional, "extension/" + relativePath);
-                } catch (IOException ignored) {
-                    // Unsafe or external icon references are not extracted.
+                    try {
+                        String relativePath = resolveContributionResourcePath(themePath, iconPath);
+                        if (relativePath == null) continue;
+                        addOptionalArchiveEntry(entries, optional, "extension/" + relativePath);
+                    } catch (IOException ignored) {
+                        // Unsafe or external icon references are not extracted.
+                    }
+                }
+            }
+
+            // Glyph-based Icon Themes can reference WOFF/TTF/OTF assets instead of SVG/PNG.
+            // Keep their font files alongside image assets for the Icon Theme parser/runtime.
+            JSONArray fonts = iconTheme.optJSONArray("fonts");
+            if (fonts != null) {
+                for (int fontIndex = 0; fontIndex < fonts.length(); fontIndex++) {
+                    JSONObject font = fonts.optJSONObject(fontIndex);
+                    JSONArray sources = font == null ? null : font.optJSONArray("src");
+                    if (sources == null) continue;
+                    for (int sourceIndex = 0; sourceIndex < sources.length(); sourceIndex++) {
+                        JSONObject fontSource = sources.optJSONObject(sourceIndex);
+                        String fontPath = optionalString(fontSource, "path");
+                        if (fontPath == null) continue;
+                        try {
+                            String relativePath = resolveContributionResourcePath(themePath, fontPath);
+                            if (relativePath != null) {
+                                addOptionalArchiveEntry(entries, optional, "extension/" + relativePath);
+                            }
+                        } catch (IOException ignored) {
+                            // Unsafe or external font references are not extracted.
+                        }
+                    }
                 }
             }
         }
@@ -882,10 +978,13 @@ public final class VSCodeVsixImporter {
         private final String licenseFile;
         private final String sourceUrl;
         private final List<ThemeEntry> themes;
+        private final List<IconThemeEntry> iconThemes;
+        private final List<String> iconThemeWarnings;
 
         private Preview(File stagingRoot, String displayName, String publisher,
             String extensionName, String version, String license, String licenseFile,
-            String sourceUrl, List<ThemeEntry> themes) {
+            String sourceUrl, List<ThemeEntry> themes, List<IconThemeEntry> iconThemes,
+            List<String> iconThemeWarnings) {
             this.stagingRoot = stagingRoot;
             this.displayName = displayName;
             this.publisher = publisher;
@@ -895,6 +994,8 @@ public final class VSCodeVsixImporter {
             this.licenseFile = licenseFile;
             this.sourceUrl = sourceUrl;
             this.themes = Collections.unmodifiableList(new ArrayList<>(themes));
+            this.iconThemes = Collections.unmodifiableList(new ArrayList<>(iconThemes));
+            this.iconThemeWarnings = Collections.unmodifiableList(new ArrayList<>(iconThemeWarnings));
         }
 
         public File getStagingRoot() { return stagingRoot; }
@@ -906,6 +1007,42 @@ public final class VSCodeVsixImporter {
         public String getLicenseFile() { return licenseFile; }
         public String getSourceUrl() { return sourceUrl; }
         public List<ThemeEntry> getThemes() { return themes; }
+        public List<IconThemeEntry> getIconThemes() { return iconThemes; }
+        public List<String> getIconThemeWarnings() { return iconThemeWarnings; }
+    }
+
+    /** Parsed VS Code File Icon Theme contribution exposed to later import/preview stages. */
+    public static final class IconThemeEntry {
+        private final String label;
+        private final String contributionId;
+        private final String suggestedId;
+        private final String themePath;
+        private final String normalizedJson;
+        private final VSCodeIconTheme parsedTheme;
+        private final List<String> resourcePaths;
+        private final List<String> warnings;
+
+        private IconThemeEntry(String label, String contributionId, String suggestedId,
+            String themePath, String normalizedJson, VSCodeIconTheme parsedTheme,
+            List<String> resourcePaths, List<String> warnings) {
+            this.label = label;
+            this.contributionId = contributionId;
+            this.suggestedId = suggestedId;
+            this.themePath = themePath;
+            this.normalizedJson = normalizedJson;
+            this.parsedTheme = parsedTheme;
+            this.resourcePaths = Collections.unmodifiableList(new ArrayList<>(resourcePaths));
+            this.warnings = Collections.unmodifiableList(new ArrayList<>(warnings));
+        }
+
+        public String getLabel() { return label; }
+        public String getContributionId() { return contributionId; }
+        public String getSuggestedId() { return suggestedId; }
+        public String getThemePath() { return themePath; }
+        public String getNormalizedJson() { return normalizedJson; }
+        public VSCodeIconTheme getParsedTheme() { return parsedTheme; }
+        public List<String> getResourcePaths() { return resourcePaths; }
+        public List<String> getWarnings() { return warnings; }
     }
 
     public static final class ThemeEntry {

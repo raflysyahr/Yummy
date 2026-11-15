@@ -293,7 +293,26 @@ public final class ThemeImportController {
                         vsixImporter.inspect(input, activity.getCacheDir());
                     debug("VSIX_PARSE", "SUCCESS; extension=" + preview.getDisplayName()
                         + "; version=" + preview.getVersion()
-                        + "; themes=" + preview.getThemes().size());
+                        + "; colorThemes=" + preview.getThemes().size()
+                        + "; iconThemesParsed=" + preview.getIconThemes().size()
+                        + "; iconThemeWarnings=" + preview.getIconThemeWarnings().size());
+                    for (VSCodeVsixImporter.IconThemeEntry iconEntry : preview.getIconThemes()) {
+                        com.termux.app.theme.model.VSCodeIconTheme iconTheme =
+                            iconEntry.getParsedTheme();
+                        com.termux.app.theme.model.VSCodeIconTheme.Associations iconAssociations =
+                            iconTheme.getAssociations();
+                        debug("ICON_THEME_PARSE", "SUCCESS; label=" + iconEntry.getLabel()
+                            + "; id=" + iconEntry.getContributionId()
+                            + "; definitions=" + iconTheme.getIconDefinitions().size()
+                            + "; fileExtensions=" + iconAssociations.getFileExtensions().size()
+                            + "; fileNames=" + iconAssociations.getFileNames().size()
+                            + "; folderNames=" + iconAssociations.getFolderNames().size()
+                            + "; assets=" + iconEntry.getResourcePaths().size()
+                            + "; warnings=" + iconEntry.getWarnings().size());
+                    }
+                    for (String warning : preview.getIconThemeWarnings()) {
+                        debug("ICON_THEME_WARNING", warning);
+                    }
                     activity.runOnUiThread(() -> {
                         if (released || activity.isFinishing()) {
                             vsixImporter.cleanup(preview);
