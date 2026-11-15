@@ -62,6 +62,7 @@ import com.termux.app.editor.EditorSettingsController;
 import com.termux.app.session.WorkspaceSessionManager;
 import com.termux.app.theme.model.AppThemeColorRole;
 import com.termux.app.theme.ui.AppThemeController;
+import com.termux.app.theme.registry.YummyUiIconRegistry;
 import com.termux.app.filemanager.storage.StorageRegistry;
 import com.termux.app.filemanager.storage.StorageTreePicker;
 import com.termux.app.filemanager.storage.model.StorageCapability;
@@ -849,12 +850,18 @@ public final class FileManagerController {
         ));
 
         ImageView leadingIcon = new ImageView(activity);
-        leadingIcon.setImageResource(directoryIcon
+        Drawable fallbackLeadingIcon = activity.getDrawable(directoryIcon
             ? R.drawable.yummy_popup_folder_icon : R.drawable.yummy_popup_file_icon);
+        leadingIcon.setImageDrawable(fallbackLeadingIcon);
         leadingIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         leadingIcon.setContentDescription(directoryIcon ? "Folder" : "File");
         if (appThemeController != null) {
-            appThemeController.bindIcon(leadingIcon, AppThemeColorRole.ICON_FOREGROUND);
+            if (directoryIcon) {
+                appThemeController.bindFolderIcon(leadingIcon, "folder", null,
+                    false, false, fallbackLeadingIcon);
+            } else {
+                appThemeController.bindFileIcon(leadingIcon, "", null, null, fallbackLeadingIcon);
+            }
         }
         heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
@@ -871,9 +878,11 @@ public final class FileManagerController {
 
         ImageButton closeButton = new ImageButton(activity);
         closeButton.setImageResource(R.drawable.ic_yummy_close);
+        closeButton.setTag(YummyUiIconRegistry.FILE_MANAGER_CANCEL);
         closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         if (appThemeController != null) {
-            appThemeController.bindIcon(closeButton, AppThemeColorRole.ICON_FOREGROUND);
+            appThemeController.bindUiIcon(closeButton, YummyUiIconRegistry.FILE_MANAGER_CLOSE,
+                AppThemeColorRole.ICON_FOREGROUND, closeButton.getDrawable());
         }
         closeButton.setPadding(dp(8), dp(8), dp(8), dp(8));
         GradientDrawable closeBackground = roundRect(0x14FFFFFF, dp(16));
@@ -1506,9 +1515,11 @@ public final class FileManagerController {
             header.addView(titleView, new LinearLayout.LayoutParams(0, -1, 1));
 
             ImageButton searchButton = iconButton(R.drawable.ic_fm_search, "Search files and folders");
+            searchButton.setTag(YummyUiIconRegistry.FILE_MANAGER_SEARCH);
             header.addView(searchButton, new LinearLayout.LayoutParams(dp(44), -1));
             if (appThemeController != null) {
-                appThemeController.bindIcon(searchButton, AppThemeColorRole.ICON_FOREGROUND);
+                appThemeController.bindUiIcon(searchButton, YummyUiIconRegistry.FILE_MANAGER_SEARCH,
+                    AppThemeColorRole.ICON_FOREGROUND);
             }
             searchButton.setOnClickListener(v -> {
                 searchView.setVisibility(searchView.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
@@ -1525,9 +1536,11 @@ public final class FileManagerController {
             });
 
             ImageButton moreButton = iconButton(R.drawable.ic_fm_more, "More file manager actions");
+            moreButton.setTag(YummyUiIconRegistry.FILE_MANAGER_MORE);
             header.addView(moreButton, new LinearLayout.LayoutParams(dp(38), -1));
             if (appThemeController != null) {
-                appThemeController.bindIcon(moreButton, AppThemeColorRole.ICON_FOREGROUND);
+                appThemeController.bindUiIcon(moreButton, YummyUiIconRegistry.FILE_MANAGER_MORE,
+                    AppThemeColorRole.ICON_FOREGROUND);
             }
             moreButton.setOnClickListener(v -> showMoreMenu());
 
@@ -1735,7 +1748,24 @@ public final class FileManagerController {
             }
             bindSidebarText(emptyView, AppThemeColorRole.SECONDARY_TEXT);
             bindSidebarProgress(progressBar, AppThemeColorRole.ACCENT);
+            bindTaggedIconViews(drawerPanel);
+        }
 
+        private void bindTaggedIconViews(@Nullable View view) {
+            if (view == null || appThemeController == null) return;
+            if (view instanceof ImageView && view.getTag() instanceof String) {
+                String slotId = (String) view.getTag();
+                if (YummyUiIconRegistry.getDefault().getSlot(slotId) != null) {
+                    appThemeController.bindUiIcon((ImageView) view, slotId,
+                        AppThemeColorRole.ICON_FOREGROUND, ((ImageView) view).getDrawable());
+                }
+            }
+            if (view instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) view;
+                for (int i = 0; i < group.getChildCount(); i++) {
+                    bindTaggedIconViews(group.getChildAt(i));
+                }
+            }
         }
 
         private void bindSidebarBackground(@Nullable View view, AppThemeColorRole role) {
@@ -1786,14 +1816,24 @@ public final class FileManagerController {
             for (StorageProvider provider : providers) {
                 String id = provider.getId();
                 String label = storageLabel(provider);
-                addRailItem(FileManagerIconResolver.storage(provider), label,
+                addRailItem(FileManagerIconResolver.storage(provider), storageIconSlot(provider), label,
                     currentProvider != null && id.equals(currentProvider.getId()), () -> openStorage(provider));
             }
 
             View spacer = new View(activity);
             storageRail.addView(spacer, new LinearLayout.LayoutParams(1, dp(4)));
-            addRailItem(R.drawable.ic_fm_storage_all, "Storage", showingLocations, this::refreshHome);
-            addRailItem(R.drawable.ic_fm_storage_add, "Add", false, this::requestAddStorage);
+            addRailItem(R.drawable.ic_fm_storage_all, YummyUiIconRegistry.FILE_MANAGER_STORAGE_ALL,
+                "Storage", showingLocations, this::refreshHome);
+            addRailItem(R.drawable.ic_fm_storage_add, YummyUiIconRegistry.FILE_MANAGER_STORAGE_ADD,
+                "Add", false, this::requestAddStorage);
+        }
+
+        private String storageIconSlot(StorageProvider provider) {
+            if (provider == null) return YummyUiIconRegistry.FILE_MANAGER_STORAGE_EXTERNAL;
+            String id = provider.getId();
+            if ("yummy.home".equals(id)) return YummyUiIconRegistry.FILE_MANAGER_STORAGE_LOCAL;
+            if ("yummy.files".equals(id)) return YummyUiIconRegistry.FILE_MANAGER_STORAGE_PRIVATE;
+            return YummyUiIconRegistry.FILE_MANAGER_STORAGE_EXTERNAL;
         }
 
         private int storageOrder(StorageProvider provider) {
@@ -1808,7 +1848,8 @@ public final class FileManagerController {
             return provider.getLocation().getName();
         }
 
-        private void addRailItem(int iconResource, String label, boolean selected, Runnable action) {
+        private void addRailItem(int iconResource, String iconSlotId, String label,
+                                 boolean selected, Runnable action) {
             LinearLayout item = new LinearLayout(activity);
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER);
@@ -1820,6 +1861,7 @@ public final class FileManagerController {
             storageNavContainer.addView(item, itemLp);
             ImageView icon = new ImageView(activity);
             icon.setImageResource(iconResource);
+            icon.setTag(iconSlotId);
             icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             icon.setContentDescription(label);
             icon.setBackground(selected ? roundRect(0xFF292C35, dp(12)) :
@@ -1834,7 +1876,8 @@ public final class FileManagerController {
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             item.addView(name, new LinearLayout.LayoutParams(-1, dp(25)));
             if (appThemeController != null) {
-                appThemeController.bindIcon(icon, AppThemeColorRole.ICON_FOREGROUND);
+                appThemeController.bindUiIcon(icon, iconSlotId, AppThemeColorRole.ICON_FOREGROUND,
+                    icon.getDrawable());
                 appThemeController.bindText(name, AppThemeColorRole.SIDEBAR_FOREGROUND);
                 if (selected) {
                     appThemeController.bindBackground(icon, AppThemeColorRole.SELECTION_BACKGROUND);
@@ -1884,9 +1927,9 @@ public final class FileManagerController {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -1);
             actionBar.addView(button, lp);
             if (appThemeController != null) {
-                // Theme the label only. The icon is a multi-color artwork drawable and
-                // must retain its original colors.
                 appThemeController.bindText(button, AppThemeColorRole.TOOLBAR_FOREGROUND);
+                String iconSlot = iconSlotForAction(iconResource);
+                if (iconSlot != null) appThemeController.bindCompoundUiIcon(button, iconSlot);
             }
             button.setOnClickListener(v -> action.run());
         }
@@ -1938,8 +1981,37 @@ public final class FileManagerController {
             selectionBar.addView(button, new LinearLayout.LayoutParams(-2, -1));
             if (appThemeController != null) {
                 appThemeController.bindText(button, AppThemeColorRole.SIDEBAR_FOREGROUND);
+                String iconSlot = iconSlotForAction(iconResource);
+                if (iconSlot != null) appThemeController.bindCompoundUiIcon(button, iconSlot);
             }
             button.setOnClickListener(v -> action.run());
+        }
+
+        @Nullable
+        private String iconSlotForAction(int iconResource) {
+            if (iconResource == R.drawable.ic_fm_add_file)
+                return YummyUiIconRegistry.FILE_MANAGER_NEW_FILE;
+            if (iconResource == R.drawable.ic_fm_add_folder)
+                return YummyUiIconRegistry.FILE_MANAGER_NEW_FOLDER;
+            if (iconResource == R.drawable.ic_fm_sort)
+                return YummyUiIconRegistry.FILE_MANAGER_SORT;
+            if (iconResource == R.drawable.ic_fm_done)
+                return YummyUiIconRegistry.FILE_MANAGER_DONE;
+            if (iconResource == R.drawable.ic_fm_select)
+                return YummyUiIconRegistry.FILE_MANAGER_SELECT;
+            if (iconResource == R.drawable.ic_fm_save)
+                return YummyUiIconRegistry.FILE_MANAGER_SAVE;
+            if (iconResource == R.drawable.ic_fm_copy)
+                return YummyUiIconRegistry.FILE_MANAGER_COPY;
+            if (iconResource == R.drawable.ic_fm_move)
+                return YummyUiIconRegistry.FILE_MANAGER_MOVE;
+            if (iconResource == R.drawable.ic_fm_delete)
+                return YummyUiIconRegistry.FILE_MANAGER_DELETE;
+            if (iconResource == R.drawable.ic_fm_cancel)
+                return YummyUiIconRegistry.FILE_MANAGER_CANCEL;
+            if (iconResource == R.drawable.ic_fm_more)
+                return YummyUiIconRegistry.FILE_MANAGER_MORE;
+            return null;
         }
 
         private void refreshHome() {
@@ -3082,13 +3154,20 @@ public final class FileManagerController {
                     container.addView(check, new LinearLayout.LayoutParams(dp(20), dp(38)));
                 }
 
-                if (appThemeController != null) appThemeController.unbind(container);
+                if (appThemeController != null) {
+                    appThemeController.unbind(container);
+                    appThemeController.unbindIcon(badge);
+                }
 
                 if (row.kind == RowKind.LOCATION) {
                     disclosure.setImageResource(R.drawable.ic_fm_chevron_right);
                     disclosure.setVisibility(View.VISIBLE);
                     badge.setImageResource(FileManagerIconResolver.storage(row.provider));
                     badge.setVisibility(View.VISIBLE);
+                    if (appThemeController != null) {
+                        appThemeController.bindUiIcon(badge, storageIconSlot(row.provider),
+                            AppThemeColorRole.ICON_FOREGROUND, badge.getDrawable());
+                    }
                     name.setText(storageLabel(row.provider));
                     subtitle.setVisibility(View.VISIBLE);
                     String description = row.provider.getLocation().getDescription();
@@ -3115,7 +3194,14 @@ public final class FileManagerController {
                     disclosure.setVisibility(View.VISIBLE);
                     disclosure.setImageResource(row.expanded
                         ? R.drawable.ic_fm_chevron_down : R.drawable.ic_fm_chevron_right);
-                    badge.setImageDrawable(FileManagerIconResolver.file(activity, entry, row.expanded));
+                    Drawable fallbackFolderIcon = FileManagerIconResolver.file(activity, entry, row.expanded);
+                    if (appThemeController != null) {
+                        appThemeController.bindFolderIcon(badge, entry.getName(),
+                            currentDirectory == null ? null : currentDirectory.getName(),
+                            row.expanded, entry.isRoot(), fallbackFolderIcon);
+                    } else {
+                        badge.setImageDrawable(fallbackFolderIcon);
+                    }
                     badge.setVisibility(View.VISIBLE);
                     subtitle.setText("");
                     subtitle.setVisibility(View.GONE);
@@ -3124,7 +3210,14 @@ public final class FileManagerController {
                     disclosure.setImageDrawable(null);
                     FileTypeResolver.Descriptor descriptor = FileTypeResolver.resolve(
                         entry.getName(), false, entry.getMimeType());
-                    badge.setImageDrawable(FileManagerIconResolver.file(activity, entry, false));
+                    Drawable fallbackFileIcon = FileManagerIconResolver.file(activity, entry, false);
+                    if (appThemeController != null) {
+                        appThemeController.bindFileIcon(badge, entry.getName(),
+                            currentDirectory == null ? null : currentDirectory.getName(),
+                            languageIdForDescriptor(descriptor), fallbackFileIcon);
+                    } else {
+                        badge.setImageDrawable(fallbackFileIcon);
+                    }
                     badge.setVisibility(View.VISIBLE);
                     subtitle.setText("");
                     subtitle.setVisibility(View.GONE);
@@ -3233,6 +3326,28 @@ public final class FileManagerController {
         if (start == null) return;
         start.setBounds(0, 0, dp(sizeDp), dp(sizeDp));
         view.setCompoundDrawablesRelative(start, drawables[1], drawables[2], drawables[3]);
+    }
+
+    @Nullable
+    private static String languageIdForDescriptor(@Nullable FileTypeResolver.Descriptor descriptor) {
+        if (descriptor == null) return null;
+        switch (descriptor.getKind()) {
+            case PYTHON: return "python";
+            case JAVASCRIPT: return "javascript";
+            case TYPESCRIPT: return "typescript";
+            case JAVA: return "java";
+            case KOTLIN: return "kotlin";
+            case PHP: return "php";
+            case HTML: return "html";
+            case CSS: return "css";
+            case JSON: return "json";
+            case XML: return "xml";
+            case SHELL: return "shellscript";
+            case MARKDOWN: return "markdown";
+            case SQL: return "sql";
+            case YAML: return "yaml";
+            default: return null;
+        }
     }
 
     private ImageButton iconButton(int iconResource, String description) {

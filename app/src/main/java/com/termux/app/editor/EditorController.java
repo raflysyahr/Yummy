@@ -50,8 +50,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import com.termux.app.session.WorkspaceSessionManager;
 import com.termux.app.filemanager.ui.FileManagerIconResolver;
+import com.termux.app.filemanager.ui.FileTypeResolver;
 import com.termux.app.theme.model.AppThemeColorRole;
 import com.termux.app.theme.ui.AppThemeController;
+import com.termux.app.theme.registry.YummyUiIconRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -201,6 +203,7 @@ public class EditorController {
         EditorSettingsController.applySavedSettings(mActivity, mEditor);
         bindKeys();
         bindEditorActionButtons();
+        bindEditorUiIcons();
 
         mEditor.subscribeEvent(SelectionChangeEvent.class, (event, unsubscribe) -> updateStatus());
         mEditor.subscribeEvent(ContentChangeEvent.class, (event, unsubscribe) -> {
@@ -435,7 +438,40 @@ public class EditorController {
     /** Supplies the App UI theme bridge for dynamically recreated editor tabs. */
     public void setAppThemeController(@Nullable AppThemeController controller) {
         mAppThemeController = controller;
+        bindEditorUiIcons();
+        updateStatus();
         renderTabs();
+    }
+
+    private void bindEditorUiIcons() {
+        if (mAppThemeController == null) return;
+        bindUiIcon(R.id.yummy_btn_menu, YummyUiIconRegistry.SIDEBAR_MENU,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_btn_terminal, YummyUiIconRegistry.SIDEBAR_TERMINAL,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_btn_search, YummyUiIconRegistry.EDITOR_SEARCH,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_btn_run, YummyUiIconRegistry.EDITOR_RUN,
+            AppThemeColorRole.ACCENT);
+        bindUiIcon(R.id.yummy_btn_save, YummyUiIconRegistry.EDITOR_SAVE,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_btn_new_tab, YummyUiIconRegistry.EDITOR_NEW_TAB,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_btn_tabs_menu, YummyUiIconRegistry.EDITOR_TABS_MENU,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_key_undo, YummyUiIconRegistry.EDITOR_UNDO,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_key_redo, YummyUiIconRegistry.EDITOR_REDO,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_key_paste, YummyUiIconRegistry.EDITOR_PASTE,
+            AppThemeColorRole.ICON_FOREGROUND);
+        bindUiIcon(R.id.yummy_session_save_icon, YummyUiIconRegistry.EDITOR_SESSION_SYNC,
+            AppThemeColorRole.ICON_FOREGROUND);
+    }
+
+    private void bindUiIcon(int viewId, String slotId, AppThemeColorRole fallbackTintRole) {
+        ImageView view = mActivity.findViewById(viewId);
+        if (view != null) mAppThemeController.bindUiIcon(view, slotId, fallbackTintRole);
     }
 
     /** Membuat tab Untitled baru hanya ketika pengguna menekan tombol +. */
@@ -905,6 +941,29 @@ public class EditorController {
         scheduleEditorSessionSave();
     }
 
+    @Nullable
+    private static String languageIdForFilename(@Nullable String fileName) {
+        if (fileName == null) return null;
+        FileTypeResolver.Descriptor descriptor = FileTypeResolver.resolve(fileName, false, null);
+        switch (descriptor.getKind()) {
+            case PYTHON: return "python";
+            case JAVASCRIPT: return "javascript";
+            case TYPESCRIPT: return "typescript";
+            case JAVA: return "java";
+            case KOTLIN: return "kotlin";
+            case PHP: return "php";
+            case HTML: return "html";
+            case CSS: return "css";
+            case JSON: return "json";
+            case XML: return "xml";
+            case SHELL: return "shellscript";
+            case MARKDOWN: return "markdown";
+            case SQL: return "sql";
+            case YAML: return "yaml";
+            default: return null;
+        }
+    }
+
     private void renderTabs() {
         if (mTabsContainer == null) return;
         mTabsContainer.removeAllViews();
@@ -919,11 +978,16 @@ public class EditorController {
             tab.setFocusable(true);
 
             ImageView icon = new ImageView(mActivity);
-            // Gunakan Material Icon Theme yang sama persis dengan daftar File Manager.
-            // Icon tidak diberi colorFilter agar warna asli tiap format tetap terlihat.
-            icon.setImageDrawable(FileManagerIconResolver.file(mActivity, document.name));
+            // Keep Material Icon Theme as the fallback. A VS Code Icon Theme may replace it
+            // with the matching file association while preserving the source artwork colors.
+            Drawable fallbackFileIcon = FileManagerIconResolver.file(mActivity, document.name);
+            icon.setImageDrawable(fallbackFileIcon);
             icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
             icon.setContentDescription("Icon " + document.name);
+            if (mAppThemeController != null && !"Untitled".equalsIgnoreCase(document.name)) {
+                mAppThemeController.bindFileIcon(icon, document.name, null,
+                    languageIdForFilename(document.name), fallbackFileIcon);
+            }
             tab.addView(icon, new LinearLayout.LayoutParams(dpInt(18), dpInt(18)));
 
             TextView name = new TextView(mActivity);
@@ -1178,13 +1242,24 @@ public class EditorController {
             mStatusLang.setText(language.displayName);
             if (mStatusLangIcon != null) {
                 try {
+                    Drawable fallback;
                     if ("plaintext".equals(language.id)) {
-                        mStatusLangIcon.setImageResource(R.drawable.ic_yummy_language_plain);
+                        fallback = ContextCompat.getDrawable(mActivity,
+                            R.drawable.ic_yummy_language_plain);
                     } else {
-                        Drawable icon = FileManagerIconResolver.file(mActivity, name);
-                        mStatusLangIcon.setImageDrawable(icon);
+                        fallback = FileManagerIconResolver.file(mActivity, name);
                     }
-                    mStatusLangIcon.setColorFilter(null);
+                    if (fallback == null) fallback = ContextCompat.getDrawable(mActivity,
+                        R.drawable.ic_yummy_file);
+                    if (mAppThemeController != null && mActiveDocument != null
+                        && !"Untitled".equalsIgnoreCase(name) && fallback != null) {
+                        mAppThemeController.bindFileIcon(mStatusLangIcon, name, null,
+                            language.id, fallback);
+                    } else {
+                        mStatusLangIcon.setImageDrawable(fallback);
+                        mStatusLangIcon.setColorFilter(null);
+                        mStatusLangIcon.setImageTintList(null);
+                    }
                 } catch (RuntimeException ignored) {
                     mStatusLangIcon.setImageResource(R.drawable.ic_yummy_file);
                 }

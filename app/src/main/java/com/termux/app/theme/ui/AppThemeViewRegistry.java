@@ -57,6 +57,17 @@ public final class AppThemeViewRegistry {
         bind(view, role, Property.IMAGE_TINT);
     }
 
+    /** Removes only the image tint binding, preserving any other bindings on the same View. */
+    public void unbindImageTint(ImageView view) {
+        requireMainThread();
+        if (view == null) return;
+        EnumMap<Property, Binding> viewBindings = bindings.get(view);
+        if (viewBindings == null) return;
+        Binding binding = viewBindings.remove(Property.IMAGE_TINT);
+        if (binding != null) binding.restore(view);
+        if (viewBindings.isEmpty()) bindings.remove(view);
+    }
+
     private static boolean isVectorDrawable(Drawable drawable) {
         return drawable instanceof VectorDrawable;
     }

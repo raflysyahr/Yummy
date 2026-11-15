@@ -41,6 +41,7 @@ public final class YummyUiIconRegistry {
     public static final String EDITOR_RUN = "editor.run";
     public static final String EDITOR_SAVE = "editor.save";
     public static final String EDITOR_SESSIONS = "editor.sessions";
+    public static final String EDITOR_TABS_MENU = "editor.tabs_menu";
     public static final String EDITOR_NEW_TAB = "editor.new_tab";
     public static final String EDITOR_CLOSE = "editor.close";
     public static final String EDITOR_UNDO = "editor.undo";
@@ -62,6 +63,7 @@ public final class YummyUiIconRegistry {
     public static final String FILE_MANAGER_MOVE = "file_manager.move";
     public static final String FILE_MANAGER_DELETE = "file_manager.delete";
     public static final String FILE_MANAGER_CANCEL = "file_manager.cancel";
+    public static final String FILE_MANAGER_CLOSE = "file_manager.close";
     public static final String FILE_MANAGER_STORAGE_LOCAL = "file_manager.storage.local";
     public static final String FILE_MANAGER_STORAGE_PRIVATE = "file_manager.storage.private";
     public static final String FILE_MANAGER_STORAGE_EXTERNAL = "file_manager.storage.external";
@@ -98,6 +100,8 @@ public final class YummyUiIconRegistry {
             R.drawable.ic_yummy_save, "save", "save-file", "save-all"));
         add(index, ordered, ui(EDITOR_SESSIONS, "Sessions", Category.EDITOR,
             R.drawable.ic_yummy_sessions, "sessions", "session-list"));
+        add(index, ordered, ui(EDITOR_TABS_MENU, "Editor tabs menu", Category.EDITOR,
+            R.drawable.ic_yummy_sort, "tabs", "tab-list", "list", "layers"));
         add(index, ordered, ui(EDITOR_NEW_TAB, "New editor tab", Category.EDITOR,
             R.drawable.ic_yummy_add, "new-tab", "add-tab", "plus"));
         add(index, ordered, ui(EDITOR_CLOSE, "Close", Category.EDITOR,
@@ -140,6 +144,8 @@ public final class YummyUiIconRegistry {
             R.drawable.ic_fm_delete, "delete", "trash", "trash-can"));
         add(index, ordered, ui(FILE_MANAGER_CANCEL, "Cancel", Category.FILE_MANAGER,
             R.drawable.ic_fm_cancel, "cancel", "close", "x"));
+        add(index, ordered, ui(FILE_MANAGER_CLOSE, "Close dialog", Category.FILE_MANAGER,
+            R.drawable.ic_yummy_close, "close", "x"));
         add(index, ordered, ui(FILE_MANAGER_STORAGE_LOCAL, "Local storage", Category.STORAGE,
             R.drawable.ic_fm_storage_local, "home", "home-folder", "hard-drive"));
         add(index, ordered, ui(FILE_MANAGER_STORAGE_PRIVATE, "Private storage", Category.STORAGE,

@@ -1,17 +1,24 @@
 package com.termux.app.theme.ui;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
+import java.io.File;
+import java.util.Map;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.view.View;
 
+import androidx.annotation.Nullable;
+
 import com.termux.app.theme.adapter.AppThemeAdapter;
 import com.termux.app.theme.model.AppThemeColorRole;
 import com.termux.app.theme.model.AppThemeFallbacks;
 import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.ResolvedAppTheme;
+import com.termux.app.theme.model.ThemeAppearance;
+import com.termux.app.theme.model.VSCodeIconTheme;
 
 /**
  * Runtime coordinator for the Application UI theme.
@@ -31,6 +38,7 @@ public final class AppThemeController {
     private final AppThemeAdapter adapter;
     private final AppThemeFallbacks fallbacks;
     private final AppThemeViewRegistry viewRegistry;
+    private final YummyIconThemeController iconThemeController;
     private ResolvedAppTheme currentTheme;
     private PaletteListener paletteListener;
 
@@ -42,6 +50,7 @@ public final class AppThemeController {
         this.fallbacks = AppThemeFallbacks.fromCurrentYummyResources(
             appContext.getResources(), appContext.getPackageName());
         this.viewRegistry = new AppThemeViewRegistry();
+        this.iconThemeController = new YummyIconThemeController(appContext);
     }
 
     /** Resolves and applies a theme package that declares App UI support. */
@@ -49,6 +58,7 @@ public final class AppThemeController {
         ResolvedAppTheme resolved = adapter.resolve(loadedTheme, fallbacks);
         viewRegistry.apply(resolved);
         currentTheme = resolved;
+        iconThemeController.refreshBindings(viewRegistry);
         notifyPaletteChanged();
         return resolved;
     }
@@ -57,6 +67,7 @@ public final class AppThemeController {
     public void clearTheme() {
         viewRegistry.apply(null);
         currentTheme = null;
+        iconThemeController.refreshBindings(viewRegistry);
         notifyPaletteChanged();
     }
 
@@ -99,6 +110,59 @@ public final class AppThemeController {
         viewRegistry.bindImageTintIncludingBitmap(view, role);
     }
 
+    /** Activates a parsed VS Code File Icon Theme for Yummy UI and file/folder associations. */
+    public void setIconTheme(@Nullable VSCodeIconTheme theme, @Nullable File extensionRoot,
+                             @Nullable String themeDocumentPath,
+                             @Nullable ThemeAppearance appearance,
+                             @Nullable Map<String, String> explicitMappings) {
+        iconThemeController.setTheme(theme, extensionRoot, themeDocumentPath, appearance,
+            explicitMappings, viewRegistry);
+    }
+
+    /** Binds a fixed Yummy UI icon slot with automatic custom-icon and fallback handling. */
+    public void bindUiIcon(ImageView view, String slotId, AppThemeColorRole fallbackTintRole) {
+        iconThemeController.bindUiIcon(view, slotId, fallbackTintRole, viewRegistry);
+    }
+
+    /** Binds a UI slot while retaining the component's existing fallback artwork. */
+    public void bindUiIcon(ImageView view, String slotId, AppThemeColorRole fallbackTintRole,
+                           Drawable fallbackOverride) {
+        iconThemeController.bindUiIcon(view, slotId, fallbackTintRole,
+            fallbackOverride, viewRegistry);
+    }
+
+    /** Binds a Yummy UI icon displayed as a TextView start compound drawable. */
+    public void bindCompoundUiIcon(TextView view, String slotId) {
+        iconThemeController.bindCompoundUiIcon(view, slotId);
+    }
+
+    /** Binds a file association and keeps it updated when the active Icon Theme changes. */
+    public void bindFileIcon(ImageView view, String fileName, String parentFolderName,
+                             String languageId, Drawable fallback) {
+        iconThemeController.bindFileIcon(view, fileName, parentFolderName, languageId, fallback);
+    }
+
+    /** Binds a folder association and keeps it updated when the active Icon Theme changes. */
+    public void bindFolderIcon(ImageView view, String folderName, String parentFolderName,
+                               boolean expanded, boolean root, Drawable fallback) {
+        iconThemeController.bindFolderIcon(view, folderName, parentFolderName,
+            expanded, root, fallback);
+    }
+
+    /** Removes Icon Theme and color-tint bindings from a recycled icon View. */
+    public void unbindIcon(ImageView view) {
+        iconThemeController.unbind(view, viewRegistry);
+    }
+
+    /** Clears the independent Icon Theme selection without changing the App UI color theme. */
+    public void clearIconTheme() {
+        iconThemeController.clearTheme(viewRegistry);
+    }
+
+    public boolean hasActiveIconTheme() {
+        return iconThemeController.hasActiveTheme();
+    }
+
     public void bindButton(CompoundButton view, AppThemeColorRole role) {
         viewRegistry.bindButtonTint(view, role);
     }
@@ -113,6 +177,7 @@ public final class AppThemeController {
 
     /** Restores all currently registered Views; call when the owning Activity is destroyed. */
     public void release() {
+        iconThemeController.clearTheme(viewRegistry);
         viewRegistry.clear();
         currentTheme = null;
         paletteListener = null;
