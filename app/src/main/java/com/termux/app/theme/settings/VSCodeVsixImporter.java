@@ -97,16 +97,19 @@ public final class VSCodeVsixImporter {
 
             JSONObject contributes = manifest.optJSONObject("contributes");
             JSONArray themes = contributes == null ? null : contributes.optJSONArray("themes");
-            if (themes == null || themes.length() == 0) {
-                throw new IOException("VSIX does not declare contributes.themes");
+            JSONArray iconThemes = contributes == null ? null : contributes.optJSONArray("iconThemes");
+            boolean hasColorThemes = themes != null && themes.length() > 0;
+            boolean hasIconThemes = iconThemes != null && iconThemes.length() > 0;
+            if (!hasColorThemes && !hasIconThemes) {
+                throw new IOException("VSIX does not declare importable Color Themes or File Icon Themes");
             }
-            if (themes.length() > MAX_THEMES) {
+            if (themes != null && themes.length() > MAX_THEMES) {
                 throw new IOException("VSIX declares more than " + MAX_THEMES + " color themes");
             }
 
             String licenseFile = findLicenseFile(extensionRoot);
             List<ThemeEntry> entries = new ArrayList<>();
-            for (int i = 0; i < themes.length(); i++) {
+            for (int i = 0; themes != null && i < themes.length(); i++) {
                 JSONObject contribution = themes.optJSONObject(i);
                 if (contribution == null) {
                     throw new IOException("contributes.themes[" + i + "] must be an object");
@@ -171,16 +174,16 @@ public final class VSCodeVsixImporter {
                 ));
             }
 
-            if (entries.isEmpty()) throw new IOException("VSIX contains no importable color themes");
-
-            // Icon Themes are optional for the Color Theme import flow. Parse each declared
-            // contribution independently so an unsupported/malformed icon manifest does not
-            // prevent the Color Themes in the same VSIX from being previewed or installed.
+            // Parse each File Icon Theme independently. An invalid optional contribution must
+            // not block valid Color Themes, and an Icon-Theme-only VSIX is also importable.
             List<IconThemeEntry> iconEntries = new ArrayList<>();
             List<String> iconThemeWarnings = new ArrayList<>();
             inspectIconThemes(extensionRoot, contributes == null ? null
                 : contributes.optJSONArray("iconThemes"), publisher, extensionName,
                 iconEntries, iconThemeWarnings);
+            if (entries.isEmpty() && iconEntries.isEmpty()) {
+                throw new IOException("VSIX contains no valid importable Color Theme or File Icon Theme contributions");
+            }
 
             success = true;
             return new Preview(stagingRoot, displayName, publisher, extensionName, version,

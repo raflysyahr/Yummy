@@ -34,9 +34,11 @@ import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.settings.VSCodeThemeJsonImporter;
 import com.termux.app.theme.settings.VSCodeVsixImporter;
 import com.termux.app.theme.storage.ThemePackageStorage;
+import com.termux.app.theme.storage.IconThemeStorage;
 import com.termux.app.theme.storage.ThemeStorageException;
 
 import java.io.InputStream;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -68,6 +70,7 @@ public final class ThemeImportController {
     private final Activity activity;
     private final YummyThemeRegistry registry;
     private final ThemePackageStorage storage;
+    private final IconThemeStorage iconThemeStorage;
     private final AppThemeController appThemeController;
     private final Typeface uiTypeface;
     private final Listener listener;
@@ -202,6 +205,7 @@ public final class ThemeImportController {
         Activity activity,
         YummyThemeRegistry registry,
         ThemePackageStorage storage,
+        IconThemeStorage iconThemeStorage,
         AppThemeController appThemeController,
         Typeface uiTypeface,
         Listener listener
@@ -209,9 +213,11 @@ public final class ThemeImportController {
         if (activity == null) throw new IllegalArgumentException("Activity is required");
         if (registry == null) throw new IllegalArgumentException("YummyThemeRegistry is required");
         if (storage == null) throw new IllegalArgumentException("ThemePackageStorage is required");
+        if (iconThemeStorage == null) throw new IllegalArgumentException("IconThemeStorage is required");
         this.activity = activity;
         this.registry = registry;
         this.storage = storage;
+        this.iconThemeStorage = iconThemeStorage;
         this.appThemeController = appThemeController;
         this.uiTypeface = uiTypeface;
         this.listener = listener;
@@ -346,8 +352,11 @@ public final class ThemeImportController {
     }
 
     private void showVsixPreview(VSCodeVsixImporter.Preview preview) {
-        debug("VSIX_PREVIEW", "Showing " + preview.getThemes().size()
-            + " theme contributions from " + preview.getDisplayName());
+        int colorCount = preview.getThemes().size();
+        int iconCount = preview.getIconThemes().size();
+        int totalCount = colorCount + iconCount;
+        debug("VSIX_PREVIEW", "Showing " + colorCount + " Color Themes and "
+            + iconCount + " File Icon Themes from " + preview.getDisplayName());
         if (released || activity.isFinishing()) {
             vsixImporter.cleanup(preview);
             if (pendingVsixPreview == preview) pendingVsixPreview = null;
@@ -369,30 +378,49 @@ public final class ThemeImportController {
             marginParams(0, dp(8), 0, dp(3)));
         root.addView(text("Publisher: " + preview.getPublisher()
             + "  •  Version: " + preview.getVersion(), 12, mutedColor(), false));
-        root.addView(text(preview.getThemes().size() + " color theme variants found",
+        root.addView(text(colorCount + " Color Themes · " + iconCount + " File Icon Themes found",
             13, textColor(), true), marginParams(0, dp(12), 0, dp(6)));
 
         ScrollView scroll = new ScrollView(activity);
         LinearLayout themeList = new LinearLayout(activity);
         themeList.setOrientation(LinearLayout.VERTICAL);
-        for (VSCodeVsixImporter.ThemeEntry entry : preview.getThemes()) {
-            String targets = (entry.supportsAppUi() ? "App UI" : "")
-                + (entry.supportsAppUi() && entry.supportsEditorSyntax() ? " • " : "")
-                + (entry.supportsEditorSyntax() ? "Editor Syntax" : "");
-            themeList.addView(text(entry.getLabel(), 13, textColor(), true),
-                marginParams(0, dp(5), 0, 0));
-            themeList.addView(text(appearanceLabel(entry.getAppearance())
-                + "  •  " + targets, 11, mutedColor(), false),
-                marginParams(0, 0, 0, dp(5)));
+        if (colorCount > 0) {
+            themeList.addView(text("COLOR THEMES", 10, accentColor(), true),
+                marginParams(0, dp(7), 0, dp(3)));
+            for (VSCodeVsixImporter.ThemeEntry entry : preview.getThemes()) {
+                String targets = (entry.supportsAppUi() ? "App UI" : "")
+                    + (entry.supportsAppUi() && entry.supportsEditorSyntax() ? " · " : "")
+                    + (entry.supportsEditorSyntax() ? "Editor Syntax" : "");
+                themeList.addView(text(entry.getLabel(), 13, textColor(), true),
+                    marginParams(0, dp(4), 0, 0));
+                themeList.addView(text(appearanceLabel(entry.getAppearance()) + " · " + targets,
+                    11, mutedColor(), false), marginParams(0, 0, 0, dp(4)));
+            }
+        }
+        if (iconCount > 0) {
+            themeList.addView(text("FILE ICON THEMES", 10, accentColor(), true),
+                marginParams(0, dp(9), 0, dp(3)));
+            for (VSCodeVsixImporter.IconThemeEntry entry : preview.getIconThemes()) {
+                themeList.addView(text(entry.getLabel(), 13, textColor(), true),
+                    marginParams(0, dp(4), 0, 0));
+                themeList.addView(text(entry.getParsedTheme().getIconDefinitions().size()
+                    + " icon definitions · " + entry.getResourcePaths().size() + " assets · "
+                    + entry.getWarnings().size() + " warnings", 11, mutedColor(), false),
+                    marginParams(0, 0, 0, dp(4)));
+            }
+        }
+        for (String warning : preview.getIconThemeWarnings()) {
+            themeList.addView(text("Warning: " + warning, 11, mutedColor(), false),
+                marginParams(0, dp(3), 0, 0));
         }
         scroll.addView(themeList);
         root.addView(scroll, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(260)));
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(300)));
 
         root.addView(text(
-            "Yummy will import each contribution as a separate theme. Theme color data and "
-                + "referenced TextMate resources are retained. Existing theme IDs are kept "
-                + "safe by assigning a unique imported ID.",
+            "Yummy will import each Color Theme and File Icon Theme as a separate package. "
+                + "Icon assets are stored selectively; unavailable assets use Yummy fallback icons. "
+                + "Existing IDs are kept safe by assigning unique imported IDs.",
             12, mutedColor(), false), marginParams(0, dp(10), 0, dp(12)));
 
         LinearLayout buttons = new LinearLayout(activity);
@@ -402,7 +430,7 @@ public final class ThemeImportController {
             dialog.dismiss();
             cleanupPendingVsixPreview();
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView confirm = action("Import all " + preview.getThemes().size(), true, () -> {
+        TextView confirm = action("Import all " + totalCount, true, () -> {
             vsixImportInProgress = true;
             dialog.dismiss();
             prepareInstallVsix(preview);
@@ -417,19 +445,30 @@ public final class ThemeImportController {
     }
 
     private void prepareInstallVsix(VSCodeVsixImporter.Preview preview) {
-        debug("VSIX_INSTALL_PREPARE", "themes=" + preview.getThemes().size());
-        final List<String> ids = new ArrayList<>();
+        debug("VSIX_INSTALL_PREPARE", "colorThemes=" + preview.getThemes().size()
+            + "; iconThemes=" + preview.getIconThemes().size());
+        final List<String> colorIds = new ArrayList<>();
+        final List<String> iconIds = new ArrayList<>();
         try {
             ThemeRegistrySnapshotHolder current = refreshRegistry();
-            java.util.Set<String> planned = new java.util.HashSet<>();
+            java.util.Set<String> plannedColor = new java.util.HashSet<>();
             for (VSCodeVsixImporter.ThemeEntry entry : preview.getThemes()) {
                 String candidate = entry.getSuggestedId();
                 if (current.contains(candidate) || storage.hasImportedTheme(candidate)
-                    || planned.contains(candidate)) {
-                    candidate = findUniqueVsixId(candidate, current, planned);
+                    || plannedColor.contains(candidate)) {
+                    candidate = findUniqueVsixId(candidate, current, plannedColor);
                 }
-                planned.add(candidate);
-                ids.add(candidate);
+                plannedColor.add(candidate);
+                colorIds.add(candidate);
+            }
+            java.util.Set<String> plannedIcons = new java.util.HashSet<>();
+            for (VSCodeVsixImporter.IconThemeEntry entry : preview.getIconThemes()) {
+                String candidate = entry.getSuggestedId();
+                if (iconThemeStorage.hasImportedTheme(candidate) || plannedIcons.contains(candidate)) {
+                    candidate = findUniqueIconVsixId(candidate, plannedIcons);
+                }
+                plannedIcons.add(candidate);
+                iconIds.add(candidate);
             }
         } catch (Exception error) {
             vsixImportInProgress = false;
@@ -438,23 +477,49 @@ public final class ThemeImportController {
             return;
         }
 
-        showProgress("Importing " + preview.getThemes().size() + " themes…");
+        int total = colorIds.size() + iconIds.size();
+        showProgress("Importing " + total + " themes…");
         ioExecutor.execute(() -> {
             List<String> installed = new ArrayList<>();
             List<String> installedIds = new ArrayList<>();
             List<String> failures = new ArrayList<>();
             for (int i = 0; i < preview.getThemes().size(); i++) {
                 VSCodeVsixImporter.ThemeEntry entry = preview.getThemes().get(i);
-                String id = ids.get(i);
+                String id = colorIds.get(i);
                 try {
                     String installedId = vsixImporter.installTheme(
                         activity, storage, preview, entry, id);
-                    installed.add(entry.getLabel() + " (" + installedId + ")");
+                    installed.add("Color Theme: " + entry.getLabel() + " (" + installedId + ")");
                     installedIds.add(installedId);
-                    debug("VSIX_THEME_INSTALLED", entry.getLabel() + "; id=" + installedId);
+                    debug("VSIX_COLOR_THEME_INSTALLED", entry.getLabel() + "; id=" + installedId);
                 } catch (Exception error) {
-                    failures.add(entry.getLabel() + ": " + safeMessage(error));
-                    debug("VSIX_THEME_FAILED", entry.getLabel() + "; " + error);
+                    failures.add("Color Theme " + entry.getLabel() + ": " + safeMessage(error));
+                    debug("VSIX_COLOR_THEME_FAILED", entry.getLabel() + "; " + error);
+                    for (StackTraceElement frame : error.getStackTrace()) debug("STACK", frame.toString());
+                }
+            }
+
+            File extensionRoot = new File(preview.getStagingRoot(), "extension");
+            for (int i = 0; i < preview.getIconThemes().size(); i++) {
+                VSCodeVsixImporter.IconThemeEntry entry = preview.getIconThemes().get(i);
+                String id = iconIds.get(i);
+                try {
+                    IconThemeStorage.InstalledIconTheme installedTheme = iconThemeStorage.installFromVsix(
+                        id, entry.getLabel(), preview.getPublisher(), preview.getExtensionName(),
+                        preview.getVersion(), preview.getLicense(), preview.getLicenseFile(),
+                        extensionRoot, entry.getThemePath(), entry.getNormalizedJson(),
+                        entry.getResourcePaths());
+                    installed.add("File Icon Theme: " + installedTheme.getLabel()
+                        + " (" + installedTheme.getId() + ")");
+                    installedIds.add(installedTheme.getId());
+                    debug("VSIX_ICON_THEME_INSTALLED", entry.getLabel() + "; id=" + id
+                        + "; assets=" + entry.getResourcePaths().size());
+                    for (String warning : installedTheme.getWarnings()) {
+                        debug("ICON_THEME_ASSET_WARNING", warning);
+                    }
+                } catch (Exception error) {
+                    failures.add("File Icon Theme " + entry.getLabel() + ": " + safeMessage(error));
+                    debug("VSIX_ICON_THEME_FAILED", entry.getLabel() + "; " + error);
                     for (StackTraceElement frame : error.getStackTrace()) debug("STACK", frame.toString());
                 }
             }
@@ -463,7 +528,7 @@ public final class ThemeImportController {
                 registry.reload();
             } catch (Exception error) {
                 debug("VSIX_REGISTRY_RELOAD_FAILED", error.toString());
-                failures.add("Registry reload: " + safeMessage(error));
+                failures.add("Color Theme registry reload: " + safeMessage(error));
             }
 
             vsixImporter.cleanup(preview);
@@ -473,7 +538,7 @@ public final class ThemeImportController {
                 dismissActiveDialog();
                 StringBuilder summary = new StringBuilder();
                 summary.append("Imported ").append(installed.size()).append(" of ")
-                    .append(preview.getThemes().size()).append(" themes.");
+                    .append(total).append(" theme contributions.");
                 if (!installed.isEmpty()) {
                     summary.append("\n\nInstalled:\n• ").append(join(installed, "\n• "));
                 }
@@ -482,11 +547,25 @@ public final class ThemeImportController {
                 }
                 showDebugDialog(failures.isEmpty()
                     ? "VSIX import completed" : "VSIX import completed with errors", summary.toString());
-                if (listener != null) {
-                    for (String id : installedIds) listener.onThemeImported(id);
+                if (listener != null && !installedIds.isEmpty()) {
+                    listener.onThemeImported(installedIds.get(0));
                 }
             });
         });
+    }
+
+    private String findUniqueIconVsixId(String base, java.util.Set<String> planned)
+        throws java.io.IOException {
+        int index = 2;
+        while (true) {
+            String suffix = "-" + index++;
+            int maximumBase = Math.max(1, 64 - suffix.length());
+            String prefix = base.length() > maximumBase ? base.substring(0, maximumBase) : base;
+            String candidate = prefix.replaceAll("[-._]+$", "") + suffix;
+            if (!iconThemeStorage.hasImportedTheme(candidate) && !planned.contains(candidate)) {
+                return candidate;
+            }
+        }
     }
 
     private String findUniqueVsixId(

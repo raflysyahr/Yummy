@@ -36,9 +36,12 @@ import com.termux.app.theme.model.ThemeSelection;
 import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.model.ThemeTarget;
 import com.termux.app.theme.model.ThemeVersion;
+import com.termux.app.theme.model.VSCodeIconTheme;
 import com.termux.app.theme.registry.ThemeRegistrySnapshot;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.settings.ThemeSelectionStore;
+import com.termux.app.theme.settings.IconThemeSelectionStore;
+import com.termux.app.theme.storage.IconThemeStorage;
 import com.termux.app.theme.settings.ThemePackageArchiveImporter;
 import com.termux.app.theme.loader.ThemePackageLoader;
 import com.termux.app.theme.storage.ThemePackageStorage;
@@ -92,6 +95,8 @@ public final class ThemeSettingsController {
     private final EditorSyntaxThemeApplier editorSyntaxThemeApplier;
     private final ThemeSelectionStore selectionStore;
     private final ThemePackageStorage packageStorage;
+    private final IconThemeStorage iconThemeStorage;
+    private final IconThemeSelectionStore iconThemeSelectionStore;
     private final Typeface uiTypeface;
 
     private ThemeRegistrySnapshot snapshot = ThemeRegistrySnapshot.empty();
@@ -118,6 +123,8 @@ public final class ThemeSettingsController {
         this.editorSyntaxThemeApplier = editorSyntaxThemeApplier;
         this.selectionStore = new ThemeSelectionStore(activity);
         this.packageStorage = new ThemePackageStorage(activity);
+        this.iconThemeStorage = new IconThemeStorage(activity);
+        this.iconThemeSelectionStore = new IconThemeSelectionStore(activity);
         this.uiTypeface = uiTypeface;
     }
 
@@ -184,6 +191,12 @@ public final class ThemeSettingsController {
                     failures.add("Editor Syntax: " + safeMessage(recoveryError));
                 }
             }
+        }
+
+        try {
+            applySelectedIconTheme();
+        } catch (Exception error) {
+            failures.add("File Icon Theme: " + safeMessage(error));
         }
 
         if (!recoveries.isEmpty() || !failures.isEmpty()) {
@@ -279,13 +292,14 @@ public final class ThemeSettingsController {
                 activity,
                 registry,
                 packageStorage,
+                iconThemeStorage,
                 appThemeController,
                 uiTypeface,
                 importedId -> {
                     snapshot = registry.reload();
                     selection = selectionStore.read(snapshot);
                     Toast.makeText(activity,
-                        "Imported theme successfully. Select it under Application UI or Editor Syntax.",
+                        "Theme import finished. Select the imported package in its matching Settings section.",
                         Toast.LENGTH_LONG).show();
                     showSettingsDialog();
                 }
@@ -304,7 +318,7 @@ public final class ThemeSettingsController {
         LinearLayout root = createRoot();
         root.addView(text("Themes", 22, textColor(), true));
         root.addView(text(
-            "Application UI and editor syntax themes are selected independently.",
+            "Application UI, editor syntax, and file icon themes are managed independently.",
             13, mutedColor(), false
         ), marginParams(0, dp(5), 0, dp(18)));
 
@@ -320,11 +334,12 @@ public final class ThemeSettingsController {
             ThemeTarget.EDITOR_SYNTAX,
             selection.getEditorSyntaxThemeId()
         );
+        addIconThemeSelectionSection(root);
 
-        TextView importTheme = action("Import VS Code Theme JSON", true, this::startThemeImport);
+        TextView importTheme = action("Import VS Code Theme JSON / VSIX", true, this::startThemeImport);
         root.addView(importTheme, marginParams(0, dp(18), 0, 0));
         root.addView(text(
-            "Import a standalone .json Color Theme. Yummy validates it and creates package metadata.",
+            "Import a Color Theme JSON, or a VSIX that provides Color Themes, File Icon Themes, or both.",
             11, mutedColor(), false), marginParams(0, dp(5), 0, 0));
 
         TextView debugReport = action(
@@ -345,6 +360,9 @@ public final class ThemeSettingsController {
         TextView manageThemes = action(
             "Manage imported themes", false, this::showImportedThemes);
         root.addView(manageThemes, marginParams(0, dp(12), 0, 0));
+        TextView manageIcons = action(
+            "Manage imported File Icon Themes", false, this::showImportedIconThemes);
+        root.addView(manageIcons, marginParams(0, dp(8), 0, 0));
 
         TextView close = action("Close", false, dialog::dismiss);
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
@@ -868,6 +886,12 @@ public final class ThemeSettingsController {
             }
         }
 
+        try {
+            applySelectedIconTheme();
+        } catch (Exception error) {
+            failures.add("File Icon Theme: " + safeMessage(error));
+        }
+
         String message = "Theme removed";
         if (!failures.isEmpty()) {
             message += ". Some active colors could not be refreshed: "
@@ -875,6 +899,331 @@ public final class ThemeSettingsController {
         }
         Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
         showImportedThemes();
+    }
+
+    private void addIconThemeSelectionSection(LinearLayout root) {
+        TextView title = text("FILE AND UI ICON THEME", 11, accentColor(), true);
+        title.setLetterSpacing(0.06f);
+        root.addView(title, marginParams(0, dp(18), 0, dp(7)));
+
+        String selectedId = iconThemeSelectionStore.read();
+        String selectedLabel = "Yummy Default Icons";
+        if (!IconThemeSelectionStore.DEFAULT_ICON_THEME_ID.equals(selectedId)) {
+            try {
+                selectedLabel = iconThemeStorage.load(selectedId).getLabel();
+            } catch (Exception error) {
+                selectedLabel = "Unavailable · " + selectedId;
+            }
+        }
+        root.addView(text(selectedLabel, 15, textColor(), true));
+        root.addView(text(
+            "Controls file/folder artwork and mapped Yummy UI icon slots. Missing custom icons use built-in Yummy icons.",
+            12, mutedColor(), false), marginParams(0, dp(3), 0, dp(9)));
+
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView choose = action("Choose Icon Theme", true, this::showIconThemeChooser);
+        TextView preview = action("Preview", false, () -> {
+            String id = iconThemeSelectionStore.read();
+            if (IconThemeSelectionStore.DEFAULT_ICON_THEME_ID.equals(id)) {
+                showIconThemePreview(null);
+            } else {
+                try {
+                    showIconThemePreview(iconThemeStorage.load(id));
+                } catch (Exception error) {
+                    showUnavailableMessage("Icon Theme is unavailable: " + safeMessage(error));
+                }
+            }
+        });
+        actions.addView(choose, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        previewParams.leftMargin = dp(8);
+        actions.addView(preview, previewParams);
+        root.addView(actions);
+
+        View divider = new View(activity);
+        divider.setBackgroundColor(borderColor());
+        root.addView(divider, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+    }
+
+    private void showIconThemeChooser() {
+        requireMainThread();
+        final List<IconThemeStorage.IconThemeInfo> themes;
+        try {
+            themes = iconThemeStorage.listImportedThemes();
+        } catch (Exception error) {
+            showUnavailableMessage("Could not list Icon Themes: " + safeMessage(error));
+            return;
+        }
+
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        root.addView(text("Choose File Icon Theme", 20, textColor(), true));
+        root.addView(text("Choose an imported VS Code Icon Theme or restore Yummy defaults.",
+            13, mutedColor(), false), marginParams(0, dp(4), 0, dp(12)));
+
+        String selectedId = iconThemeSelectionStore.read();
+        addIconThemeChoice(root, dialog, null,
+            IconThemeSelectionStore.DEFAULT_ICON_THEME_ID.equals(selectedId));
+        for (IconThemeStorage.IconThemeInfo info : themes) {
+            addIconThemeChoice(root, dialog, info, info.getId().equals(selectedId));
+        }
+        if (themes.isEmpty()) {
+            root.addView(text("No imported File Icon Themes are installed yet.",
+                12, mutedColor(), false), marginParams(0, dp(8), 0, 0));
+        }
+
+        TextView back = action("Back", false, dialog::dismiss);
+        root.addView(back, marginParams(0, dp(12), 0, 0));
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(backgroundColor());
+        scroll.addView(root);
+        dialog.setContentView(scroll);
+        showDialog(dialog, 560);
+    }
+
+    private void addIconThemeChoice(LinearLayout root, Dialog chooserDialog,
+                                    IconThemeStorage.IconThemeInfo info, boolean selected) {
+        String id = info == null ? IconThemeSelectionStore.DEFAULT_ICON_THEME_ID : info.getId();
+        String label = info == null ? "Yummy Default Icons" : info.getLabel();
+        String detail = info == null ? "Built-in Material Icon Theme fallback"
+            : (info.getDefinitionCount() + " icon definitions"
+                + (info.getPublisher() == null ? "" : " · " + info.getPublisher())
+                + (info.getVersion() == null ? "" : " · v" + info.getVersion())
+                + (info.getWarningCount() == 0 ? "" : " · " + info.getWarningCount() + " warnings"));
+
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        card.setBackground(rect(surfaceColor(), borderColor()));
+        LinearLayout header = new LinearLayout(activity);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.addView(text(label, 15, textColor(), true),
+            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        if (selected) header.addView(text("SELECTED", 10, accentColor(), true));
+        card.addView(header);
+        card.addView(text(detail, 11, mutedColor(), false), marginParams(0, dp(3), 0, dp(8)));
+        TextView use = action(selected ? "Selected" : "Use Icon Theme", true, () -> {
+            chooserDialog.dismiss();
+            selectIconTheme(id);
+        });
+        card.addView(use);
+        root.addView(card, marginParams(0, dp(5), 0, dp(5)));
+    }
+
+    private void showIconThemePreview(IconThemeStorage.InstalledIconTheme installed) {
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        if (installed == null) {
+            root.addView(text("Yummy Default Icons", 20, textColor(), true));
+            root.addView(text("The built-in icon provider is active. Any missing custom mapping falls back to these icons.",
+                13, mutedColor(), false), marginParams(0, dp(5), 0, dp(12)));
+        } else {
+            VSCodeIconTheme theme = installed.getTheme();
+            int imageDefinitions = 0;
+            int glyphDefinitions = 0;
+            for (VSCodeIconTheme.IconDefinition definition : theme.getIconDefinitions().values()) {
+                if (definition.usesImage()) imageDefinitions++;
+                else if (definition.usesFontGlyph()) glyphDefinitions++;
+            }
+            root.addView(text(installed.getLabel(), 20, textColor(), true));
+            String detail = installed.getId()
+                + (installed.getPublisher() == null ? "" : "\nPublisher: " + installed.getPublisher())
+                + (installed.getVersion() == null ? "" : "\nVersion: " + installed.getVersion());
+            root.addView(text(detail, 11, mutedColor(), false), marginParams(0, dp(4), 0, dp(10)));
+            root.addView(text("Definitions: " + theme.getIconDefinitions().size()
+                + "\nImage icons: " + imageDefinitions
+                + "\nFont glyphs: " + glyphDefinitions
+                + "\nFonts: " + theme.getFonts().size()
+                + "\nWarnings: " + installed.getWarnings().size(),
+                13, textColor(), false));
+            if (!installed.getWarnings().isEmpty()) {
+                root.addView(text("COMPATIBILITY WARNINGS", 10, accentColor(), true),
+                    marginParams(0, dp(12), 0, dp(4)));
+                int shown = 0;
+                for (String warning : installed.getWarnings()) {
+                    if (shown++ >= 12) break;
+                    root.addView(text("• " + warning, 11, mutedColor(), false),
+                        marginParams(0, dp(2), 0, 0));
+                }
+            }
+        }
+        root.addView(action("Close", true, dialog::dismiss), marginParams(0, dp(14), 0, 0));
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(backgroundColor());
+        scroll.addView(root);
+        dialog.setContentView(scroll);
+        showDialog(dialog, 500);
+    }
+
+    private void selectIconTheme(String id) {
+        try {
+            if (IconThemeSelectionStore.DEFAULT_ICON_THEME_ID.equals(id)) {
+                iconThemeSelectionStore.clear();
+                if (appThemeController != null) appThemeController.clearIconTheme();
+            } else {
+                IconThemeStorage.InstalledIconTheme installed = iconThemeStorage.load(id);
+                iconThemeSelectionStore.select(id);
+                applyInstalledIconTheme(installed);
+            }
+            Toast.makeText(activity, "File Icon Theme updated", Toast.LENGTH_SHORT).show();
+            showSettingsDialog();
+        } catch (Exception error) {
+            iconThemeSelectionStore.clear();
+            if (appThemeController != null) appThemeController.clearIconTheme();
+            Toast.makeText(activity, "Could not apply Icon Theme: " + safeMessage(error),
+                Toast.LENGTH_LONG).show();
+            showSettingsDialog();
+        }
+    }
+
+    private void applySelectedIconTheme() throws Exception {
+        String selectedId = iconThemeSelectionStore.read();
+        if (IconThemeSelectionStore.DEFAULT_ICON_THEME_ID.equals(selectedId)) {
+            if (appThemeController != null) appThemeController.clearIconTheme();
+            return;
+        }
+        try {
+            IconThemeStorage.InstalledIconTheme installed = iconThemeStorage.load(selectedId);
+            applyInstalledIconTheme(installed);
+        } catch (Exception error) {
+            iconThemeSelectionStore.clear();
+            if (appThemeController != null) appThemeController.clearIconTheme();
+            throw error;
+        }
+    }
+
+    private void applyInstalledIconTheme(IconThemeStorage.InstalledIconTheme installed) {
+        if (appThemeController == null) {
+            throw new IllegalStateException("AppThemeController is not connected");
+        }
+        ResolvedAppTheme currentAppTheme = appThemeController.getCurrentTheme();
+        ThemeAppearance appearance = currentAppTheme == null
+            ? ThemeAppearance.UNKNOWN : currentAppTheme.getAppearance();
+        appThemeController.setIconTheme(installed.getTheme(), installed.getPackageDirectory(),
+            installed.getThemeDocumentPath(), appearance, java.util.Collections.emptyMap());
+        if (!appThemeController.hasActiveIconTheme()) {
+            throw new IllegalStateException("Icon Theme could not be activated");
+        }
+    }
+
+    private void showImportedIconThemes() {
+        requireMainThread();
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        root.addView(text("Manage imported File Icon Themes", 20, textColor(), true));
+        root.addView(text("Remove imported icon packages. The built-in Yummy icons cannot be removed.",
+            12, mutedColor(), false), marginParams(0, dp(5), 0, dp(14)));
+        try {
+            List<IconThemeStorage.IconThemeInfo> themes = iconThemeStorage.listImportedThemes();
+            if (themes.isEmpty()) {
+                root.addView(text("No imported File Icon Themes installed.", 13, mutedColor(), false));
+            } else {
+                for (IconThemeStorage.IconThemeInfo info : themes) {
+                    LinearLayout card = new LinearLayout(activity);
+                    card.setOrientation(LinearLayout.VERTICAL);
+                    card.setPadding(dp(12), dp(10), dp(12), dp(10));
+                    card.setBackground(rect(surfaceColor(), borderColor()));
+                    card.addView(text(info.getLabel(), 15, textColor(), true));
+                    card.addView(text(info.getId() + " · " + info.getDefinitionCount()
+                        + " definitions · " + info.getWarningCount() + " warnings",
+                        11, mutedColor(), false), marginParams(0, dp(3), 0, dp(8)));
+                    LinearLayout actions = new LinearLayout(activity);
+                    actions.setOrientation(LinearLayout.HORIZONTAL);
+                    TextView preview = action("Preview", false, () -> {
+                        try { showIconThemePreview(iconThemeStorage.load(info.getId())); }
+                        catch (Exception error) { showUnavailableMessage(safeMessage(error)); }
+                    });
+                    TextView remove = action("Remove", false, () -> {
+                        dialog.dismiss();
+                        confirmRemoveIconTheme(info);
+                    });
+                    actions.addView(preview, new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                    LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                    removeParams.leftMargin = dp(8);
+                    actions.addView(remove, removeParams);
+                    card.addView(actions);
+                    root.addView(card, marginParams(0, 0, 0, dp(8)));
+                }
+            }
+        } catch (Exception error) {
+            root.addView(text("Could not list Icon Themes: " + safeMessage(error),
+                12, mutedColor(), false));
+        }
+        root.addView(action("Back", false, () -> {
+            dialog.dismiss();
+            showSettingsDialog();
+        }), marginParams(0, dp(14), 0, 0));
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(backgroundColor());
+        scroll.addView(root);
+        dialog.setContentView(scroll);
+        showDialog(dialog, 560);
+    }
+
+    private void confirmRemoveIconTheme(IconThemeStorage.IconThemeInfo info) {
+        Dialog dialog = createDialog();
+        LinearLayout root = createRoot();
+        root.addView(text("Remove File Icon Theme?", 19, textColor(), true));
+        root.addView(text("'" + info.getLabel()
+            + "' will be removed from Yummy's private Icon Theme storage.",
+            13, mutedColor(), false), marginParams(0, dp(7), 0, dp(14)));
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.addView(action("Cancel", false, dialog::dismiss),
+            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView remove = action("Remove", true, () -> {
+            dialog.dismiss();
+            removeImportedIconTheme(info.getId());
+        });
+        LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        removeParams.leftMargin = dp(8);
+        actions.addView(remove, removeParams);
+        root.addView(actions);
+        dialog.setContentView(root);
+        showDialog(dialog, 440);
+    }
+
+    private void removeImportedIconTheme(String id) {
+        requireMainThread();
+        if (released) return;
+        boolean selected = id.equals(iconThemeSelectionStore.read());
+        if (selected) {
+            // Detach the runtime before deleting any files it may still reference.
+            iconThemeSelectionStore.clear();
+            if (appThemeController != null) appThemeController.clearIconTheme();
+        }
+        Toast.makeText(activity, "Removing Icon Theme…", Toast.LENGTH_SHORT).show();
+        packageIoExecutor.execute(() -> {
+            Exception failure = null;
+            try {
+                iconThemeStorage.removeImportedTheme(id);
+            } catch (Exception error) {
+                failure = error;
+            }
+            Exception removeFailure = failure;
+            postPackageResult(() -> {
+                if (removeFailure != null) {
+                    Toast.makeText(activity, "Could not remove Icon Theme: "
+                        + safeMessage(removeFailure), Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(activity, selected
+                        ? "Icon Theme removed. Yummy default icons restored."
+                        : "Icon Theme removed", Toast.LENGTH_LONG).show();
+                }
+                showImportedIconThemes();
+            });
+        });
     }
 
     private void addSelectionSection(
@@ -1296,6 +1645,15 @@ public final class ThemeSettingsController {
                 }
                 appThemeController.applyTheme(theme);
                 selectionStore.selectAppUiTheme(theme.getMetadata().getId());
+                try {
+                    // Re-resolve appearance-specific icon mappings after a Color Theme switch.
+                    applySelectedIconTheme();
+                } catch (Exception iconError) {
+                    // Keep the successful App UI selection independent from File Icon Theme.
+                    if (appThemeController != null) appThemeController.clearIconTheme();
+                    Toast.makeText(activity, "App UI updated; File Icon Theme fell back to Yummy: "
+                        + safeMessage(iconError), Toast.LENGTH_LONG).show();
+                }
             } else {
                 if (editorSyntaxThemeApplier == null) {
                     throw new IllegalStateException("Editor Syntax applier is not connected");
