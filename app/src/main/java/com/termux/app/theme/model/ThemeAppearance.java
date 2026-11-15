@@ -23,6 +23,28 @@ public enum ThemeAppearance {
     }
 
     /**
+     * Converts a VS Code extension contribution's uiTheme value to a Yummy appearance.
+     * VSIX theme contributions use "vs", "vs-dark", "hc-black", and "hc-light"
+     * instead of the Color Theme JSON document's "type" values.
+     */
+    public static ThemeAppearance fromVscodeUiTheme(String value) {
+        if (value == null) return UNKNOWN;
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        switch (normalized) {
+            case "vs":
+                return LIGHT;
+            case "vs-dark":
+                return DARK;
+            case "hc-black":
+                return HIGH_CONTRAST_DARK;
+            case "hc-light":
+                return HIGH_CONTRAST_LIGHT;
+            default:
+                return UNKNOWN;
+        }
+    }
+
+    /**
      * Converts a VS Code theme type to a Yummy enum value.
      * Unknown or missing values are kept explicit instead of being guessed.
      */

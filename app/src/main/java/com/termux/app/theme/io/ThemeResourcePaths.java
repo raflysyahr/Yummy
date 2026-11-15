@@ -10,8 +10,14 @@ public final class ThemeResourcePaths {
         if (path.isEmpty() || path.startsWith("/") || path.matches("^[A-Za-z]:.*")) {
             throw new IllegalArgumentException("Theme resource path must be relative");
         }
-        if (!path.matches("[A-Za-z0-9._/-]+")) {
-            throw new IllegalArgumentException("Theme resource path contains unsupported characters");
+        // VS Code extensions may use spaces or Unicode characters in theme resource names.
+        // Keep path traversal checks strict, but do not reject otherwise safe file names just
+        // because they are outside the old ASCII-only package naming convention.
+        for (int i = 0; i < path.length(); i++) {
+            char character = path.charAt(i);
+            if (Character.isISOControl(character) || character == ':') {
+                throw new IllegalArgumentException("Theme resource path contains unsupported characters");
+            }
         }
         String[] segments = path.split("/", -1);
         for (String segment : segments) {

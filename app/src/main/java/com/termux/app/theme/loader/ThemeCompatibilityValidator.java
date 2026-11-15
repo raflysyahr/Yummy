@@ -100,7 +100,7 @@ public final class ThemeCompatibilityValidator {
         String lower = reference.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".json")) {
             try {
-                new JSONObject(content);
+                new JSONObject(ThemeDocumentParser.normalizeJsonc(content));
             } catch (JSONException error) {
                 throw new ThemeLoadException(
                     "Referenced TextMate JSON is invalid: " + reference, error);

@@ -32,6 +32,7 @@ import com.termux.app.theme.model.ThemeAppearance;
 import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.settings.VSCodeThemeJsonImporter;
+import com.termux.app.theme.settings.VSCodeVsixImporter;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.storage.ThemeStorageException;
 
@@ -42,11 +43,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * SAF-based import flow for standalone VS Code Color Theme JSON documents.
+ * SAF-based import flow for standalone VS Code Color Theme JSON documents and VSIX extensions.
  *
- * <p>The controller previews and validates a theme before installation. A duplicate imported
- * theme requires explicit replacement confirmation; a built-in ID is never overwritten and
- * receives a collision-free imported ID instead.</p>
+ * <p>The controller previews and validates a selected theme before installation. VSIX files
+ * expose all contributed themes and can install every variant as an independent Yummy package.
+ * Existing IDs are never overwritten; collisions receive a unique imported ID.</p>
  */
 public final class ThemeImportController {
     public static final int REQUEST_CODE = 0x594D;
@@ -71,6 +72,9 @@ public final class ThemeImportController {
     private final Typeface uiTypeface;
     private final Listener listener;
     private final VSCodeThemeJsonImporter importer = new VSCodeThemeJsonImporter();
+    private final VSCodeVsixImporter vsixImporter = new VSCodeVsixImporter();
+    private VSCodeVsixImporter.Preview pendingVsixPreview;
+    private volatile boolean vsixImportInProgress;
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
 
     private Dialog activeDialog;
@@ -181,7 +185,7 @@ public final class ThemeImportController {
         showDialog(dialog, 520);
     }
 
-    /** Shows the last persisted JSON-import diagnostic report from the Themes screen. */
+    /** Shows the last persisted theme-import diagnostic report from the Themes screen. */
     public void showLastImportDebugReport() {
         requireMainThread();
         restoreDebugReport();
@@ -219,6 +223,7 @@ public final class ThemeImportController {
         requireMainThread();
         if (released) return;
         clearDebugReport();
+        cleanupPendingVsixPreview();
         debug("PICKER", "Launching ACTION_OPEN_DOCUMENT");
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -249,7 +254,7 @@ public final class ThemeImportController {
         }
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
             debug("NO_DOCUMENT", "Picker returned no usable document URI");
-            showDebugDialog("No JSON file was returned",
+            showDebugDialog("No theme file was returned",
                 "Explorer returned resultCode=" + resultCode + ". Please retry and select a file.");
             return true;
         }
@@ -262,6 +267,7 @@ public final class ThemeImportController {
         requireMainThread();
         debug("CONTROLLER_RELEASE", "Import controller released with Activity lifecycle");
         released = true;
+        if (!vsixImportInProgress) cleanupPendingVsixPreview();
         if (activeDialog != null) {
             activeDialog.dismiss();
             activeDialog = null;
@@ -272,34 +278,216 @@ public final class ThemeImportController {
     private void inspectUri(Uri uri) {
         debug("URI_RECEIVED", uri.toString());
         debug("MIME_TYPE", String.valueOf(activity.getContentResolver().getType(uri)));
-        showProgress("Reading theme JSON…");
+        showProgress("Reading theme file…");
         ioExecutor.execute(() -> {
-            VSCodeThemeJsonImporter.Preview preview;
+            String displayName = queryDisplayName(uri);
             try {
-                String displayName = queryDisplayName(uri);
                 debug("DISPLAY_NAME", displayName);
                 InputStream input = activity.getContentResolver().openInputStream(uri);
                 if (input == null) throw new IllegalStateException("Could not open selected document");
                 debug("READ", "InputStream opened");
-                preview = importer.inspect(input, displayName);
+
+                if (displayName != null
+                    && displayName.toLowerCase(java.util.Locale.ROOT).endsWith(".vsix")) {
+                    VSCodeVsixImporter.Preview preview =
+                        vsixImporter.inspect(input, activity.getCacheDir());
+                    debug("VSIX_PARSE", "SUCCESS; extension=" + preview.getDisplayName()
+                        + "; version=" + preview.getVersion()
+                        + "; themes=" + preview.getThemes().size());
+                    activity.runOnUiThread(() -> {
+                        if (released || activity.isFinishing()) {
+                            vsixImporter.cleanup(preview);
+                            return;
+                        }
+                        cleanupPendingVsixPreview();
+                        pendingVsixPreview = preview;
+                        showVsixPreview(preview);
+                    });
+                    return;
+                }
+
+                VSCodeThemeJsonImporter.Preview preview = importer.inspect(input, displayName);
                 debug("JSON_PARSE", "SUCCESS; name=" + preview.getName()
                     + "; id=" + preview.getSuggestedId()
                     + "; appUi=" + preview.supportsAppUi()
                     + "; editorSyntax=" + preview.supportsEditorSyntax());
+                postToMain(() -> showDebugDialog(
+                    "JSON read and parsed successfully",
+                    "Theme: " + preview.getName()
+                        + "\nThe preview is ready. Continue to inspect and import this theme.",
+                    "Continue to Preview",
+                    () -> beginPreview(preview)
+                ));
             } catch (Exception error) {
                 debug("READ_OR_PARSE_FAILED", error.toString());
                 for (StackTraceElement frame : error.getStackTrace()) debug("STACK", frame.toString());
                 postToMain(() -> showDebugDialog("Could not read or parse theme", safeMessage(error)));
-                return;
             }
-            postToMain(() -> showDebugDialog(
-                "JSON read and parsed successfully",
-                "Theme: " + preview.getName()
-                    + "\nThe preview is ready. Continue to inspect and import this theme.",
-                "Continue to Preview",
-                () -> beginPreview(preview)
-            ));
         });
+    }
+
+    private void showVsixPreview(VSCodeVsixImporter.Preview preview) {
+        debug("VSIX_PREVIEW", "Showing " + preview.getThemes().size()
+            + " theme contributions from " + preview.getDisplayName());
+        if (released || activity.isFinishing()) {
+            vsixImporter.cleanup(preview);
+            if (pendingVsixPreview == preview) pendingVsixPreview = null;
+            return;
+        }
+
+        Dialog dialog = createDialog();
+        dialog.setOnDismissListener(ignored -> {
+            if (activeDialog == dialog) activeDialog = null;
+            if (pendingVsixPreview == preview && !vsixImportInProgress) {
+                vsixImporter.cleanup(preview);
+                pendingVsixPreview = null;
+            }
+        });
+
+        LinearLayout root = createRoot();
+        root.addView(text("Import VS Code Extension", 19, textColor(), true));
+        root.addView(text(preview.getDisplayName(), 16, accentColor(), true),
+            marginParams(0, dp(8), 0, dp(3)));
+        root.addView(text("Publisher: " + preview.getPublisher()
+            + "  •  Version: " + preview.getVersion(), 12, mutedColor(), false));
+        root.addView(text(preview.getThemes().size() + " color theme variants found",
+            13, textColor(), true), marginParams(0, dp(12), 0, dp(6)));
+
+        ScrollView scroll = new ScrollView(activity);
+        LinearLayout themeList = new LinearLayout(activity);
+        themeList.setOrientation(LinearLayout.VERTICAL);
+        for (VSCodeVsixImporter.ThemeEntry entry : preview.getThemes()) {
+            String targets = (entry.supportsAppUi() ? "App UI" : "")
+                + (entry.supportsAppUi() && entry.supportsEditorSyntax() ? " • " : "")
+                + (entry.supportsEditorSyntax() ? "Editor Syntax" : "");
+            themeList.addView(text(entry.getLabel(), 13, textColor(), true),
+                marginParams(0, dp(5), 0, 0));
+            themeList.addView(text(appearanceLabel(entry.getAppearance())
+                + "  •  " + targets, 11, mutedColor(), false),
+                marginParams(0, 0, 0, dp(5)));
+        }
+        scroll.addView(themeList);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(260)));
+
+        root.addView(text(
+            "Yummy will import each contribution as a separate theme. Theme color data and "
+                + "referenced TextMate resources are retained. Existing theme IDs are kept "
+                + "safe by assigning a unique imported ID.",
+            12, mutedColor(), false), marginParams(0, dp(10), 0, dp(12)));
+
+        LinearLayout buttons = new LinearLayout(activity);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.addView(action("Cancel", false, () -> {
+            if (activeDialog == dialog) activeDialog = null;
+            dialog.dismiss();
+            cleanupPendingVsixPreview();
+        }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView confirm = action("Import all " + preview.getThemes().size(), true, () -> {
+            vsixImportInProgress = true;
+            dialog.dismiss();
+            prepareInstallVsix(preview);
+        });
+        LinearLayout.LayoutParams confirmParams = new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        confirmParams.leftMargin = dp(8);
+        buttons.addView(confirm, confirmParams);
+        root.addView(buttons);
+        dialog.setContentView(root);
+        showDialog(dialog, 540);
+    }
+
+    private void prepareInstallVsix(VSCodeVsixImporter.Preview preview) {
+        debug("VSIX_INSTALL_PREPARE", "themes=" + preview.getThemes().size());
+        final List<String> ids = new ArrayList<>();
+        try {
+            ThemeRegistrySnapshotHolder current = refreshRegistry();
+            java.util.Set<String> planned = new java.util.HashSet<>();
+            for (VSCodeVsixImporter.ThemeEntry entry : preview.getThemes()) {
+                String candidate = entry.getSuggestedId();
+                if (current.contains(candidate) || storage.hasImportedTheme(candidate)
+                    || planned.contains(candidate)) {
+                    candidate = findUniqueVsixId(candidate, current, planned);
+                }
+                planned.add(candidate);
+                ids.add(candidate);
+            }
+        } catch (Exception error) {
+            vsixImportInProgress = false;
+            cleanupPendingVsixPreview();
+            showDebugDialog("Could not prepare VSIX import", safeMessage(error));
+            return;
+        }
+
+        showProgress("Importing " + preview.getThemes().size() + " themes…");
+        ioExecutor.execute(() -> {
+            List<String> installed = new ArrayList<>();
+            List<String> installedIds = new ArrayList<>();
+            List<String> failures = new ArrayList<>();
+            for (int i = 0; i < preview.getThemes().size(); i++) {
+                VSCodeVsixImporter.ThemeEntry entry = preview.getThemes().get(i);
+                String id = ids.get(i);
+                try {
+                    String installedId = vsixImporter.installTheme(
+                        activity, storage, preview, entry, id);
+                    installed.add(entry.getLabel() + " (" + installedId + ")");
+                    installedIds.add(installedId);
+                    debug("VSIX_THEME_INSTALLED", entry.getLabel() + "; id=" + installedId);
+                } catch (Exception error) {
+                    failures.add(entry.getLabel() + ": " + safeMessage(error));
+                    debug("VSIX_THEME_FAILED", entry.getLabel() + "; " + error);
+                    for (StackTraceElement frame : error.getStackTrace()) debug("STACK", frame.toString());
+                }
+            }
+
+            try {
+                registry.reload();
+            } catch (Exception error) {
+                debug("VSIX_REGISTRY_RELOAD_FAILED", error.toString());
+                failures.add("Registry reload: " + safeMessage(error));
+            }
+
+            vsixImporter.cleanup(preview);
+            postToMain(() -> {
+                vsixImportInProgress = false;
+                if (pendingVsixPreview == preview) pendingVsixPreview = null;
+                dismissActiveDialog();
+                StringBuilder summary = new StringBuilder();
+                summary.append("Imported ").append(installed.size()).append(" of ")
+                    .append(preview.getThemes().size()).append(" themes.");
+                if (!installed.isEmpty()) {
+                    summary.append("\n\nInstalled:\n• ").append(join(installed, "\n• "));
+                }
+                if (!failures.isEmpty()) {
+                    summary.append("\n\nFailed:\n• ").append(join(failures, "\n• "));
+                }
+                showDebugDialog(failures.isEmpty()
+                    ? "VSIX import completed" : "VSIX import completed with errors", summary.toString());
+                if (listener != null) {
+                    for (String id : installedIds) listener.onThemeImported(id);
+                }
+            });
+        });
+    }
+
+    private String findUniqueVsixId(
+        String base, ThemeRegistrySnapshotHolder snapshot, java.util.Set<String> planned
+    ) throws ThemeStorageException {
+        int index = 2;
+        while (true) {
+            String suffix = "-" + index++;
+            int maximumBase = Math.max(1, 64 - suffix.length());
+            String prefix = base.length() > maximumBase ? base.substring(0, maximumBase) : base;
+            String candidate = prefix.replaceAll("[-._]+$", "") + suffix;
+            if (!snapshot.contains(candidate) && !storage.hasImportedTheme(candidate)
+                && !planned.contains(candidate)) return candidate;
+        }
+    }
+
+    private void cleanupPendingVsixPreview() {
+        VSCodeVsixImporter.Preview preview = pendingVsixPreview;
+        pendingVsixPreview = null;
+        if (preview != null) vsixImporter.cleanup(preview);
     }
 
     private String queryDisplayName(Uri uri) {

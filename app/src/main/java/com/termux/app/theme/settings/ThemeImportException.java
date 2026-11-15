@@ -1,6 +1,6 @@
 package com.termux.app.theme.settings;
 
-/** Raised when a standalone VS Code Color Theme JSON cannot be imported safely. */
+/** Raised when a VS Code Color Theme JSON or VSIX package cannot be imported safely. */
 public final class ThemeImportException extends Exception {
     private static final long serialVersionUID = 1L;
 
