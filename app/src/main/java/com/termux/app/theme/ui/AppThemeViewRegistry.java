@@ -47,8 +47,13 @@ public final class AppThemeViewRegistry {
     public void bindImageTint(ImageView view, AppThemeColorRole role) {
         // App Theme tint is intended for Yummy's monochrome VectorDrawable XML icons.
         // Material Icon Theme assets are BitmapDrawables and must retain their original
-        // artwork colors.
+        // artwork colors by default.
         if (view == null || !isVectorDrawable(view.getDrawable())) return;
+        bind(view, role, Property.IMAGE_TINT);
+    }
+
+    /** Explicit opt-in for a bitmap icon that is intentionally monochrome in its UI role. */
+    public void bindImageTintIncludingBitmap(ImageView view, AppThemeColorRole role) {
         bind(view, role, Property.IMAGE_TINT);
     }
 

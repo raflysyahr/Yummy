@@ -2,6 +2,7 @@ package com.termux.app.editor;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.res.ColorStateList;
 import android.app.Application;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -941,12 +942,21 @@ public class EditorController {
             tab.addView(name, nameParams);
 
             if (mAppThemeController != null) {
+                AppThemeColorRole tabForegroundRole = active
+                    ? AppThemeColorRole.TAB_ACTIVE_FOREGROUND
+                    : AppThemeColorRole.TAB_INACTIVE_FOREGROUND;
                 mAppThemeController.bindBackground(tab, active
                     ? AppThemeColorRole.TAB_ACTIVE_BACKGROUND
                     : AppThemeColorRole.TAB_INACTIVE_BACKGROUND);
-                mAppThemeController.bindText(name, active
-                    ? AppThemeColorRole.TAB_ACTIVE_FOREGROUND
-                    : AppThemeColorRole.TAB_INACTIVE_FOREGROUND);
+                mAppThemeController.bindText(name, tabForegroundRole);
+
+                // Untitled uses the generic Material Icon Theme file bitmap. Unlike normal
+                // filename icons, this placeholder is a monochrome tab affordance and must
+                // share exactly the same foreground color as its tab title.
+                if ("Untitled".equalsIgnoreCase(document.name)) {
+                    icon.setImageTintList(ColorStateList.valueOf(name.getCurrentTextColor()));
+                    mAppThemeController.bindIconTintIncludingBitmap(icon, tabForegroundRole);
+                }
             }
 
             if (document.isDirty()) {

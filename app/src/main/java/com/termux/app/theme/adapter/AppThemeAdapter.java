@@ -59,6 +59,21 @@ public final class AppThemeAdapter {
                 continue;
             }
 
+            // Light VS Code themes frequently omit tab.activeForeground. Yummy's default
+            // active-tab fallback is designed for its dark UI and would therefore render
+            // white text on a light tab. In that specific case, use the theme's editor text
+            // color as the active-tab foreground fallback. This does not add an alias to the
+            // role mapping table or affect themes that explicitly define tab.activeForeground.
+            if (role == AppThemeColorRole.TAB_ACTIVE_FOREGROUND
+                && metadata.getAppearance() == com.termux.app.theme.model.ThemeAppearance.LIGHT) {
+                ThemeColorMatch editorForeground = findThemeColor(
+                    sourceColors, new String[] {"editor.foreground"});
+                if (editorForeground.color != null) {
+                    resolved.put(role, editorForeground.color);
+                    continue;
+                }
+            }
+
             if (fallbacks != null) {
                 Integer fallbackColor = fallbacks.getColor(role);
                 if (fallbackColor != null) resolved.put(role, fallbackColor);

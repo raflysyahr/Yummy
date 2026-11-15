@@ -94,6 +94,11 @@ public final class AppThemeController {
         viewRegistry.bindImageTint(view, role);
     }
 
+    /** Explicit tint binding for bitmap artwork whose UI role is intentionally monochrome. */
+    public void bindIconTintIncludingBitmap(ImageView view, AppThemeColorRole role) {
+        viewRegistry.bindImageTintIncludingBitmap(view, role);
+    }
+
     public void bindButton(CompoundButton view, AppThemeColorRole role) {
         viewRegistry.bindButtonTint(view, role);
     }

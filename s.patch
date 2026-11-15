@@ -1,0 +1,102 @@
+diff --git a/app/src/main/java/com/termux/app/editor/EditorController.java b/app/src/main/java/com/termux/app/editor/EditorController.java
+index 03348da..505c761 100644
+--- a/app/src/main/java/com/termux/app/editor/EditorController.java
++++ b/app/src/main/java/com/termux/app/editor/EditorController.java
+@@ -2,6 +2,7 @@ package com.termux.app.editor;
+ 
+ import android.app.Activity;
+ import android.app.AlertDialog;
++import android.content.res.ColorStateList;
+ import android.app.Application;
+ import android.graphics.Color;
+ import android.graphics.Typeface;
+@@ -941,12 +942,21 @@ public class EditorController {
+             tab.addView(name, nameParams);
+ 
+             if (mAppThemeController != null) {
++                AppThemeColorRole tabForegroundRole = active
++                    ? AppThemeColorRole.TAB_ACTIVE_FOREGROUND
++                    : AppThemeColorRole.TAB_INACTIVE_FOREGROUND;
+                 mAppThemeController.bindBackground(tab, active
+                     ? AppThemeColorRole.TAB_ACTIVE_BACKGROUND
+                     : AppThemeColorRole.TAB_INACTIVE_BACKGROUND);
+-                mAppThemeController.bindText(name, active
+-                    ? AppThemeColorRole.TAB_ACTIVE_FOREGROUND
+-                    : AppThemeColorRole.TAB_INACTIVE_FOREGROUND);
++                mAppThemeController.bindText(name, tabForegroundRole);
++
++                // Untitled uses the generic Material Icon Theme file bitmap. Unlike normal
++                // filename icons, this placeholder is a monochrome tab affordance and must
++                // share exactly the same foreground color as its tab title.
++                if ("Untitled".equalsIgnoreCase(document.name)) {
++                    icon.setImageTintList(ColorStateList.valueOf(name.getCurrentTextColor()));
++                    mAppThemeController.bindIconTintIncludingBitmap(icon, tabForegroundRole);
++                }
+             }
+ 
+             if (document.isDirty()) {
+diff --git a/app/src/main/java/com/termux/app/theme/adapter/AppThemeAdapter.java b/app/src/main/java/com/termux/app/theme/adapter/AppThemeAdapter.java
+index 1b9e62d..dfa46ca 100644
+--- a/app/src/main/java/com/termux/app/theme/adapter/AppThemeAdapter.java
++++ b/app/src/main/java/com/termux/app/theme/adapter/AppThemeAdapter.java
+@@ -59,6 +59,21 @@ public final class AppThemeAdapter {
+                 continue;
+             }
+ 
++            // Light VS Code themes frequently omit tab.activeForeground. Yummy's default
++            // active-tab fallback is designed for its dark UI and would therefore render
++            // white text on a light tab. In that specific case, use the theme's editor text
++            // color as the active-tab foreground fallback. This does not add an alias to the
++            // role mapping table or affect themes that explicitly define tab.activeForeground.
++            if (role == AppThemeColorRole.TAB_ACTIVE_FOREGROUND
++                && metadata.getAppearance() == com.termux.app.theme.model.ThemeAppearance.LIGHT) {
++                ThemeColorMatch editorForeground = findThemeColor(
++                    sourceColors, new String[] {"editor.foreground"});
++                if (editorForeground.color != null) {
++                    resolved.put(role, editorForeground.color);
++                    continue;
++                }
++            }
++
+             if (fallbacks != null) {
+                 Integer fallbackColor = fallbacks.getColor(role);
+                 if (fallbackColor != null) resolved.put(role, fallbackColor);
+diff --git a/app/src/main/java/com/termux/app/theme/ui/AppThemeController.java b/app/src/main/java/com/termux/app/theme/ui/AppThemeController.java
+index 2a0f4c2..cc2e9e1 100644
+--- a/app/src/main/java/com/termux/app/theme/ui/AppThemeController.java
++++ b/app/src/main/java/com/termux/app/theme/ui/AppThemeController.java
+@@ -94,6 +94,11 @@ public final class AppThemeController {
+         viewRegistry.bindImageTint(view, role);
+     }
+ 
++    /** Explicit tint binding for bitmap artwork whose UI role is intentionally monochrome. */
++    public void bindIconTintIncludingBitmap(ImageView view, AppThemeColorRole role) {
++        viewRegistry.bindImageTintIncludingBitmap(view, role);
++    }
++
+     public void bindButton(CompoundButton view, AppThemeColorRole role) {
+         viewRegistry.bindButtonTint(view, role);
+     }
+diff --git a/app/src/main/java/com/termux/app/theme/ui/AppThemeViewRegistry.java b/app/src/main/java/com/termux/app/theme/ui/AppThemeViewRegistry.java
+index d96b94f..5a75b2f 100644
+--- a/app/src/main/java/com/termux/app/theme/ui/AppThemeViewRegistry.java
++++ b/app/src/main/java/com/termux/app/theme/ui/AppThemeViewRegistry.java
+@@ -47,11 +47,16 @@ public final class AppThemeViewRegistry {
+     public void bindImageTint(ImageView view, AppThemeColorRole role) {
+         // App Theme tint is intended for Yummy's monochrome VectorDrawable XML icons.
+         // Material Icon Theme assets are BitmapDrawables and must retain their original
+-        // artwork colors.
++        // artwork colors by default.
+         if (view == null || !isVectorDrawable(view.getDrawable())) return;
+         bind(view, role, Property.IMAGE_TINT);
+     }
+ 
++    /** Explicit opt-in for a bitmap icon that is intentionally monochrome in its UI role. */
++    public void bindImageTintIncludingBitmap(ImageView view, AppThemeColorRole role) {
++        bind(view, role, Property.IMAGE_TINT);
++    }
++
+     private static boolean isVectorDrawable(Drawable drawable) {
+         return drawable instanceof VectorDrawable;
+     }
+
