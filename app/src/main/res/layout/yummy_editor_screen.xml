@@ -32,8 +32,8 @@
 
         <ImageView
             android:id="@+id/yummy_app_file_icon"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
             android:layout_marginStart="8dp"
             android:src="@drawable/ic_yummy_file"
             android:tint="@color/yummy_accent_green"
@@ -283,8 +283,8 @@
             android:paddingEnd="6dp">
             <ImageView
                 android:id="@+id/yummy_status_lang_icon"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:layout_marginEnd="4dp"
                 android:scaleType="fitCenter"
                 android:contentDescription="Ikon bahasa" />

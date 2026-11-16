@@ -1006,7 +1006,7 @@ public class EditorController {
                 mAppThemeController.bindFileIcon(icon, document.name, null,
                     languageIdForFilename(document.name), fallbackFileIcon);
             }
-            tab.addView(icon, new LinearLayout.LayoutParams(dpInt(22), dpInt(22)));
+            tab.addView(icon, new LinearLayout.LayoutParams(dpInt(16), dpInt(16)));
 
             TextView name = new TextView(mActivity);
             name.setText(document.name);

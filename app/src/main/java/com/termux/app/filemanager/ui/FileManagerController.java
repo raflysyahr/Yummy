@@ -863,7 +863,7 @@ public final class FileManagerController {
                 appThemeController.bindFileIcon(leadingIcon, "", null, null, fallbackLeadingIcon);
             }
         }
-        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(18), dp(18)));
 
         View divider = new View(activity);
         divider.setBackgroundColor(0xFFA0A0A0);
@@ -3134,9 +3134,8 @@ public final class FileManagerController {
                     badge = new ImageView(activity);
                     badge.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     LinearLayout.LayoutParams badgeLp =
-                        // Use a 30dp slot for imported icon themes. The renderer normalizes
-                        // transparent SVG padding while preserving the original artwork ratio.
-                        new LinearLayout.LayoutParams(dp(30), dp(38));
+                        // Keep file/folder artwork approximately 10% larger than the 14sp filename.
+                        new LinearLayout.LayoutParams(dp(16), dp(38));
                     badgeLp.setMargins(0, 0, dp(6), 0);
                     container.addView(badge, badgeLp);
                     texts = new LinearLayout(activity);
