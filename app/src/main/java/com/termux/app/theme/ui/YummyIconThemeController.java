@@ -51,6 +51,11 @@ import java.util.regex.Pattern;
  */
 public final class YummyIconThemeController {
     private static final int RENDER_SIZE_PX = 72;
+    /** Render SVGs above display resolution so transparent padding can be measured accurately. */
+    private static final int SVG_SOURCE_SIZE_PX = 144;
+    /** Keep a small optical margin while normalizing the visible artwork across icon themes. */
+    private static final float ICON_CONTENT_FRACTION = 0.88f;
+    private static final int VISIBLE_ALPHA_THRESHOLD = 12;
     private static final long MAX_ASSET_BYTES = 4L * 1024L * 1024L;
     private static final int MAX_FONT_BYTES = 5 * 1024 * 1024;
     /** AndroidSVG's CSS parser does not consistently understand CSS Color 4 color(display-p3). */
@@ -370,11 +375,78 @@ public final class YummyIconThemeController {
         try (ByteArrayInputStream input = new ByteArrayInputStream(
             source.getBytes(StandardCharsets.UTF_8))) {
             SVG svg = SVG.getFromInputStream(input);
-            Bitmap bitmap = Bitmap.createBitmap(RENDER_SIZE_PX, RENDER_SIZE_PX, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            svg.renderToCanvas(canvas, new RectF(0f, 0f, RENDER_SIZE_PX, RENDER_SIZE_PX));
-            return bitmap;
+            Bitmap sourceBitmap = Bitmap.createBitmap(
+                SVG_SOURCE_SIZE_PX, SVG_SOURCE_SIZE_PX, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(sourceBitmap);
+            svg.renderToCanvas(canvas, new RectF(
+                0f, 0f, SVG_SOURCE_SIZE_PX, SVG_SOURCE_SIZE_PX));
+            Bitmap normalized = fitVisibleArtwork(sourceBitmap);
+            sourceBitmap.recycle();
+            return normalized;
         }
+    }
+
+    /**
+     * Trims transparent SVG/raster padding and centers the visible artwork in a common icon box.
+     * This compensates for themes whose SVG viewBox is much larger than the actual path artwork.
+     * The source ratio is preserved; artwork is never stretched or clipped.
+     */
+    @Nullable
+    private static Bitmap fitVisibleArtwork(@Nullable Bitmap source) {
+        if (source == null || source.isRecycled()) return null;
+        int sourceWidth = source.getWidth();
+        int sourceHeight = source.getHeight();
+        if (sourceWidth <= 0 || sourceHeight <= 0) return null;
+
+        int minX = sourceWidth;
+        int minY = sourceHeight;
+        int maxX = -1;
+        int maxY = -1;
+        for (int y = 0; y < sourceHeight; y++) {
+            for (int x = 0; x < sourceWidth; x++) {
+                if (Color.alpha(source.getPixel(x, y)) > VISIBLE_ALPHA_THRESHOLD) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+        }
+        if (maxX < minX || maxY < minY) return null;
+
+        // Preserve antialiased edge pixels around the detected visible bounds.
+        int artworkWidth = maxX - minX + 1;
+        int artworkHeight = maxY - minY + 1;
+        int padX = Math.max(1, Math.round(artworkWidth * 0.025f));
+        int padY = Math.max(1, Math.round(artworkHeight * 0.025f));
+        minX = Math.max(0, minX - padX);
+        minY = Math.max(0, minY - padY);
+        maxX = Math.min(sourceWidth - 1, maxX + padX);
+        maxY = Math.min(sourceHeight - 1, maxY + padY);
+
+        Rect sourceBounds = new Rect(minX, minY, maxX + 1, maxY + 1);
+        float targetContentSize = RENDER_SIZE_PX * ICON_CONTENT_FRACTION;
+        float targetScale = Math.min(targetContentSize / sourceBounds.width(),
+            targetContentSize / sourceBounds.height());
+        // Never shrink artwork that already fills the target image box. Only enlarge assets
+        // whose visible artwork would otherwise look unusually small inside their viewBox.
+        float baseFitScale = Math.min((float) RENDER_SIZE_PX / sourceWidth,
+            (float) RENDER_SIZE_PX / sourceHeight);
+        float scale = Math.max(baseFitScale, targetScale);
+        float destinationWidth = sourceBounds.width() * scale;
+        float destinationHeight = sourceBounds.height() * scale;
+        float left = (RENDER_SIZE_PX - destinationWidth) / 2f;
+        float top = (RENDER_SIZE_PX - destinationHeight) / 2f;
+        RectF destinationBounds = new RectF(left, top,
+            left + destinationWidth, top + destinationHeight);
+
+        Bitmap normalized = Bitmap.createBitmap(
+            RENDER_SIZE_PX, RENDER_SIZE_PX, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(normalized);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG
+            | Paint.DITHER_FLAG);
+        canvas.drawBitmap(source, sourceBounds, destinationBounds, paint);
+        return normalized;
     }
 
     /** Converts CSS Color 4 Display-P3 values to ordinary sRGB colors understood by AndroidSVG. */
@@ -462,20 +534,9 @@ public final class YummyIconThemeController {
         options.inPreferredConfig = Bitmap.Config.ARGB_8888;
         Bitmap decoded = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
         if (decoded == null) return null;
-        float scale = Math.min((float) RENDER_SIZE_PX / decoded.getWidth(),
-            (float) RENDER_SIZE_PX / decoded.getHeight());
-        int width = Math.max(1, Math.round(decoded.getWidth() * scale));
-        int height = Math.max(1, Math.round(decoded.getHeight() * scale));
-        Bitmap scaled = Bitmap.createScaledBitmap(decoded, width, height, true);
-        Bitmap canvasBitmap = Bitmap.createBitmap(RENDER_SIZE_PX, RENDER_SIZE_PX,
-            Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(canvasBitmap);
-        float left = (RENDER_SIZE_PX - width) / 2f;
-        float top = (RENDER_SIZE_PX - height) / 2f;
-        canvas.drawBitmap(scaled, left, top, null);
-        if (scaled != decoded) scaled.recycle();
+        Bitmap normalized = fitVisibleArtwork(decoded);
         decoded.recycle();
-        return canvasBitmap;
+        return normalized;
     }
 
     @Nullable

@@ -863,7 +863,7 @@ public final class FileManagerController {
                 appThemeController.bindFileIcon(leadingIcon, "", null, null, fallbackLeadingIcon);
             }
         }
-        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        heading.addView(leadingIcon, new LinearLayout.LayoutParams(dp(30), dp(30)));
 
         View divider = new View(activity);
         divider.setBackgroundColor(0xFFA0A0A0);
@@ -3134,9 +3134,9 @@ public final class FileManagerController {
                     badge = new ImageView(activity);
                     badge.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                     LinearLayout.LayoutParams badgeLp =
-                        // VS Code File Icon Themes commonly use 16px folder artwork. Give the
-                        // asset a 22dp slot on mobile so folder glyphs do not look undersized.
-                        new LinearLayout.LayoutParams(dp(22), dp(38));
+                        // Use a 30dp slot for imported icon themes. The renderer normalizes
+                        // transparent SVG padding while preserving the original artwork ratio.
+                        new LinearLayout.LayoutParams(dp(30), dp(38));
                     badgeLp.setMargins(0, 0, dp(6), 0);
                     container.addView(badge, badgeLp);
                     texts = new LinearLayout(activity);
