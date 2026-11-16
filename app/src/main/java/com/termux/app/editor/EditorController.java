@@ -73,6 +73,7 @@ public class EditorController {
     private TextView mStatusIndent;
     private TextView mStatusLang;
     private ImageView mStatusLangIcon;
+    private ImageView mAppFileIcon;
     private TextView mStatusEncoding;
     private View mStatusEncodingGroup;
     private PopupWindow mEncodingPopup;
@@ -175,6 +176,7 @@ public class EditorController {
         mStatusIndent = mActivity.findViewById(R.id.yummy_status_indent);
         mStatusLang = mActivity.findViewById(R.id.yummy_status_lang);
         mStatusLangIcon = mActivity.findViewById(R.id.yummy_status_lang_icon);
+        mAppFileIcon = mActivity.findViewById(R.id.yummy_app_file_icon);
         mStatusEncoding = mActivity.findViewById(R.id.yummy_status_enc);
         mStatusEncodingGroup = mActivity.findViewById(R.id.yummy_status_encoding_button);
         if (mStatusEncodingGroup != null) mStatusEncodingGroup.setOnClickListener(v -> showEncodingPopup());
@@ -439,6 +441,7 @@ public class EditorController {
     public void setAppThemeController(@Nullable AppThemeController controller) {
         mAppThemeController = controller;
         bindEditorUiIcons();
+        updateAppFileIcon();
         updateStatus();
         renderTabs();
     }
@@ -910,6 +913,21 @@ public class EditorController {
         if (title != null) {
             title.setTypeface(nunitoTypeface(true));
             title.setText(mActiveDocument == null ? "Yummy" : mActiveDocument.name);
+        }
+        updateAppFileIcon();
+    }
+
+    /** Uses the active document's file association for the app-bar icon beside Terminal. */
+    private void updateAppFileIcon() {
+        if (mAppFileIcon == null) return;
+        Drawable fallback = ContextCompat.getDrawable(mActivity, R.drawable.ic_yummy_file);
+        if (fallback == null) return;
+        String fileName = mActiveDocument == null ? "" : mActiveDocument.name;
+        if (mAppThemeController != null) {
+            mAppThemeController.bindFileIcon(mAppFileIcon, fileName, null,
+                languageIdForFilename(fileName), fallback);
+        } else {
+            mAppFileIcon.setImageDrawable(fallback);
         }
     }
 

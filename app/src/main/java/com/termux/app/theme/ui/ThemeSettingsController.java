@@ -1732,10 +1732,16 @@ public final class ThemeSettingsController {
     }
 
     private TextView action(String label, boolean primary, Runnable callback) {
-        TextView view = text(label, 13, primary ? accentForegroundColor() : textColor(), true);
+        // A primary action is a button, not a focus indicator. VS Code themes such as Vira
+        // intentionally set focusBorder to transparent and activityBarBadge.foreground to
+        // black; pairing those roles made labels such as "Choose theme" black on a dark,
+        // transparent surface. Use the dedicated button foreground/background pair instead.
+        int actionBackground = primary ? buttonBackgroundColor() : surfaceColor();
+        int actionForeground = primary ? buttonForegroundColor() : textColor();
+        TextView view = text(label, 13, actionForeground, true);
         view.setGravity(Gravity.CENTER);
         view.setPadding(dp(12), dp(10), dp(12), dp(10));
-        view.setBackground(rect(primary ? accentColor() : surfaceColor(), borderColor()));
+        view.setBackground(rect(actionBackground, borderColor()));
         view.setClickable(true);
         view.setFocusable(true);
         view.setOnClickListener(ignored -> callback.run());
@@ -1813,8 +1819,26 @@ public final class ThemeSettingsController {
         return appColor(AppThemeColorRole.ACCENT, COLOR_ACCENT);
     }
 
-    private int accentForegroundColor() {
-        return appColor(AppThemeColorRole.ACCENT_FOREGROUND, Color.BLACK);
+    private int buttonBackgroundColor() {
+        return appColor(AppThemeColorRole.BUTTON_BACKGROUND, accentColor());
+    }
+
+    private int buttonForegroundColor() {
+        return appColor(AppThemeColorRole.BUTTON_FOREGROUND,
+            readableForegroundFor(buttonBackgroundColor()));
+    }
+
+    private static int readableForegroundFor(int background) {
+        double red = linearize(Color.red(background) / 255.0);
+        double green = linearize(Color.green(background) / 255.0);
+        double blue = linearize(Color.blue(background) / 255.0);
+        double luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+        return luminance > 0.42 ? Color.BLACK : Color.WHITE;
+    }
+
+    private static double linearize(double channel) {
+        return channel <= 0.04045 ? channel / 12.92
+            : Math.pow((channel + 0.055) / 1.055, 2.4);
     }
 
     private int appColor(AppThemeColorRole role, int fallback) {

@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -28,12 +29,18 @@ import com.termux.app.theme.registry.YummyUiIconRegistry;
 import com.termux.app.theme.resolver.VSCodeIconThemeResolver;
 
 import java.io.File;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Runtime bridge between VS Code File Icon Themes and concrete Yummy ImageViews.
@@ -46,6 +53,14 @@ public final class YummyIconThemeController {
     private static final int RENDER_SIZE_PX = 72;
     private static final long MAX_ASSET_BYTES = 4L * 1024L * 1024L;
     private static final int MAX_FONT_BYTES = 5 * 1024 * 1024;
+    /** AndroidSVG's CSS parser does not consistently understand CSS Color 4 color(display-p3). */
+    private static final Pattern DISPLAY_P3_COLOR = Pattern.compile(
+        "color\\(\\s*display-p3\\s+"
+            + "([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)%?)\\s+"
+            + "([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)%?)\\s+"
+            + "([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)%?)"
+            + "(?:\\s*/\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)%?))?"
+            + "\\s*\\)", Pattern.CASE_INSENSITIVE);
 
     private final Context appContext;
     private final YummyUiIconRegistry registry = YummyUiIconRegistry.getDefault();
@@ -161,9 +176,16 @@ public final class YummyIconThemeController {
                              @Nullable String parentFolderName, @Nullable String languageId,
                              @NonNull Drawable fallback) {
         if (view == null || fileName == null || fallback == null) return;
+        AssociationBinding previous = associationBindings.get(view);
+        UiBinding previousUi = uiBindings.get(view);
+        ColorStateList fallbackTint = previous != null ? previous.fallbackTint
+            : previousUi != null ? previousUi.originalTint : view.getImageTintList();
+        ColorFilter fallbackColorFilter = previous != null ? previous.fallbackColorFilter
+            : view.getColorFilter();
         uiBindings.remove(view);
         associationBindings.put(view, AssociationBinding.file(
-            fileName, parentFolderName, languageId, fallback));
+            fileName, parentFolderName, languageId, fallback,
+            fallbackTint, fallbackColorFilter));
         applyAssociationBinding(view, associationBindings.get(view));
     }
 
@@ -172,9 +194,16 @@ public final class YummyIconThemeController {
                                @Nullable String parentFolderName, boolean expanded,
                                boolean root, @NonNull Drawable fallback) {
         if (view == null || folderName == null || fallback == null) return;
+        AssociationBinding previous = associationBindings.get(view);
+        UiBinding previousUi = uiBindings.get(view);
+        ColorStateList fallbackTint = previous != null ? previous.fallbackTint
+            : previousUi != null ? previousUi.originalTint : view.getImageTintList();
+        ColorFilter fallbackColorFilter = previous != null ? previous.fallbackColorFilter
+            : view.getColorFilter();
         uiBindings.remove(view);
         associationBindings.put(view, AssociationBinding.folder(
-            folderName, parentFolderName, expanded, root, fallback));
+            folderName, parentFolderName, expanded, root, fallback,
+            fallbackTint, fallbackColorFilter));
         applyAssociationBinding(view, associationBindings.get(view));
     }
 
@@ -245,9 +274,20 @@ public final class YummyIconThemeController {
             }
             custom = renderResolution(resolution);
         }
-        view.setImageTintList(null);
-        view.setColorFilter(null);
-        view.setImageDrawable(custom == null ? binding.fallback : custom);
+        if (custom != null) {
+            // Imported artwork keeps its original colors. Never carry the Yummy fallback tint
+            // over to a custom SVG/bitmap/font glyph.
+            view.setImageTintList(null);
+            view.setColorFilter(null);
+            view.setImageDrawable(custom);
+        } else {
+            // The fallback may be a monochrome Yummy vector with an XML tint (for example the
+            // current-file icon in the editor app bar). Preserve that tint instead of exposing
+            // its dark source path on a dark surface.
+            view.setImageDrawable(binding.fallback);
+            view.setImageTintList(binding.fallbackTint);
+            view.setColorFilter(binding.fallbackColorFilter);
+        }
     }
 
     @Nullable
@@ -313,13 +353,99 @@ public final class YummyIconThemeController {
     @Nullable
     private static Bitmap renderSvg(File file) throws Exception {
         SVG.setInternalEntitiesEnabled(false);
-        try (FileInputStream input = new FileInputStream(file)) {
+        String source;
+        try (FileInputStream input = new FileInputStream(file);
+             ByteArrayOutputStream output = new ByteArrayOutputStream((int) file.length())) {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                if (output.size() + count > MAX_ASSET_BYTES) {
+                    throw new IOException("SVG asset exceeds the 4 MiB limit");
+                }
+                output.write(buffer, 0, count);
+            }
+            source = new String(output.toByteArray(), StandardCharsets.UTF_8);
+        }
+        source = normalizeDisplayP3Colors(source);
+        try (ByteArrayInputStream input = new ByteArrayInputStream(
+            source.getBytes(StandardCharsets.UTF_8))) {
             SVG svg = SVG.getFromInputStream(input);
             Bitmap bitmap = Bitmap.createBitmap(RENDER_SIZE_PX, RENDER_SIZE_PX, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
             svg.renderToCanvas(canvas, new RectF(0f, 0f, RENDER_SIZE_PX, RENDER_SIZE_PX));
             return bitmap;
         }
+    }
+
+    /** Converts CSS Color 4 Display-P3 values to ordinary sRGB colors understood by AndroidSVG. */
+    private static String normalizeDisplayP3Colors(String source) {
+        if (source == null || !source.toLowerCase(Locale.ROOT).contains("display-p3")) return source;
+        Matcher matcher = DISPLAY_P3_COLOR.matcher(source);
+        StringBuffer normalized = new StringBuffer(source.length());
+        while (matcher.find()) {
+            String replacement;
+            try {
+                double red = parseCssComponent(matcher.group(1));
+                double green = parseCssComponent(matcher.group(2));
+                double blue = parseCssComponent(matcher.group(3));
+                double alpha = matcher.group(4) == null ? 1.0
+                    : clamp(parseCssComponent(matcher.group(4)), 0.0, 1.0);
+                int[] rgb = displayP3ToSrgb(red, green, blue);
+                replacement = alpha >= 0.9999
+                    ? String.format(Locale.ROOT, "#%02X%02X%02X", rgb[0], rgb[1], rgb[2])
+                    : String.format(Locale.ROOT, "rgba(%d,%d,%d,%.4f)",
+                        rgb[0], rgb[1], rgb[2], alpha);
+            } catch (RuntimeException invalidColor) {
+                // Keep an invalid source expression intact; the SVG parser will report it and
+                // the caller will use the registered Yummy fallback for this one icon.
+                replacement = matcher.group();
+            }
+            matcher.appendReplacement(normalized, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(normalized);
+        return normalized.toString();
+    }
+
+    private static double parseCssComponent(String value) {
+        String normalized = value.trim();
+        if (normalized.endsWith("%")) {
+            return Double.parseDouble(normalized.substring(0, normalized.length() - 1)) / 100.0;
+        }
+        return Double.parseDouble(normalized);
+    }
+
+    private static int[] displayP3ToSrgb(double red, double green, double blue) {
+        double r = toLinear(red);
+        double g = toLinear(green);
+        double b = toLinear(blue);
+
+        // Display-P3 (D65) -> XYZ D65 -> linear sRGB. Out-of-gamut values are clipped
+        // only after conversion, which is the practical gamut mapping available on Android.
+        double x = 0.4865709486 * r + 0.2656676932 * g + 0.1982172852 * b;
+        double y = 0.2289745641 * r + 0.6917385218 * g + 0.0792869141 * b;
+        double z = 0.0451133819 * g + 1.0439443689 * b;
+        double sr =  3.2409699419 * x - 1.5373831776 * y - 0.4986107603 * z;
+        double sg = -0.9692436363 * x + 1.8759675015 * y + 0.0415550574 * z;
+        double sb =  0.0556300797 * x - 0.2039769589 * y + 1.0569715142 * z;
+        return new int[] {
+            (int) Math.round(toEncodedSrgb(clamp(sr, 0.0, 1.0)) * 255.0),
+            (int) Math.round(toEncodedSrgb(clamp(sg, 0.0, 1.0)) * 255.0),
+            (int) Math.round(toEncodedSrgb(clamp(sb, 0.0, 1.0)) * 255.0)
+        };
+    }
+
+    private static double toLinear(double encoded) {
+        return encoded <= 0.04045 ? encoded / 12.92
+            : Math.pow((encoded + 0.055) / 1.055, 2.4);
+    }
+
+    private static double toEncodedSrgb(double linear) {
+        return linear <= 0.0031308 ? linear * 12.92
+            : 1.055 * Math.pow(linear, 1.0 / 2.4) - 0.055;
+    }
+
+    private static double clamp(double value, double minimum, double maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
     }
 
     @Nullable
@@ -556,9 +682,12 @@ public final class YummyIconThemeController {
         final boolean expanded;
         final boolean root;
         final Drawable fallback;
+        final ColorStateList fallbackTint;
+        final ColorFilter fallbackColorFilter;
 
         private AssociationBinding(boolean folder, String name, String parentName,
-            String languageId, boolean expanded, boolean root, Drawable fallback) {
+            String languageId, boolean expanded, boolean root, Drawable fallback,
+            ColorStateList fallbackTint, ColorFilter fallbackColorFilter) {
             this.folder = folder;
             this.name = name;
             this.parentName = parentName;
@@ -566,13 +695,19 @@ public final class YummyIconThemeController {
             this.expanded = expanded;
             this.root = root;
             this.fallback = fallback;
+            this.fallbackTint = fallbackTint;
+            this.fallbackColorFilter = fallbackColorFilter;
         }
-        static AssociationBinding file(String name, String parent, String language, Drawable fallback) {
-            return new AssociationBinding(false, name, parent, language, false, false, fallback);
+        static AssociationBinding file(String name, String parent, String language, Drawable fallback,
+                                       ColorStateList fallbackTint, ColorFilter fallbackColorFilter) {
+            return new AssociationBinding(false, name, parent, language, false, false, fallback,
+                fallbackTint, fallbackColorFilter);
         }
         static AssociationBinding folder(String name, String parent, boolean expanded,
-            boolean root, Drawable fallback) {
-            return new AssociationBinding(true, name, parent, null, expanded, root, fallback);
+            boolean root, Drawable fallback, ColorStateList fallbackTint,
+            ColorFilter fallbackColorFilter) {
+            return new AssociationBinding(true, name, parent, null, expanded, root, fallback,
+                fallbackTint, fallbackColorFilter);
         }
     }
 
