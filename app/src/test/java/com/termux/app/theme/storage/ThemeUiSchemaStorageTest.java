@@ -7,6 +7,7 @@ import com.termux.app.theme.model.ThemeAppearance;
 import com.termux.app.theme.model.ThemeMetadata;
 import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.model.ThemeTarget;
+import com.termux.app.theme.schema.YummyComponentProperty;
 
 import org.json.JSONObject;
 import org.junit.Test;
@@ -18,6 +19,7 @@ import java.nio.file.Files;
 import java.util.EnumSet;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -185,6 +187,97 @@ public class ThemeUiSchemaStorageTest {
         } finally {
             deleteTree(previousPackage);
             deleteTree(stagedPackage);
+        }
+    }
+
+    @Test
+    public void updatesYummyComponentPropertiesWithoutDroppingVscodeOrSiblingData() throws Exception {
+        File packageDirectory = Files.createTempDirectory("yummy-ui-schema-components").toFile();
+        LoadedTheme theme = loadedTheme("component-properties", "#101010", "#abcdef");
+        try {
+            storage.ensureForInstall(packageDirectory, theme, null, null);
+            storage.putComponentProperty(
+                packageDirectory,
+                theme,
+                "sidebar.fileTree.iconSize",
+                YummyComponentProperty.literalDefinition(
+                    YummyComponentProperty.TYPE_DIMENSION, 16, "dp", "File tree icon size")
+            );
+            storage.putComponentProperty(
+                packageDirectory,
+                theme,
+                "sidebar.background",
+                YummyComponentProperty.vscodeDefinition(
+                    YummyComponentProperty.TYPE_COLOR,
+                    "colors",
+                    "sideBar.background",
+                    YummyComponentProperty.defaultSource("sidebar.background"),
+                    "Sidebar background")
+            );
+            storage.putComponentProperty(
+                packageDirectory,
+                theme,
+                "sidebar.storage.background",
+                YummyComponentProperty.inheritedDefinition(
+                    YummyComponentProperty.TYPE_COLOR,
+                    "sidebar.background",
+                    null,
+                    "Storage background inherits sidebar background")
+            );
+
+            JSONObject definitions = storage.getComponentProperties(packageDirectory, theme);
+            assertEquals(3, definitions.length());
+            assertEquals(16, definitions.getJSONObject("sidebar.fileTree.iconSize")
+                .getJSONObject("value").getInt("value"));
+            assertEquals("sideBar.background", definitions.getJSONObject("sidebar.background")
+                .getJSONObject("value").getString("key"));
+            assertEquals("sidebar.background", definitions
+                .getJSONObject("sidebar.storage.background")
+                .getJSONObject("value").getString("from"));
+
+            JSONObject stored = storage.load(packageDirectory, theme);
+            assertEquals("#101010", stored.getJSONObject("vscode").getJSONObject("colorTheme")
+                .getJSONObject("colors").getString("editor.background"));
+            assertEquals("kept-for-a-future-adapter", stored.getJSONObject("vscode")
+                .getJSONObject("colorTheme").getJSONObject("futureSection")
+                .getString("marker"));
+
+            assertTrue(storage.removeComponentProperty(
+                packageDirectory, theme, "sidebar.fileTree.iconSize"));
+            assertFalse(storage.removeComponentProperty(
+                packageDirectory, theme, "sidebar.fileTree.iconSize"));
+            assertEquals(2, storage.getComponentProperties(packageDirectory, theme).length());
+            assertNotNull(storage.getComponentProperty(
+                packageDirectory, theme, "sidebar.storage.background"));
+        } finally {
+            deleteTree(packageDirectory);
+        }
+    }
+
+    @Test
+    public void rejectsInvalidCustomPropertyWithoutChangingSavedSchema() throws Exception {
+        File packageDirectory = Files.createTempDirectory("yummy-ui-schema-invalid-component").toFile();
+        LoadedTheme theme = loadedTheme("invalid-component", "#101010", "#abcdef");
+        try {
+            storage.ensureForInstall(packageDirectory, theme, null, null);
+            JSONObject before = storage.load(packageDirectory, theme);
+            try {
+                storage.putComponentProperty(
+                    packageDirectory,
+                    theme,
+                    "sidebar.fileTree.iconSize",
+                    new JSONObject()
+                        .put("type", "dimension")
+                        .put("value", new JSONObject().put("source", "literal").put("value", 16))
+                );
+                fail("Expected a dimension without a unit to be rejected");
+            } catch (ThemeStorageException expected) {
+                assertTrue(expected.getMessage().contains("explicit unit"));
+            }
+            JSONObject after = storage.load(packageDirectory, theme);
+            assertEquals(before.toString(), after.toString());
+        } finally {
+            deleteTree(packageDirectory);
         }
     }
 

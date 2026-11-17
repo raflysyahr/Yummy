@@ -4,6 +4,7 @@ import com.termux.app.theme.loader.ThemeDocumentParser;
 import com.termux.app.theme.loader.ThemeLoadException;
 import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.ThemeMetadata;
+import com.termux.app.theme.schema.YummyComponentSchema;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -217,6 +218,112 @@ public final class ThemeUiSchemaStorage {
         }
     }
 
+    /** Returns all Yummy component-property definitions as a defensive JSON copy. */
+    public synchronized JSONObject getComponentProperties(
+        File packageDirectory,
+        LoadedTheme expectedTheme
+    ) throws ThemeStorageException {
+        try {
+            return YummyComponentSchema.fromDocument(load(packageDirectory, expectedTheme)).toJson();
+        } catch (JSONException | IllegalArgumentException error) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.INVALID_PACKAGE,
+                "Invalid yummy.components: " + safeMessage(error),
+                error
+            );
+        }
+    }
+
+    /** Returns one Yummy component-property definition, or null when it is not configured. */
+    public synchronized JSONObject getComponentProperty(
+        File packageDirectory,
+        LoadedTheme expectedTheme,
+        String propertyId
+    ) throws ThemeStorageException {
+        try {
+            return YummyComponentSchema.fromDocument(load(packageDirectory, expectedTheme))
+                .getProperty(propertyId);
+        } catch (JSONException | IllegalArgumentException error) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.INVALID_PACKAGE,
+                "Invalid yummy.components: " + safeMessage(error),
+                error
+            );
+        }
+    }
+
+    /** Adds or replaces one Yummy component-property definition without changing sibling entries. */
+    public synchronized void putComponentProperty(
+        File packageDirectory,
+        LoadedTheme expectedTheme,
+        String propertyId,
+        JSONObject definition
+    ) throws ThemeStorageException {
+        updateComponentProperties(packageDirectory, expectedTheme, propertyId, definition);
+    }
+
+    /** Removes one Yummy component-property definition without changing sibling entries. */
+    public synchronized boolean removeComponentProperty(
+        File packageDirectory,
+        LoadedTheme expectedTheme,
+        String propertyId
+    ) throws ThemeStorageException {
+        JSONObject document = load(packageDirectory, expectedTheme);
+        try {
+            YummyComponentSchema components = YummyComponentSchema.fromDocument(document);
+            if (!components.removeProperty(propertyId)) return false;
+            saveComponentProperties(packageDirectory, expectedTheme, document, components);
+            return true;
+        } catch (JSONException | IllegalArgumentException error) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.INVALID_PACKAGE,
+                "Could not update yummy.components: " + safeMessage(error),
+                error
+            );
+        }
+    }
+
+    private void updateComponentProperties(
+        File packageDirectory,
+        LoadedTheme expectedTheme,
+        String propertyId,
+        JSONObject definition
+    ) throws ThemeStorageException {
+        JSONObject document = load(packageDirectory, expectedTheme);
+        try {
+            YummyComponentSchema components = YummyComponentSchema.fromDocument(document);
+            components.putProperty(propertyId, definition);
+            saveComponentProperties(packageDirectory, expectedTheme, document, components);
+        } catch (JSONException | IllegalArgumentException error) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.INVALID_PACKAGE,
+                "Could not update yummy.components: " + safeMessage(error),
+                error
+            );
+        }
+    }
+
+    private void saveComponentProperties(
+        File packageDirectory,
+        LoadedTheme expectedTheme,
+        JSONObject previousDocument,
+        YummyComponentSchema components
+    ) throws ThemeStorageException, JSONException {
+        JSONObject updated = components.applyToDocument(previousDocument);
+        validate(updated, expectedTheme);
+        try {
+            validateEmbeddedColorTheme(updated);
+        } catch (ThemeLoadException error) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.INVALID_PACKAGE,
+                "Could not preserve valid vscode.colorTheme while updating yummy.components: "
+                    + safeMessage(error),
+                error
+            );
+        }
+        replaceFileAtomically(getSchemaFile(packageDirectory), updated);
+    }
+
     private static JSONObject mergeWithUpdatedTheme(
         JSONObject previousDocument,
         LoadedTheme nextTheme
@@ -361,6 +468,74 @@ public final class ThemeUiSchemaStorage {
                 "Could not write UI Schema: " + safeMessage(error),
                 error
             );
+        }
+    }
+
+    /** Replaces an existing sidecar through a same-directory temporary file and rollback backup. */
+    private static void replaceFileAtomically(File target, JSONObject document)
+        throws ThemeStorageException {
+        File parent = target.getParentFile();
+        File backup = new File(parent, "." + FILE_NAME + ".bak");
+        File temporary = null;
+        boolean movedOriginal = false;
+        try {
+            if (!target.isFile()) {
+                throw new IOException("Existing UI Schema file is unavailable for update");
+            }
+            if (backup.exists()) {
+                if (target.exists()) {
+                    if (!backup.delete()) {
+                        throw new IOException("Could not remove a stale UI Schema backup");
+                    }
+                } else if (!backup.renameTo(target)) {
+                    throw new IOException("Could not recover the previous UI Schema backup");
+                }
+            }
+
+            byte[] bytes = document.toString().getBytes(StandardCharsets.UTF_8);
+            if (bytes.length == 0 || bytes.length > MAX_SCHEMA_BYTES) {
+                throw new IOException("Updated UI Schema exceeds the 4 MiB limit");
+            }
+            temporary = File.createTempFile(".ui-schema-", ".tmp", parent);
+            try (FileOutputStream output = new FileOutputStream(temporary)) {
+                output.write(bytes);
+                output.flush();
+                output.getFD().sync();
+            }
+
+            if (!target.renameTo(backup)) {
+                throw new IOException("Could not preserve the previous UI Schema before update");
+            }
+            movedOriginal = true;
+            if (!temporary.renameTo(target)) {
+                if (!backup.renameTo(target)) {
+                    throw new IOException(
+                        "Could not install updated UI Schema or restore its previous version"
+                    );
+                }
+                movedOriginal = false;
+                throw new IOException("Could not atomically install updated UI Schema");
+            }
+            movedOriginal = false;
+            // A leftover backup is harmless after the new target has been installed. The next
+            // write will remove it before starting another replacement.
+            //noinspection ResultOfMethodCallIgnored
+            backup.delete();
+        } catch (IOException error) {
+            if (movedOriginal && backup.exists() && !target.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                backup.renameTo(target);
+            }
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.IO_FAILURE,
+                "Could not update " + FILE_NAME + ": " + safeMessage(error),
+                error
+            );
+        } finally {
+            if (temporary != null && temporary.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                temporary.delete();
+            }
         }
     }
 
