@@ -18,10 +18,10 @@ import java.util.zip.ZipInputStream;
 /** Securely extracts and validates a Yummy theme package ZIP in the app cache directory. */
 public final class ThemePackageArchiveImporter {
     private static final int MAX_ARCHIVE_BYTES = 16 * 1024 * 1024;
-    private static final int MAX_ENTRIES = 128;
+    private static final int MAX_ENTRIES = 129;
     private static final int MAX_DEPTH = 8;
-    private static final long MAX_FILE_BYTES = 2L * 1024L * 1024L;
-    private static final long MAX_PACKAGE_BYTES = 8L * 1024L * 1024L;
+    private static final long MAX_FILE_BYTES = 4L * 1024L * 1024L;
+    private static final long MAX_PACKAGE_BYTES = 12L * 1024L * 1024L;
 
     public static final class Result {
         private final File packageDirectory;
@@ -82,10 +82,10 @@ public final class ThemePackageArchiveImporter {
                             fileBytes += count;
                             packageBytes += count;
                             if (fileBytes > MAX_FILE_BYTES) {
-                                throw new IOException("A theme package file exceeds the 2 MiB limit");
+                                throw new IOException("A theme package file exceeds the 4 MiB limit");
                             }
                             if (packageBytes > MAX_PACKAGE_BYTES) {
-                                throw new IOException("Expanded theme package exceeds the 8 MiB limit");
+                                throw new IOException("Expanded theme package exceeds the 12 MiB limit");
                             }
                             file.write(buffer, 0, count);
                         }

@@ -47,15 +47,16 @@ public final class ThemePackageStorage {
 
     private static final Pattern VALID_THEME_ID =
         Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
-    private static final int MAX_PACKAGE_FILES = 128;
+    private static final int MAX_PACKAGE_FILES = 129;
     private static final int MAX_BACKUPS_PER_THEME = 5;
     private static final int MAX_DIRECTORY_DEPTH = 8;
-    private static final long MAX_FILE_BYTES = 2L * 1024L * 1024L;
-    private static final long MAX_PACKAGE_BYTES = 8L * 1024L * 1024L;
+    private static final long MAX_FILE_BYTES = 4L * 1024L * 1024L;
+    private static final long MAX_PACKAGE_BYTES = 12L * 1024L * 1024L;
 
     private final File filesDirectory;
     private final AssetManager assets;
     private final ThemePackageSourceLoader packageLoader;
+    private final ThemeUiSchemaStorage uiSchemaStorage = new ThemeUiSchemaStorage();
     private long operationSequence;
 
     /** Creates storage under context.getFilesDir()/themes/imported. */
@@ -86,6 +87,52 @@ public final class ThemePackageStorage {
     /** Returns the private directory scanned by {@link YummyThemeRegistry}. */
     public File getImportedThemesDirectory() {
         return new File(new File(filesDirectory, THEMES_DIRECTORY_NAME), IMPORTED_DIRECTORY_NAME);
+    }
+
+    /**
+     * Returns the editable UI Schema sidecar for an installed imported theme.
+     * Legacy packages are upgraded lazily by {@link #ensureUiSchemaFile(String)}.
+     */
+    public synchronized File getUiSchemaFile(String themeId) throws ThemeStorageException {
+        String id = requireThemeId(themeId);
+        StorageDirectories directories = ensureStorageDirectories();
+        File packageDirectory = new File(directories.importedRoot, id);
+        if (!packageDirectory.isDirectory()) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.PACKAGE_NOT_FOUND,
+                "Imported theme does not exist: " + id
+            );
+        }
+        requireDirectChild(directories.importedRoot, packageDirectory, "Imported theme directory");
+        return uiSchemaStorage.getSchemaFile(packageDirectory);
+    }
+
+    /**
+     * Ensures an imported theme has a current UI Schema sidecar and returns its file path.
+     * Existing packages created before UI Schema Step 2 are upgraded without changing theme.json.
+     */
+    public synchronized File ensureUiSchemaFile(String themeId) throws ThemeStorageException {
+        String id = requireThemeId(themeId);
+        StorageDirectories directories = ensureStorageDirectories();
+        File packageDirectory = new File(directories.importedRoot, id);
+        if (!packageDirectory.isDirectory()) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.PACKAGE_NOT_FOUND,
+                "Imported theme does not exist: " + id
+            );
+        }
+        requireDirectChild(directories.importedRoot, packageDirectory, "Imported theme directory");
+        try {
+            LoadedTheme loaded = packageLoader.loadImported(packageDirectory);
+            uiSchemaStorage.ensureForInstall(packageDirectory, loaded, null, null);
+            return uiSchemaStorage.getSchemaFile(packageDirectory);
+        } catch (ThemeLoadException error) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.INVALID_PACKAGE,
+                "Cannot create UI Schema for an invalid imported theme: " + error.getMessage(),
+                error
+            );
+        }
     }
 
     /**
@@ -405,6 +452,16 @@ public final class ThemePackageStorage {
             }
         }
 
+        LoadedTheme previousTheme = null;
+        if (replace && destinationExists) {
+            try {
+                previousTheme = packageLoader.loadImported(destination);
+            } catch (ThemeLoadException ignored) {
+                // If an old schema exists, ensureForInstall will stop the replacement rather
+                // than silently discard it. A package without a schema can still be repaired.
+            }
+        }
+
         File stagedPackage = new File(
             directories.stagingRoot,
             id + ".stage-" + nextOperationSuffix()
@@ -416,6 +473,9 @@ public final class ThemePackageStorage {
                 throw new IOException("Could not create staging directory");
             }
 
+            boolean sourceHadUiSchema = new File(
+                sourceRoot, ThemeUiSchemaStorage.FILE_NAME
+            ).isFile();
             CopyStats stats = new CopyStats();
             copyDirectoryContents(sourceRoot, sourceRoot, stagedPackage, "", stats, 0);
 
@@ -436,6 +496,24 @@ public final class ThemePackageStorage {
                     ThemeStorageException.Code.INVALID_PACKAGE,
                     "Theme ID changed while copying the package"
                 );
+            }
+
+            uiSchemaStorage.ensureForInstall(
+                stagedPackage,
+                stagedTheme,
+                replace ? destination : null,
+                previousTheme
+            );
+            if (!sourceHadUiSchema) {
+                File schemaFile = uiSchemaStorage.getSchemaFile(stagedPackage);
+                if (stats.entryCount + 1 > MAX_PACKAGE_FILES) {
+                    throw limitExceeded("Theme package contains more than "
+                        + MAX_PACKAGE_FILES + " entries after adding " + ThemeUiSchemaStorage.FILE_NAME);
+                }
+                if (stats.totalBytes + schemaFile.length() > MAX_PACKAGE_BYTES) {
+                    throw limitExceeded("Theme package exceeds 12 MiB after adding "
+                        + ThemeUiSchemaStorage.FILE_NAME);
+                }
             }
 
             if (replace) {
@@ -641,7 +719,7 @@ public final class ThemePackageStorage {
     private static void copyFile(File source, File destination, String relativePath, CopyStats stats)
         throws IOException, ThemeStorageException {
         if (source.length() > MAX_FILE_BYTES) {
-            throw limitExceeded("Theme package file exceeds 2 MiB: " + relativePath);
+            throw limitExceeded("Theme package file exceeds 4 MiB: " + relativePath);
         }
         try (InputStream input = new FileInputStream(source);
              OutputStream output = new FileOutputStream(destination)) {
@@ -652,10 +730,10 @@ public final class ThemePackageStorage {
                 copied += read;
                 stats.totalBytes += read;
                 if (copied > MAX_FILE_BYTES) {
-                    throw limitExceeded("Theme package file exceeds 2 MiB: " + relativePath);
+                    throw limitExceeded("Theme package file exceeds 4 MiB: " + relativePath);
                 }
                 if (stats.totalBytes > MAX_PACKAGE_BYTES) {
-                    throw limitExceeded("Theme package exceeds 8 MiB in total");
+                    throw limitExceeded("Theme package exceeds 12 MiB in total");
                 }
                 output.write(buffer, 0, read);
             }

@@ -593,6 +593,35 @@ public final class ThemeSettingsController {
         metadata.put("id", newId);
         try (FileOutputStream output = new FileOutputStream(metadataFile, false)) {
             output.write(metadata.toString(2).getBytes(StandardCharsets.UTF_8));
+            output.flush();
+            output.getFD().sync();
+        }
+
+        // The package's editable UI Schema has its own metadata ID. Keep it aligned when
+        // a restored package must be renamed to avoid shadowing a built-in theme.
+        File uiSchemaFile = new File(packageDirectory, "ui-schema.json");
+        if (uiSchemaFile.isFile()) {
+            byte[] schemaBytes;
+            try (InputStream input = new FileInputStream(uiSchemaFile)) {
+                java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int count;
+                while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                schemaBytes = output.toByteArray();
+            }
+            String schemaJson = new String(schemaBytes, StandardCharsets.UTF_8);
+            if (schemaJson.startsWith("\uFEFF")) schemaJson = schemaJson.substring(1);
+            JSONObject schema = new JSONObject(schemaJson);
+            JSONObject schemaMetadata = schema.optJSONObject("metadata");
+            if (schemaMetadata == null) {
+                throw new IllegalArgumentException("Package UI Schema metadata is missing");
+            }
+            schemaMetadata.put("id", newId);
+            try (FileOutputStream output = new FileOutputStream(uiSchemaFile, false)) {
+                output.write(schema.toString(2).getBytes(StandardCharsets.UTF_8));
+                output.flush();
+                output.getFD().sync();
+            }
         }
     }
 
