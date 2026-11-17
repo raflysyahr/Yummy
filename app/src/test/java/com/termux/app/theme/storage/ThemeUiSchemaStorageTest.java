@@ -110,6 +110,63 @@ public class ThemeUiSchemaStorageTest {
         }
     }
 
+
+    @Test
+    public void parserValidatesEditableEmbeddedThemeWithoutDroppingUnknownFields() throws Exception {
+        File packageDirectory = Files.createTempDirectory("yummy-ui-schema-parser").toFile();
+        LoadedTheme theme = loadedTheme("parser-roundtrip", "#101010", "#abcdef");
+        try {
+            JSONObject schema = storage.createDefault(theme);
+            JSONObject colorTheme = schema.getJSONObject("vscode").getJSONObject("colorTheme");
+            colorTheme.put("futureThemeField", new JSONObject().put("version", 7));
+            colorTheme.getJSONObject("colors").put("future.palette",
+                new org.json.JSONArray().put("#111111").put("#222222"));
+            colorTheme.put("tokenColors", new org.json.JSONArray().put(new JSONObject()
+                .put("scope", "comment")
+                .put("settings", new JSONObject()
+                    .put("foreground", "#888888")
+                    .put("futureTokenSetting", "keep"))
+                .put("futureRuleProperty", true)));
+            colorTheme.put("semanticTokenColors", new JSONObject()
+                .put("*.declaration", new JSONObject()
+                    .put("fontStyle", "bold")
+                    .put("futureSemanticProperty", "keep")));
+            write(storage.getSchemaFile(packageDirectory), schema.toString());
+
+            JSONObject loaded = storage.load(packageDirectory, theme);
+            JSONObject storedTheme = loaded.getJSONObject("vscode").getJSONObject("colorTheme");
+            assertEquals(7, storedTheme.getJSONObject("futureThemeField").getInt("version"));
+            assertEquals(2, storedTheme.getJSONObject("colors").getJSONArray("future.palette").length());
+            assertEquals("keep", storedTheme.getJSONArray("tokenColors").getJSONObject(0)
+                .getJSONObject("settings").getString("futureTokenSetting"));
+            assertEquals("keep", storedTheme.getJSONObject("semanticTokenColors")
+                .getJSONObject("*.declaration").getString("futureSemanticProperty"));
+        } finally {
+            deleteTree(packageDirectory);
+        }
+    }
+
+    @Test
+    public void rejectsMalformedEditableEmbeddedTheme() throws Exception {
+        File packageDirectory = Files.createTempDirectory("yummy-ui-schema-malformed-theme").toFile();
+        LoadedTheme theme = loadedTheme("parser-invalid", "#101010", "#abcdef");
+        try {
+            JSONObject schema = storage.createDefault(theme);
+            schema.getJSONObject("vscode").getJSONObject("colorTheme")
+                .getJSONObject("colors").put("editor.background", 123);
+            write(storage.getSchemaFile(packageDirectory), schema.toString());
+
+            try {
+                storage.load(packageDirectory, theme);
+                fail("Expected malformed embedded VS Code theme data to be rejected");
+            } catch (ThemeStorageException expected) {
+                assertTrue(expected.getMessage().contains("vscode.colorTheme"));
+            }
+        } finally {
+            deleteTree(packageDirectory);
+        }
+    }
+
     @Test
     public void refusesToReplaceWhenPreviousSchemaIsInvalid() throws Exception {
         File previousPackage = Files.createTempDirectory("yummy-ui-schema-invalid-old").toFile();

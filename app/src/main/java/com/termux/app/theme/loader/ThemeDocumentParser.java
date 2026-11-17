@@ -100,6 +100,18 @@ public final class ThemeDocumentParser {
         return parse(json, null);
     }
 
+    /** Parses an already-decoded theme object without narrowing its preserved VS Code fields. */
+    public VSCodeColorTheme parse(JSONObject source) throws ThemeLoadException {
+        return parse(source, null);
+    }
+
+    /** Parses an already-decoded theme object against package metadata. */
+    public VSCodeColorTheme parse(JSONObject source, ThemeMetadata metadata)
+        throws ThemeLoadException {
+        if (source == null) throw new ThemeLoadException("Color Theme JSON object is required");
+        return parse(source.toString(), metadata);
+    }
+
     public VSCodeColorTheme parse(String json, ThemeMetadata metadata)
         throws ThemeLoadException {
         if (json == null || json.trim().isEmpty()) {

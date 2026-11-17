@@ -1,5 +1,7 @@
 package com.termux.app.theme.storage;
 
+import com.termux.app.theme.loader.ThemeDocumentParser;
+import com.termux.app.theme.loader.ThemeLoadException;
 import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.ThemeMetadata;
 
@@ -27,13 +29,27 @@ import java.nio.charset.StandardCharsets;
  * in the package makes it travel with package backups, restores, replacements, and removals.</p>
  *
  * <p>Unknown fields in the VS Code theme and unknown Yummy component entries are retained.
- * This class intentionally validates only the wrapper needed for safe storage; the detailed
- * component-property validator belongs to the later UI Schema runtime stage.</p>
+ * The wrapper is validated here, and the embedded color-theme document is checked by the same
+ * parser used during import. Detailed Yummy component-property validation belongs to the later
+ * UI Schema validator stage.</p>
  */
 public final class ThemeUiSchemaStorage {
     public static final String FILE_NAME = "ui-schema.json";
     public static final int SCHEMA_VERSION = 1;
     public static final long MAX_SCHEMA_BYTES = 4L * 1024L * 1024L;
+
+    private final ThemeDocumentParser colorThemeParser;
+
+    public ThemeUiSchemaStorage() {
+        this(new ThemeDocumentParser());
+    }
+
+    public ThemeUiSchemaStorage(ThemeDocumentParser colorThemeParser) {
+        if (colorThemeParser == null) {
+            throw new IllegalArgumentException("ThemeDocumentParser is required");
+        }
+        this.colorThemeParser = colorThemeParser;
+    }
 
     /** Returns the root sidecar path for a package directory. */
     public File getSchemaFile(File packageDirectory) throws ThemeStorageException {
@@ -142,11 +158,18 @@ public final class ThemeUiSchemaStorage {
         try {
             JSONObject document = new JSONObject(readUtf8Limited(source, MAX_SCHEMA_BYTES));
             validate(document, expectedTheme);
+            validateEmbeddedColorTheme(document);
             return copyObject(document);
         } catch (JSONException | IOException error) {
             throw new ThemeStorageException(
                 ThemeStorageException.Code.INVALID_PACKAGE,
                 "Invalid " + FILE_NAME + ": " + safeMessage(error),
+                error
+            );
+        } catch (ThemeLoadException error) {
+            throw new ThemeStorageException(
+                ThemeStorageException.Code.INVALID_PACKAGE,
+                "Invalid vscode.colorTheme in " + FILE_NAME + ": " + safeMessage(error),
                 error
             );
         }
@@ -248,6 +271,20 @@ public final class ThemeUiSchemaStorage {
         if (yummy == null || yummy.optJSONObject("components") == null) {
             throw invalid("UI Schema yummy.components must be an object");
         }
+    }
+
+    /**
+     * Validates the editable embedded VS Code document with the same parser used by imports.
+     * The parser retains the complete object; this check only rejects malformed standard
+     * sections that the current VS Code theme loader cannot safely interpret.
+     */
+    private void validateEmbeddedColorTheme(JSONObject document) throws ThemeLoadException {
+        JSONObject vscode = document.optJSONObject("vscode");
+        JSONObject colorTheme = vscode == null ? null : vscode.optJSONObject("colorTheme");
+        if (colorTheme == null) {
+            throw new ThemeLoadException("vscode.colorTheme must be an object");
+        }
+        colorThemeParser.parse(colorTheme);
     }
 
     private static String requiredString(JSONObject object, String key, String path)
