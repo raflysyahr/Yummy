@@ -45,6 +45,8 @@ import com.termux.app.theme.storage.IconThemeStorage;
 import com.termux.app.theme.settings.ThemePackageArchiveImporter;
 import com.termux.app.theme.loader.ThemePackageLoader;
 import com.termux.app.theme.storage.ThemePackageStorage;
+import com.termux.app.theme.schema.YummyUiSchemaRuntime;
+import com.termux.app.theme.schema.YummyUiSchemaViewBinder;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -98,6 +100,8 @@ public final class ThemeSettingsController {
     private final IconThemeStorage iconThemeStorage;
     private final IconThemeSelectionStore iconThemeSelectionStore;
     private final Typeface uiTypeface;
+    private YummyUiSchemaRuntime uiSchemaRuntime;
+    private YummyUiSchemaViewBinder uiSchemaBinder;
 
     private ThemeRegistrySnapshot snapshot = ThemeRegistrySnapshot.empty();
     private ThemeSelection selection = ThemeSelection.defaults();
@@ -126,6 +130,14 @@ public final class ThemeSettingsController {
         this.iconThemeStorage = new IconThemeStorage(activity);
         this.iconThemeSelectionStore = new IconThemeSelectionStore(activity);
         this.uiTypeface = uiTypeface;
+    }
+
+    /** Connects Yummy-owned theme dialogs to the shared application UI Schema runtime. */
+    public void setUiSchemaRuntime(YummyUiSchemaRuntime runtime) {
+        if (uiSchemaBinder != null) uiSchemaBinder.unregisterAll();
+        uiSchemaRuntime = runtime;
+        uiSchemaBinder = runtime == null ? null : new YummyUiSchemaViewBinder(runtime);
+        if (themeImportController != null) themeImportController.setUiSchemaRuntime(runtime);
     }
 
     /** Reloads available packages and displays the two independent theme selectors. */
@@ -250,6 +262,7 @@ public final class ThemeSettingsController {
             activeDialog = null;
             dialog.dismiss();
         }
+        if (uiSchemaBinder != null) uiSchemaBinder.unregisterAll();
     }
 
     public ThemeSelection getSelection() {
@@ -304,6 +317,7 @@ public final class ThemeSettingsController {
                     showSettingsDialog();
                 }
             );
+            themeImportController.setUiSchemaRuntime(uiSchemaRuntime);
         }
         return themeImportController;
     }
@@ -373,6 +387,7 @@ public final class ThemeSettingsController {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(backgroundColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", scroll);
         scroll.addView(root);
         dialog.setContentView(scroll);
         showDialog(dialog, 560);
@@ -408,6 +423,7 @@ public final class ThemeSettingsController {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(backgroundColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", scroll);
         scroll.addView(root);
         dialog.setContentView(scroll);
         showDialog(dialog, 560);
@@ -438,6 +454,7 @@ public final class ThemeSettingsController {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(12), dp(10), dp(12), dp(10));
         card.setBackground(rect(surfaceColor(), borderColor()));
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.surface.background", card);
         card.addView(text(theme.getMetadata().getLabel(), 15, textColor(), true));
         card.addView(text(details.toString(), 11, mutedColor(), false),
             marginParams(0, dp(4), 0, dp(8)));
@@ -974,6 +991,7 @@ public final class ThemeSettingsController {
 
         View divider = new View(activity);
         divider.setBackgroundColor(borderColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.divider", divider);
         root.addView(divider, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
     }
@@ -1010,6 +1028,7 @@ public final class ThemeSettingsController {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(backgroundColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", scroll);
         scroll.addView(root);
         dialog.setContentView(scroll);
         showDialog(dialog, 560);
@@ -1029,6 +1048,7 @@ public final class ThemeSettingsController {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(12), dp(10), dp(12), dp(10));
         card.setBackground(rect(surfaceColor(), borderColor()));
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.surface.background", card);
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -1086,6 +1106,7 @@ public final class ThemeSettingsController {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(backgroundColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", scroll);
         scroll.addView(root);
         dialog.setContentView(scroll);
         showDialog(dialog, 500);
@@ -1159,6 +1180,7 @@ public final class ThemeSettingsController {
                     card.setOrientation(LinearLayout.VERTICAL);
                     card.setPadding(dp(12), dp(10), dp(12), dp(10));
                     card.setBackground(rect(surfaceColor(), borderColor()));
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.surface.background", card);
                     card.addView(text(info.getLabel(), 15, textColor(), true));
                     card.addView(text(info.getId() + " · " + info.getDefinitionCount()
                         + " definitions · " + info.getWarningCount() + " warnings",
@@ -1194,6 +1216,7 @@ public final class ThemeSettingsController {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(backgroundColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", scroll);
         scroll.addView(root);
         dialog.setContentView(scroll);
         showDialog(dialog, 560);
@@ -1299,6 +1322,7 @@ public final class ThemeSettingsController {
 
         View divider = new View(activity);
         divider.setBackgroundColor(borderColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.divider", divider);
         root.addView(divider, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
     }
@@ -1326,6 +1350,7 @@ public final class ThemeSettingsController {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(backgroundColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", scroll);
         scroll.addView(root);
         dialog.setContentView(scroll);
         showDialog(dialog, 560);
@@ -1344,6 +1369,7 @@ public final class ThemeSettingsController {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(12), dp(10), dp(12), dp(10));
         card.setBackground(rect(surfaceColor(), borderColor()));
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.surface.background", card);
 
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -1428,6 +1454,7 @@ public final class ThemeSettingsController {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(backgroundColor());
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", scroll);
         scroll.addView(root);
         dialog.setContentView(scroll);
         showDialog(dialog, 560);
@@ -1718,6 +1745,10 @@ public final class ThemeSettingsController {
     private Dialog createDialog() {
         Dialog dialog = new Dialog(activity);
         dialog.setOnDismissListener(ignored -> {
+            if (uiSchemaBinder != null) {
+                View content = dialog.findViewById(android.R.id.content);
+                if (content != null) uiSchemaBinder.unregisterTree(content);
+            }
             if (activeDialog == dialog) activeDialog = null;
         });
         return dialog;
@@ -1743,6 +1774,9 @@ public final class ThemeSettingsController {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(18), dp(18), dp(18));
         root.setBackground(rect(backgroundColor(), borderColor()));
+        if (uiSchemaBinder != null) {
+            uiSchemaBinder.bindBackgroundTint("settings.dialog.background", root);
+        }
         return root;
     }
 
@@ -1756,6 +1790,12 @@ public final class ThemeSettingsController {
             view.setTypeface(uiTypeface, bold ? Typeface.BOLD : Typeface.NORMAL);
         } else if (bold) {
             view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        }
+        if (uiSchemaBinder != null) {
+            String property = color == mutedColor()
+                ? "settings.dialog.secondaryForeground"
+                : (color == accentColor() ? "settings.dialog.accentForeground" : "settings.dialog.foreground");
+            uiSchemaBinder.bindTextColor(property, view);
         }
         return view;
     }
@@ -1774,6 +1814,11 @@ public final class ThemeSettingsController {
         view.setClickable(true);
         view.setFocusable(true);
         view.setOnClickListener(ignored -> callback.run());
+        if (uiSchemaBinder != null) {
+            uiSchemaBinder.bindBackgroundTint(primary
+                ? "settings.dialog.button.primary.background"
+                : "settings.dialog.button.secondary.background", view);
+        }
         return view;
     }
 

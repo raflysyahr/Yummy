@@ -771,6 +771,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             theme -> applyEditorSyntaxTheme(editor, theme),
             uiTypeface
         );
+        mThemeSettingsController.setUiSchemaRuntime(mUiSchemaRuntime);
 
         // TextMate support is initialized synchronously by EditorController.setup(), so both
         // independently stored selections can now be restored without changing terminal colors.

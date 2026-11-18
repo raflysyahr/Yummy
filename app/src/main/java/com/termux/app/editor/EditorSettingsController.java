@@ -28,6 +28,8 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.AppSystemUiController;
 import com.termux.app.TermuxActivity;
+import com.termux.app.theme.schema.YummyUiSchemaRuntime;
+import com.termux.app.theme.schema.YummyUiSchemaViewBinder;
 
 import io.github.rosemoe.sora.widget.CodeEditor;
 
@@ -69,6 +71,8 @@ public final class EditorSettingsController {
     private final Activity activity;
     @Nullable private final CodeEditor editor;
     private final SharedPreferences preferences;
+    @Nullable private final YummyUiSchemaRuntime uiSchemaRuntime;
+    @Nullable private final YummyUiSchemaViewBinder uiSchemaBinder;
 
     private Dialog pageDialog;
     private int fontSize;
@@ -78,9 +82,12 @@ public final class EditorSettingsController {
     private TextView fontFamilyValue;
     private TextView preview;
 
-    private EditorSettingsController(@NonNull Activity activity, @Nullable CodeEditor editor) {
+    private EditorSettingsController(@NonNull Activity activity, @Nullable CodeEditor editor,
+                                     @Nullable YummyUiSchemaRuntime runtime) {
         this.activity = activity;
         this.editor = editor;
+        this.uiSchemaRuntime = runtime;
+        this.uiSchemaBinder = runtime == null ? null : new YummyUiSchemaViewBinder(runtime);
         this.preferences = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         this.fontSize = preferences.getInt(KEY_FONT_SIZE, DEFAULT_FONT_SIZE);
         this.tabWidth = normalizeTabWidth(preferences.getInt(KEY_TAB_WIDTH, DEFAULT_TAB_WIDTH));
@@ -102,8 +109,13 @@ public final class EditorSettingsController {
 
     /** Open the full-screen editor settings page from the File Manager overflow menu. */
     public static void show(@NonNull Activity activity) {
+        show(activity, null);
+    }
+
+    /** Opens editor settings with the shared UI Schema runtime when hosted by Yummy. */
+    public static void show(@NonNull Activity activity, @Nullable YummyUiSchemaRuntime runtime) {
         CodeEditor editor = activity.findViewById(R.id.yummy_code_editor);
-        new EditorSettingsController(activity, editor).showPage();
+        new EditorSettingsController(activity, editor, runtime).showPage();
     }
 
     private void showPage() {
@@ -112,6 +124,14 @@ public final class EditorSettingsController {
         pageDialog.setCancelable(true);
         pageDialog.setCanceledOnTouchOutside(false);
         pageDialog.setContentView(buildPage());
+        pageDialog.setOnDismissListener(ignored -> {
+            if (uiSchemaBinder != null) {
+                View content = pageDialog == null ? null : pageDialog.findViewById(android.R.id.content);
+                if (content != null) uiSchemaBinder.unregisterTree(content);
+                uiSchemaBinder.unregisterAll();
+            }
+            pageDialog = null;
+        });
         pageDialog.show();
 
         Window window = pageDialog.getWindow();
@@ -132,12 +152,14 @@ public final class EditorSettingsController {
         LinearLayout root = new LinearLayout(activity);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BACKGROUND);
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.editor.background", root);
 
         LinearLayout toolbar = new LinearLayout(activity);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
         toolbar.setPadding(dp(12), 0, dp(16), 0);
         toolbar.setBackgroundColor(BACKGROUND);
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.editor.toolbar.background", toolbar);
         root.addView(toolbar, new LinearLayout.LayoutParams(-1, dp(58)));
 
         TextView back = label("‹", 34, PRIMARY, false);
@@ -254,6 +276,7 @@ public final class EditorSettingsController {
         preview.setTypeface(resolveTypeface(activity, fontFamily));
         preview.setPadding(dp(16), dp(14), dp(16), dp(14));
         preview.setBackground(flatRectangle(SURFACE, BORDER, dp(1)));
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.editor.preview.background", preview);
         LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(-1, -2);
         previewParams.topMargin = dp(12);
         content.addView(preview, previewParams);
@@ -285,6 +308,7 @@ public final class EditorSettingsController {
         LinearLayout card = new LinearLayout(activity);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(flatRectangle(SURFACE, BORDER, dp(1)));
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.editor.surface.background", card);
         return card;
     }
 
@@ -292,6 +316,7 @@ public final class EditorSettingsController {
     private void addDivider(@NonNull LinearLayout parent) {
         View divider = new View(activity);
         divider.setBackgroundColor(BORDER);
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.editor.divider", divider);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(1));
         params.leftMargin = dp(16);
         params.rightMargin = dp(16);
@@ -327,6 +352,10 @@ public final class EditorSettingsController {
                 new int[] { ACCENT, 0xFF9AA19D }));
             toggle.setTrackTintList(new ColorStateList(states,
                 new int[] { 0x6600D65A, 0xFF414844 }));
+            if (uiSchemaBinder != null) {
+                uiSchemaBinder.bindSwitchThumbTint("settings.editor.control.accent", toggle);
+                uiSchemaBinder.bindSwitchTrackTint("settings.editor.control.track", toggle);
+            }
         }
         LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(-2, -2);
         toggleParams.leftMargin = dp(10);
@@ -430,6 +459,7 @@ public final class EditorSettingsController {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18), dp(16), dp(18), dp(12));
         panel.setBackground(flatRectangle(SURFACE, BORDER, dp(1)));
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.editor.popup.background", panel);
         panel.addView(label("Font family", 17, PRIMARY, true),
             new LinearLayout.LayoutParams(-1, dp(42)));
         for (int i = 0; i < ids.length; i++) {
@@ -453,6 +483,9 @@ public final class EditorSettingsController {
         panel.addView(cancel, new LinearLayout.LayoutParams(-1, dp(42)));
         cancel.setOnClickListener(view -> picker.dismiss());
         picker.setContentView(panel);
+        picker.setOnDismissListener(ignored -> {
+            if (uiSchemaBinder != null) uiSchemaBinder.unregisterTree(panel);
+        });
         picker.show();
         Window window = picker.getWindow();
         if (window != null) {
@@ -520,6 +553,11 @@ public final class EditorSettingsController {
         view.setTextColor(color);
         view.setTypeface(uiTypeface(bold));
         view.setIncludeFontPadding(false);
+        if (uiSchemaBinder != null) {
+            String property = color == SECONDARY ? "settings.editor.secondaryForeground"
+                : (color == ACCENT ? "settings.editor.accentForeground" : "settings.editor.foreground");
+            uiSchemaBinder.bindTextColor(property, view);
+        }
         return view;
     }
 

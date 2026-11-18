@@ -36,6 +36,8 @@ import com.termux.app.theme.settings.VSCodeVsixImporter;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.storage.IconThemeStorage;
 import com.termux.app.theme.storage.ThemeStorageException;
+import com.termux.app.theme.schema.YummyUiSchemaRuntime;
+import com.termux.app.theme.schema.YummyUiSchemaViewBinder;
 
 import java.io.InputStream;
 import java.io.File;
@@ -74,6 +76,8 @@ public final class ThemeImportController {
     private final AppThemeController appThemeController;
     private final Typeface uiTypeface;
     private final Listener listener;
+    private YummyUiSchemaRuntime uiSchemaRuntime;
+    private YummyUiSchemaViewBinder uiSchemaBinder;
     private final VSCodeThemeJsonImporter importer = new VSCodeThemeJsonImporter();
     private final VSCodeVsixImporter vsixImporter = new VSCodeVsixImporter();
     private VSCodeVsixImporter.Preview pendingVsixPreview;
@@ -225,6 +229,13 @@ public final class ThemeImportController {
     }
 
     /** Opens Android's document picker. The returned result is forwarded to onActivityResult. */
+    /** Connects import and diagnostic dialogs to the shared Yummy UI Schema runtime. */
+    public void setUiSchemaRuntime(YummyUiSchemaRuntime runtime) {
+        if (uiSchemaBinder != null) uiSchemaBinder.unregisterAll();
+        uiSchemaRuntime = runtime;
+        uiSchemaBinder = runtime == null ? null : new YummyUiSchemaViewBinder(runtime);
+    }
+
     public void launchPicker() {
         requireMainThread();
         if (released) return;
@@ -278,6 +289,7 @@ public final class ThemeImportController {
             activeDialog.dismiss();
             activeDialog = null;
         }
+        if (uiSchemaBinder != null) uiSchemaBinder.unregisterAll();
         ioExecutor.shutdownNow();
     }
 
@@ -877,6 +889,10 @@ public final class ThemeImportController {
     private Dialog createDialog() {
         Dialog dialog = new Dialog(activity);
         dialog.setOnDismissListener(ignored -> {
+            if (uiSchemaBinder != null) {
+                android.view.View content = dialog.findViewById(android.R.id.content);
+                if (content != null) uiSchemaBinder.unregisterTree(content);
+            }
             if (activeDialog == dialog) activeDialog = null;
         });
         return dialog;
@@ -935,6 +951,7 @@ public final class ThemeImportController {
         root.setVisibility(android.view.View.VISIBLE);
         root.setAlpha(1f);
         root.setBackground(rect(backgroundColor(), borderColor()));
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", root);
         return root;
     }
 
@@ -946,6 +963,12 @@ public final class ThemeImportController {
         view.setGravity(Gravity.CENTER_VERTICAL);
         if (uiTypeface != null) view.setTypeface(uiTypeface, bold ? Typeface.BOLD : Typeface.NORMAL);
         else if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        if (uiSchemaBinder != null) {
+            String property = color == mutedColor()
+                ? "settings.dialog.secondaryForeground"
+                : (color == accentForegroundColor() ? "settings.dialog.accentForeground" : "settings.dialog.foreground");
+            uiSchemaBinder.bindTextColor(property, view);
+        }
         return view;
     }
 
@@ -957,6 +980,11 @@ public final class ThemeImportController {
         view.setClickable(true);
         view.setFocusable(true);
         view.setOnClickListener(ignored -> callback.run());
+        if (uiSchemaBinder != null) {
+            uiSchemaBinder.bindBackgroundTint(primary
+                ? "settings.dialog.button.primary.background"
+                : "settings.dialog.button.secondary.background", view);
+        }
         return view;
     }
 

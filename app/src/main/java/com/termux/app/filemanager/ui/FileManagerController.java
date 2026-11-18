@@ -3096,7 +3096,7 @@ public final class FileManagerController {
             if (currentProvider instanceof SafTreeStorageProvider) menu.getMenu().add("Remove current storage");
             menu.setOnMenuItemClickListener(item -> {
                 String action = item.getTitle().toString();
-                if ("Editor settings".equals(action)) EditorSettingsController.show(activity);
+                if ("Editor settings".equals(action)) EditorSettingsController.show(activity, uiSchemaRuntime);
                 else if (action.startsWith("Show hidden") || action.startsWith("Hide hidden")) {
                     showHidden = !showHidden;
                     preferences.edit().putBoolean(KEY_SHOW_HIDDEN, showHidden).apply();
