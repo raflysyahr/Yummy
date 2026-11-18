@@ -104,6 +104,27 @@ public final class YummyUiSchemaRuntime {
     }
 
     /**
+     * Deactivates the current theme schema and restores every property previously applied by it.
+     * Bindings remain registered so the next selected theme can be applied without rebuilding UI.
+     */
+    public void deactivate() {
+        final List<YummyUiComponentBinding> bindings;
+        final long deactivatedGeneration;
+        synchronized (lock) {
+            ensureNotDisposedLocked();
+            candidateSequence++;
+            if (activeResolution == null) return;
+            activeDocument = null;
+            activeResolution = null;
+            generation++;
+            deactivatedGeneration = generation;
+            runtimeDiagnostics.clear();
+            bindings = registry.getBindingsSnapshot();
+        }
+        scheduleBindings(bindings, deactivatedGeneration);
+    }
+
+    /**
      * Re-resolves the active document with a new code-owned defaults map. This is useful when a
      * component adapter set changes; it never modifies the imported JSON document.
      */
@@ -363,6 +384,11 @@ public final class YummyUiSchemaRuntime {
 
         @Override
         public boolean post(Runnable task) {
+            if (task == null) return false;
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                task.run();
+                return true;
+            }
             return handler.post(task);
         }
     }

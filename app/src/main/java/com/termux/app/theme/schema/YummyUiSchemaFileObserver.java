@@ -51,6 +51,7 @@ public final class YummyUiSchemaFileObserver implements AutoCloseable {
     private final File requestedSchemaFile;
     private final YummyUiSchemaRuntime runtime;
     private final YummyUiSchemaValidator validator;
+    private final String expectedThemeId;
     private final long debounceMillis;
     private final HandlerThread workerThread;
     private final Handler workerHandler;
@@ -75,6 +76,17 @@ public final class YummyUiSchemaFileObserver implements AutoCloseable {
         YummyUiSchemaValidator validator,
         long debounceMillis
     ) {
+        this(schemaFile, runtime, validator, debounceMillis, null);
+    }
+
+    /** Constructor that also pins edits to the ID of the selected imported theme package. */
+    public YummyUiSchemaFileObserver(
+        File schemaFile,
+        YummyUiSchemaRuntime runtime,
+        YummyUiSchemaValidator validator,
+        long debounceMillis,
+        String expectedThemeId
+    ) {
         if (schemaFile == null) throw new IllegalArgumentException("UI Schema file is required");
         if (runtime == null) throw new IllegalArgumentException("UI Schema runtime is required");
         if (validator == null) throw new IllegalArgumentException("UI Schema validator is required");
@@ -84,6 +96,10 @@ public final class YummyUiSchemaFileObserver implements AutoCloseable {
         this.requestedSchemaFile = schemaFile;
         this.runtime = runtime;
         this.validator = validator;
+        this.expectedThemeId = expectedThemeId == null ? null : expectedThemeId.trim();
+        if (this.expectedThemeId != null && this.expectedThemeId.isEmpty()) {
+            throw new IllegalArgumentException("Expected theme ID cannot be empty");
+        }
         this.debounceMillis = debounceMillis;
         this.workerThread = new HandlerThread("YummyUiSchemaObserver");
         this.workerThread.start();
@@ -264,6 +280,15 @@ public final class YummyUiSchemaFileObserver implements AutoCloseable {
             notifyRejected(epoch, validation,
                 validation == null ? "Schema validator returned no result" : summarizeErrors(validation));
             return;
+        }
+        if (expectedThemeId != null) {
+            JSONObject metadata = candidate.optJSONObject("metadata");
+            String actualId = metadata == null ? null : metadata.optString("id", null);
+            if (!expectedThemeId.equals(actualId)) {
+                notifyRejected(epoch, validation,
+                    "Schema metadata.id does not match the selected theme package");
+                return;
+            }
         }
 
         final YummyUiSchemaRuntime.ActivationResult activation;

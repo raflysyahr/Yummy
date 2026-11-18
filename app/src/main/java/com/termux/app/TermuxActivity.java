@@ -63,6 +63,7 @@ import com.termux.app.theme.sora.SoraEditorThemeApplier;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.ui.AppThemeController;
 import com.termux.app.theme.schema.YummyUiSchemaRuntime;
+import com.termux.app.theme.schema.YummyUiSchemaThemeManager;
 import com.termux.app.theme.ui.ThemeSettingsController;
 import com.termux.app.theme.ui.ThemeImportController;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
@@ -411,6 +412,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mThemeSettingsController.dismiss();
             mThemeSettingsController = null;
         }
+        if (mUiSchemaThemeManager != null) {
+            mUiSchemaThemeManager.close();
+            mUiSchemaThemeManager = null;
+        }
         if (mAppThemeController != null) {
             mAppThemeController.release();
             mAppThemeController = null;
@@ -711,6 +716,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private FileManagerController mFileManagerController;
     private AppThemeController mAppThemeController;
     private YummyUiSchemaRuntime mUiSchemaRuntime;
+    private YummyUiSchemaThemeManager mUiSchemaThemeManager;
     private ThemeSettingsController mThemeSettingsController;
     private boolean mBootstrapSetupRunning = false;
     private boolean mPendingFailsafeSession = false;
@@ -733,6 +739,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void initializeThemeSystem() {
         mAppThemeController = new AppThemeController(this);
         mUiSchemaRuntime = new YummyUiSchemaRuntime();
+        mUiSchemaThemeManager = new YummyUiSchemaThemeManager(
+            mUiSchemaRuntime, new ThemePackageStorage(getApplicationContext()));
         bindApplicationThemeViews();
         mAppThemeController.setPaletteListener(theme -> {
             applyEditorAppTheme(theme);
@@ -772,6 +780,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             uiTypeface
         );
         mThemeSettingsController.setUiSchemaRuntime(mUiSchemaRuntime);
+        mThemeSettingsController.setUiSchemaThemeManager(mUiSchemaThemeManager);
 
         // TextMate support is initialized synchronously by EditorController.setup(), so both
         // independently stored selections can now be restored without changing terminal colors.

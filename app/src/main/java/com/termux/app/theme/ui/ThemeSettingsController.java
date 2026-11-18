@@ -46,6 +46,7 @@ import com.termux.app.theme.settings.ThemePackageArchiveImporter;
 import com.termux.app.theme.loader.ThemePackageLoader;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.schema.YummyUiSchemaRuntime;
+import com.termux.app.theme.schema.YummyUiSchemaThemeManager;
 import com.termux.app.theme.schema.YummyUiSchemaViewBinder;
 
 import org.json.JSONArray;
@@ -102,6 +103,7 @@ public final class ThemeSettingsController {
     private final Typeface uiTypeface;
     private YummyUiSchemaRuntime uiSchemaRuntime;
     private YummyUiSchemaViewBinder uiSchemaBinder;
+    private YummyUiSchemaThemeManager uiSchemaThemeManager;
 
     private ThemeRegistrySnapshot snapshot = ThemeRegistrySnapshot.empty();
     private ThemeSelection selection = ThemeSelection.defaults();
@@ -140,6 +142,11 @@ public final class ThemeSettingsController {
         if (themeImportController != null) themeImportController.setUiSchemaRuntime(runtime);
     }
 
+    /** Connects selected App UI theme lifecycle to its package-local UI Schema sidecar. */
+    public void setUiSchemaThemeManager(YummyUiSchemaThemeManager manager) {
+        uiSchemaThemeManager = manager;
+    }
+
     /** Reloads available packages and displays the two independent theme selectors. */
     public void show() {
         requireMainThread();
@@ -162,18 +169,25 @@ public final class ThemeSettingsController {
         List<String> recoveries = new java.util.ArrayList<>();
 
         LoadedTheme appTheme = snapshot.findById(selection.getAppColorSchemeId());
+        LoadedTheme activeAppTheme = null;
+        if (uiSchemaThemeManager != null) {
+            try { uiSchemaThemeManager.deactivate(); }
+            catch (RuntimeException error) { failures.add("App UI Schema reset: " + safeMessage(error)); }
+        }
         if (appTheme != null && appTheme.getMetadata().supports(ThemeTarget.APP_UI)) {
             try {
                 if (appThemeController == null) {
                     throw new IllegalStateException("AppThemeController is not connected");
                 }
                 appThemeController.applyTheme(appTheme);
+                activeAppTheme = appTheme;
             } catch (Exception error) {
                 try {
                     LoadedTheme fallback = findRecoveryTheme(
                         ThemeTarget.APP_UI, selection.getAppColorSchemeId());
                     if (fallback == null || appThemeController == null) throw error;
                     appThemeController.applyTheme(fallback);
+                    activeAppTheme = fallback;
                     selectionStore.selectAppUiTheme(fallback.getMetadata().getId());
                     selection = selection.withAppColorScheme(fallback.getMetadata().getId());
                     recoveries.add("App UI restored with '" + fallback.getMetadata().getLabel() + "'");
@@ -181,6 +195,9 @@ public final class ThemeSettingsController {
                     failures.add("App UI: " + safeMessage(recoveryError));
                 }
             }
+        }
+        if (uiSchemaThemeManager != null && activeAppTheme != null) {
+            activateUiSchemaForTheme(activeAppTheme);
         }
 
         LoadedTheme syntaxTheme = snapshot.findById(selection.getEditorSyntaxThemeId());
@@ -889,9 +906,22 @@ public final class ThemeSettingsController {
 
     private void removeImportedTheme(String themeId) {
         ThemeSelection before = selectionStore.read(snapshot);
+        boolean removingActiveAppTheme = themeId.equals(before.getAppColorSchemeId());
+        if (removingActiveAppTheme && uiSchemaThemeManager != null) {
+            try { uiSchemaThemeManager.deactivate(); }
+            catch (RuntimeException error) {
+                Toast.makeText(activity, "Could not stop active UI Schema: " + safeMessage(error), Toast.LENGTH_LONG).show();
+                showImportedThemes();
+                return;
+            }
+        }
         try {
             packageStorage.removeImportedTheme(themeId);
         } catch (Exception error) {
+            if (removingActiveAppTheme && uiSchemaThemeManager != null) {
+                LoadedTheme previous = snapshot.findById(before.getAppColorSchemeId());
+                if (previous != null) activateUiSchemaForTheme(previous);
+            }
             Toast.makeText(activity,
                 "Could not remove theme: " + safeMessage(error), Toast.LENGTH_LONG).show();
             showImportedThemes();
@@ -912,6 +942,7 @@ public final class ThemeSettingsController {
                     throw new IllegalStateException("App UI theme controller is unavailable");
                 }
                 appThemeController.applyTheme(fallback);
+                activateUiSchemaForTheme(fallback);
             } catch (Exception error) {
                 failures.add("Application UI: " + safeMessage(error));
             }
@@ -1699,8 +1730,23 @@ public final class ThemeSettingsController {
                 if (appThemeController == null) {
                     throw new IllegalStateException("AppThemeController is not connected");
                 }
-                appThemeController.applyTheme(theme);
+                LoadedTheme previousTheme = findSelected(ThemeTarget.APP_UI);
+                if (uiSchemaThemeManager != null) uiSchemaThemeManager.deactivate();
+                try {
+                    appThemeController.applyTheme(theme);
+                } catch (Exception applyError) {
+                    if (previousTheme != null) {
+                        try {
+                            appThemeController.applyTheme(previousTheme);
+                            activateUiSchemaForTheme(previousTheme);
+                        } catch (Exception restoreError) {
+                            applyError.addSuppressed(restoreError);
+                        }
+                    }
+                    throw applyError;
+                }
                 selectionStore.selectAppUiTheme(theme.getMetadata().getId());
+                activateUiSchemaForTheme(theme);
                 try {
                     // Re-resolve appearance-specific icon mappings after a Color Theme switch.
                     applySelectedIconTheme();
@@ -1724,6 +1770,22 @@ public final class ThemeSettingsController {
             Toast.makeText(activity,
                 "Could not apply theme: " + safeMessage(error), Toast.LENGTH_LONG).show();
             showSettingsDialog();
+        }
+    }
+
+    private void activateUiSchemaForTheme(LoadedTheme theme) {
+        if (uiSchemaThemeManager == null || theme == null) return;
+        try {
+            YummyUiSchemaThemeManager.ActivationStatus status = uiSchemaThemeManager.activate(theme);
+            if (status.isSchemaActive() && !status.isWatching()) {
+                android.util.Log.w("YummyUiSchemaTheme",
+                    "Schema is active for " + status.getThemeId() + " but live watching is unavailable");
+            }
+        } catch (Exception error) {
+            android.util.Log.e("YummyUiSchemaTheme",
+                "Could not activate App UI schema for " + theme.getMetadata().getId(), error);
+            Toast.makeText(activity, "App UI theme applied; UI Schema unavailable: "
+                + safeMessage(error), Toast.LENGTH_LONG).show();
         }
     }
 
