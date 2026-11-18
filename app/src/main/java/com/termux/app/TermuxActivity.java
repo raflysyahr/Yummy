@@ -62,6 +62,7 @@ import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.sora.SoraEditorThemeApplier;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.ui.AppThemeController;
+import com.termux.app.theme.schema.YummyUiSchemaRuntime;
 import com.termux.app.theme.ui.ThemeSettingsController;
 import com.termux.app.theme.ui.ThemeImportController;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
@@ -418,6 +419,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFileManagerController.destroy();
             mFileManagerController = null;
         }
+        if (mUiSchemaRuntime != null) {
+            mUiSchemaRuntime.dispose();
+            mUiSchemaRuntime = null;
+        }
 
         super.onDestroy();
 
@@ -705,6 +710,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private EditorController mEditorController;
     private FileManagerController mFileManagerController;
     private AppThemeController mAppThemeController;
+    private YummyUiSchemaRuntime mUiSchemaRuntime;
     private ThemeSettingsController mThemeSettingsController;
     private boolean mBootstrapSetupRunning = false;
     private boolean mPendingFailsafeSession = false;
@@ -726,13 +732,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Initializes the independent App UI and Editor Syntax theme targets. */
     private void initializeThemeSystem() {
         mAppThemeController = new AppThemeController(this);
+        mUiSchemaRuntime = new YummyUiSchemaRuntime();
         bindApplicationThemeViews();
-        mAppThemeController.setPaletteListener(this::applyEditorAppTheme);
+        mAppThemeController.setPaletteListener(theme -> {
+            applyEditorAppTheme(theme);
+            if (mFileManagerController != null) {
+                mFileManagerController.refreshUiSchemaBindings();
+            }
+        });
         if (mEditorController != null) {
             mEditorController.setAppThemeController(mAppThemeController);
         }
         if (mFileManagerController != null) {
             mFileManagerController.setAppThemeController(mAppThemeController);
+            mFileManagerController.setUiSchemaRuntime(mUiSchemaRuntime);
         }
 
         ThemePackageStorage storage = new ThemePackageStorage(getApplicationContext());

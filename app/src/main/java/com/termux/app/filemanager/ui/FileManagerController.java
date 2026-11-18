@@ -62,6 +62,8 @@ import com.termux.app.editor.EditorSettingsController;
 import com.termux.app.session.WorkspaceSessionManager;
 import com.termux.app.theme.model.AppThemeColorRole;
 import com.termux.app.theme.ui.AppThemeController;
+import com.termux.app.theme.schema.YummyUiSchemaRuntime;
+import com.termux.app.theme.schema.YummyUiSchemaViewBinder;
 import com.termux.app.theme.registry.YummyUiIconRegistry;
 import com.termux.app.filemanager.storage.StorageRegistry;
 import com.termux.app.filemanager.storage.StorageTreePicker;
@@ -146,6 +148,8 @@ public final class FileManagerController {
     private final Activity activity;
     private final EditorController editorController;
     @Nullable private AppThemeController appThemeController;
+    @Nullable private YummyUiSchemaRuntime uiSchemaRuntime;
+    @Nullable private YummyUiSchemaViewBinder uiSchemaViewBinder;
     private final StorageRegistry registry;
     private final FileOperationService fileOperations;
     private final StorageTransferService transferService = new StorageTransferService();
@@ -441,6 +445,19 @@ public final class FileManagerController {
         if (managerDialog != null) managerDialog.bindThemeViews();
     }
 
+    /** Connects the independent Yummy UI Schema runtime to File Manager component Views. */
+    public void setUiSchemaRuntime(@Nullable YummyUiSchemaRuntime runtime) {
+        if (uiSchemaViewBinder != null) uiSchemaViewBinder.unregisterAll();
+        uiSchemaRuntime = runtime;
+        uiSchemaViewBinder = runtime == null ? null : new YummyUiSchemaViewBinder(runtime);
+        if (managerDialog != null) managerDialog.bindThemeViews();
+    }
+
+    /** Reapply schema values after the App Theme palette has been refreshed. */
+    public void refreshUiSchemaBindings() {
+        if (uiSchemaViewBinder != null) uiSchemaViewBinder.refresh();
+    }
+
     public void show() {
         show(false);
     }
@@ -485,6 +502,11 @@ public final class FileManagerController {
             managerDialog.dismiss();
             managerDialog = null;
         }
+        if (uiSchemaViewBinder != null) {
+            uiSchemaViewBinder.unregisterAll();
+            uiSchemaViewBinder = null;
+        }
+        uiSchemaRuntime = null;
         editorController.setDocumentActionListener(null);
         openFiles.clear();
         ioExecutor.shutdownNow();
@@ -1731,24 +1753,43 @@ public final class FileManagerController {
         }
 
         private void bindThemeViews() {
-            if (appThemeController == null) return;
-            bindSidebarBackground(drawerPanel, AppThemeColorRole.SIDEBAR_BACKGROUND);
-            bindSidebarBackground(storageRail, AppThemeColorRole.SIDEBAR_BACKGROUND);
-            bindSidebarBackground(rightPane, AppThemeColorRole.SIDEBAR_BACKGROUND);
-            bindSidebarBackground(header, AppThemeColorRole.TOOLBAR_BACKGROUND);
-            bindSidebarBackground(actionBar, AppThemeColorRole.TOOLBAR_BACKGROUND);
-            bindSidebarBackground(listView, AppThemeColorRole.SIDEBAR_BACKGROUND);
-            bindSidebarBackground(selectionBar, AppThemeColorRole.SIDEBAR_BACKGROUND);
-            bindSidebarBackground(searchView, AppThemeColorRole.INPUT_BACKGROUND);
-            bindSidebarText(titleView, AppThemeColorRole.SIDEBAR_FOREGROUND);
-            bindSidebarText(breadcrumbView, AppThemeColorRole.SECONDARY_TEXT);
-            bindSidebarText(searchView, AppThemeColorRole.INPUT_FOREGROUND);
-            if (searchView != null) {
-                appThemeController.bindHint(searchView, AppThemeColorRole.SECONDARY_TEXT);
+            if (appThemeController != null) {
+                bindSidebarBackground(drawerPanel, AppThemeColorRole.SIDEBAR_BACKGROUND);
+                bindSidebarBackground(storageRail, AppThemeColorRole.SIDEBAR_BACKGROUND);
+                bindSidebarBackground(rightPane, AppThemeColorRole.SIDEBAR_BACKGROUND);
+                bindSidebarBackground(header, AppThemeColorRole.TOOLBAR_BACKGROUND);
+                bindSidebarBackground(actionBar, AppThemeColorRole.TOOLBAR_BACKGROUND);
+                bindSidebarBackground(listView, AppThemeColorRole.SIDEBAR_BACKGROUND);
+                bindSidebarBackground(selectionBar, AppThemeColorRole.SIDEBAR_BACKGROUND);
+                bindSidebarBackground(searchView, AppThemeColorRole.INPUT_BACKGROUND);
+                bindSidebarText(titleView, AppThemeColorRole.SIDEBAR_FOREGROUND);
+                bindSidebarText(breadcrumbView, AppThemeColorRole.SECONDARY_TEXT);
+                bindSidebarText(searchView, AppThemeColorRole.INPUT_FOREGROUND);
+                if (searchView != null) {
+                    appThemeController.bindHint(searchView, AppThemeColorRole.SECONDARY_TEXT);
+                }
+                bindSidebarText(emptyView, AppThemeColorRole.SECONDARY_TEXT);
+                bindSidebarProgress(progressBar, AppThemeColorRole.ACCENT);
+                bindTaggedIconViews(drawerPanel);
             }
-            bindSidebarText(emptyView, AppThemeColorRole.SECONDARY_TEXT);
-            bindSidebarProgress(progressBar, AppThemeColorRole.ACCENT);
-            bindTaggedIconViews(drawerPanel);
+            bindUiSchemaViews();
+        }
+
+        private void bindUiSchemaViews() {
+            if (uiSchemaViewBinder == null) return;
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.background", drawerPanel);
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.storage.background", storageRail);
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.content.background", rightPane);
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.header.background", header);
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.actionbar.background", actionBar);
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.tree.background", listView);
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.selection.background", selectionBar);
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.search.background", searchView);
+            uiSchemaViewBinder.bindTextColor("sidebar.foreground", titleView);
+            uiSchemaViewBinder.bindTextColor("sidebar.breadcrumb.foreground", breadcrumbView);
+            uiSchemaViewBinder.bindTextColor("sidebar.search.foreground", searchView);
+            uiSchemaViewBinder.bindHintTextColor("sidebar.search.hint", searchView);
+            uiSchemaViewBinder.bindTextColor("sidebar.emptyState.foreground", emptyView);
         }
 
         private void bindTaggedIconViews(@Nullable View view) {
@@ -1756,8 +1797,13 @@ public final class FileManagerController {
             if (view instanceof ImageView && view.getTag() instanceof String) {
                 String slotId = (String) view.getTag();
                 if (YummyUiIconRegistry.getDefault().getSlot(slotId) != null) {
-                    appThemeController.bindUiIcon((ImageView) view, slotId,
-                        AppThemeColorRole.ICON_FOREGROUND, ((ImageView) view).getDrawable());
+                    if (appThemeController != null) {
+                        appThemeController.bindUiIcon((ImageView) view, slotId,
+                            AppThemeColorRole.ICON_FOREGROUND, ((ImageView) view).getDrawable());
+                    }
+                    if (uiSchemaViewBinder != null) {
+                        uiSchemaViewBinder.bindVectorTint("sidebar.icon.foreground", (ImageView) view);
+                    }
                 }
             }
             if (view instanceof ViewGroup) {
@@ -1769,18 +1815,45 @@ public final class FileManagerController {
         }
 
         private void bindSidebarBackground(@Nullable View view, AppThemeColorRole role) {
-            if (view != null) appThemeController.bindBackground(view, role);
+            if (view == null) return;
+            if (appThemeController != null) appThemeController.bindBackground(view, role);
+            if (uiSchemaViewBinder != null) {
+                String propertyId;
+                if (view == storageRail) propertyId = "sidebar.storage.background";
+                else if (view == rightPane) propertyId = "sidebar.content.background";
+                else if (view == header) propertyId = "sidebar.header.background";
+                else if (view == actionBar) propertyId = "sidebar.actionbar.background";
+                else if (view == listView) propertyId = "sidebar.tree.background";
+                else if (view == selectionBar) propertyId = "sidebar.selection.background";
+                else if (view == searchView) propertyId = "sidebar.search.background";
+                else if (role == AppThemeColorRole.SELECTION_BACKGROUND) propertyId = "sidebar.selection.background";
+                else propertyId = "sidebar.background";
+                uiSchemaViewBinder.bindBackgroundTint(propertyId, view);
+            }
         }
 
         private void bindSidebarText(@Nullable TextView view, AppThemeColorRole role) {
-            if (view != null) appThemeController.bindText(view, role);
+            if (view == null) return;
+            if (appThemeController != null) appThemeController.bindText(view, role);
+            if (uiSchemaViewBinder != null) {
+                String propertyId;
+                if (view == searchView) propertyId = "sidebar.search.foreground";
+                else if (view == breadcrumbView) propertyId = "sidebar.breadcrumb.foreground";
+                else if (view == emptyView) propertyId = "sidebar.emptyState.foreground";
+                else propertyId = role == AppThemeColorRole.SECONDARY_TEXT
+                    ? "sidebar.secondaryForeground" : "sidebar.foreground";
+                uiSchemaViewBinder.bindTextColor(propertyId, view);
+            }
         }
 
         private void bindSidebarProgress(@Nullable ProgressBar view, AppThemeColorRole role) {
-            if (view != null) appThemeController.bindProgress(view, role);
+            if (view != null && appThemeController != null) appThemeController.bindProgress(view, role);
         }
 
         private void rebuildStorageRail() {
+            if (uiSchemaViewBinder != null && storageNavContainer != null) {
+                uiSchemaViewBinder.unregisterTree(storageNavContainer);
+            }
             storageRail.removeAllViews();
 
             ImageView brand = new ImageView(activity);
@@ -1881,6 +1954,13 @@ public final class FileManagerController {
                 appThemeController.bindText(name, AppThemeColorRole.SIDEBAR_FOREGROUND);
                 if (selected) {
                     appThemeController.bindBackground(icon, AppThemeColorRole.SELECTION_BACKGROUND);
+                }
+            }
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.storage.foreground", name);
+                uiSchemaViewBinder.bindVectorTint("sidebar.storage.icon.foreground", icon);
+                if (selected) {
+                    uiSchemaViewBinder.bindBackgroundTint("sidebar.storage.item.selectedBackground", icon);
                 }
             }
             item.setOnClickListener(v -> action.run());
@@ -3102,6 +3182,10 @@ public final class FileManagerController {
                         appThemeController.bindText(section, AppThemeColorRole.SECONDARY_TEXT);
                         appThemeController.bindBackground(section, AppThemeColorRole.SIDEBAR_BACKGROUND);
                     }
+                    if (uiSchemaViewBinder != null) {
+                        uiSchemaViewBinder.bindTextColor("sidebar.secondaryForeground", section);
+                        uiSchemaViewBinder.bindBackgroundTint("sidebar.tree.section.background", section);
+                    }
                     return section;
                 }
 
@@ -3183,6 +3267,12 @@ public final class FileManagerController {
                         appThemeController.bindText(subtitle, AppThemeColorRole.SECONDARY_TEXT);
                         appThemeController.bindIcon(disclosure, AppThemeColorRole.ICON_FOREGROUND);
                     }
+                    if (uiSchemaViewBinder != null) {
+                        uiSchemaViewBinder.bindBackgroundTint("sidebar.tree.row.background", container);
+                        uiSchemaViewBinder.bindTextColor("sidebar.foreground", name);
+                        uiSchemaViewBinder.bindTextColor("sidebar.secondaryForeground", subtitle);
+                        uiSchemaViewBinder.bindVectorTint("sidebar.icon.foreground", disclosure);
+                    }
                     applySidebarRipple(container);
                     return container;
                 }
@@ -3251,7 +3341,15 @@ public final class FileManagerController {
                         appThemeController.bindBackground(container, AppThemeColorRole.SELECTION_BACKGROUND);
                     }
                 }
-
+                if (uiSchemaViewBinder != null) {
+                    uiSchemaViewBinder.bindBackgroundTint("sidebar.tree.row.background", container);
+                    uiSchemaViewBinder.bindTextColor("sidebar.foreground", name);
+                    uiSchemaViewBinder.bindTextColor("sidebar.secondaryForeground", subtitle);
+                    uiSchemaViewBinder.bindVectorTint("sidebar.icon.foreground", disclosure);
+                    if (check.getVisibility() == View.VISIBLE) {
+                        uiSchemaViewBinder.bindVectorTint("sidebar.selection.foreground", check);
+                    }
+                }
 
                 applySidebarRipple(container);
                 return container;
