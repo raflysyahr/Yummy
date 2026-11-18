@@ -54,6 +54,8 @@ import com.termux.app.filemanager.ui.FileTypeResolver;
 import com.termux.app.theme.model.AppThemeColorRole;
 import com.termux.app.theme.ui.AppThemeController;
 import com.termux.app.theme.registry.YummyUiIconRegistry;
+import com.termux.app.theme.schema.YummyUiSchemaRuntime;
+import com.termux.app.theme.schema.YummyUiSchemaViewBinder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -116,6 +118,8 @@ public class EditorController {
     private final Runnable mPendingSessionSave = this::persistEditorSessionNow;
     private WorkspaceSessionManager mWorkspaceSessionManager;
     private AppThemeController mAppThemeController;
+    private YummyUiSchemaRuntime mUiSchemaRuntime;
+    private YummyUiSchemaViewBinder mUiSchemaBinder;
 
     private final List<EditorDocument> mDocuments = new ArrayList<>();
     private EditorDocument mActiveDocument;
@@ -444,6 +448,75 @@ public class EditorController {
         updateAppFileIcon();
         updateStatus();
         renderTabs();
+    }
+
+    /** Supplies the shared UI Schema runtime for Editor-owned app UI components. */
+    public void setUiSchemaRuntime(@Nullable YummyUiSchemaRuntime runtime) {
+        if (mUiSchemaBinder != null) mUiSchemaBinder.unregisterAll();
+        mUiSchemaRuntime = runtime;
+        mUiSchemaBinder = runtime == null ? null : new YummyUiSchemaViewBinder(runtime);
+        bindEditorUiSchemaViews();
+        renderTabs();
+    }
+
+    /** Re-applies resolved values after AppTheme palette updates or dynamic view recreation. */
+    public void refreshUiSchemaBindings() {
+        bindEditorUiSchemaViews();
+        if (mUiSchemaBinder != null) mUiSchemaBinder.refresh();
+    }
+
+    private void bindEditorUiSchemaViews() {
+        if (mUiSchemaBinder == null) return;
+
+        bindSchemaBackground("editor.toolbar.background", R.id.yummy_app_bar);
+        bindSchemaBackground("editor.tabs.background", R.id.yummy_tab_bar);
+        bindSchemaBackground("editor.statusBar.background", R.id.yummy_editor_status_bar);
+        bindSchemaBackground("editor.keys.background", R.id.yummy_keys_row);
+
+        bindSchemaText("editor.toolbar.foreground", R.id.yummy_title);
+        bindSchemaText("editor.statusBar.foreground", R.id.yummy_status_pos);
+        bindSchemaText("editor.statusBar.foreground", R.id.yummy_status_col);
+        bindSchemaText("editor.statusBar.foreground", R.id.yummy_status_indent);
+        bindSchemaText("editor.statusBar.foreground", R.id.yummy_status_lang);
+        bindSchemaText("editor.statusBar.foreground", R.id.yummy_status_enc);
+        bindSchemaText("editor.statusBar.secondaryForeground", R.id.yummy_status_label_ln);
+        bindSchemaText("editor.statusBar.secondaryForeground", R.id.yummy_status_label_col);
+        bindSchemaText("editor.statusBar.secondaryForeground", R.id.yummy_status_label_spaces);
+
+        bindSchemaVector("editor.toolbar.foreground", R.id.yummy_btn_menu);
+        bindSchemaVector("editor.toolbar.foreground", R.id.yummy_btn_terminal);
+        bindSchemaVector("editor.toolbar.foreground", R.id.yummy_btn_search);
+        bindSchemaVector("editor.toolbar.foreground", R.id.yummy_btn_save);
+        bindSchemaVector("editor.toolbar.accentForeground", R.id.yummy_btn_run);
+        bindSchemaVector("editor.tabs.inactive.foreground", R.id.yummy_btn_new_tab);
+        bindSchemaVector("editor.tabs.inactive.foreground", R.id.yummy_btn_tabs_menu);
+        bindSchemaVector("editor.statusBar.secondaryForeground", R.id.yummy_status_encoding_chevron);
+        bindSchemaVector("editor.keys.foreground", R.id.yummy_key_tab);
+        bindSchemaVector("editor.keys.foreground", R.id.yummy_key_up);
+        bindSchemaVector("editor.keys.foreground", R.id.yummy_key_down);
+        bindSchemaVector("editor.keys.foreground", R.id.yummy_key_left);
+        bindSchemaVector("editor.keys.foreground", R.id.yummy_key_right);
+        bindSchemaVector("editor.keys.foreground", R.id.yummy_key_undo);
+        bindSchemaVector("editor.keys.foreground", R.id.yummy_key_redo);
+        bindSchemaVector("editor.keys.foreground", R.id.yummy_key_paste);
+    }
+
+    private void bindSchemaBackground(String propertyId, int viewId) {
+        if (mUiSchemaBinder == null) return;
+        View view = mActivity.findViewById(viewId);
+        if (view != null) mUiSchemaBinder.bindBackgroundTint(propertyId, view);
+    }
+
+    private void bindSchemaText(String propertyId, int viewId) {
+        if (mUiSchemaBinder == null) return;
+        TextView view = mActivity.findViewById(viewId);
+        if (view != null) mUiSchemaBinder.bindTextColor(propertyId, view);
+    }
+
+    private void bindSchemaVector(String propertyId, int viewId) {
+        if (mUiSchemaBinder == null) return;
+        ImageView view = mActivity.findViewById(viewId);
+        if (view != null) mUiSchemaBinder.bindVectorTint(propertyId, view);
     }
 
     private void bindEditorUiIcons() {
@@ -984,6 +1057,7 @@ public class EditorController {
 
     private void renderTabs() {
         if (mTabsContainer == null) return;
+        if (mUiSchemaBinder != null) mUiSchemaBinder.unregisterTree(mTabsContainer);
         mTabsContainer.removeAllViews();
         for (EditorDocument document : mDocuments) {
             final boolean active = document == mActiveDocument;
@@ -1073,6 +1147,15 @@ public class EditorController {
             tab.addView(close, closeParams);
             close.setOnClickListener(view -> closeDocument(document.id));
             tab.setOnClickListener(view -> activateDocument(document.id));
+
+            if (mUiSchemaBinder != null) {
+                mUiSchemaBinder.bindBackgroundTint(active
+                    ? "editor.tabs.active.background" : "editor.tabs.inactive.background", tab);
+                mUiSchemaBinder.bindTextColor(active
+                    ? "editor.tabs.active.foreground" : "editor.tabs.inactive.foreground", name);
+                mUiSchemaBinder.bindTextColor(active
+                    ? "editor.tabs.active.foreground" : "editor.tabs.inactive.foreground", close);
+            }
 
             LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT);
@@ -1315,12 +1398,20 @@ public class EditorController {
         list.setOrientation(LinearLayout.VERTICAL);
         list.setBackgroundColor(0xFF202329);
         list.setPadding(0, dpInt(5), 0, dpInt(5));
+        if (mUiSchemaBinder != null) {
+            mUiSchemaBinder.bindBackgroundTint("editor.popup.background", list);
+        }
         for (String encoding : SUPPORTED_ENCODINGS) {
             TextView item = new TextView(mActivity);
             item.setText(encoding);
             item.setTextSize(13f);
             item.setTypeface(nunitoTypeface(true));
             item.setTextColor(encoding.equalsIgnoreCase(mActiveDocument.encoding) ? 0xFF80B7FF : 0xFFE5E7EB);
+            if (mUiSchemaBinder != null) {
+                mUiSchemaBinder.bindTextColor(
+                    encoding.equalsIgnoreCase(mActiveDocument.encoding)
+                        ? "editor.popup.selectedForeground" : "editor.popup.foreground", item);
+            }
             item.setGravity(Gravity.CENTER_VERTICAL);
             item.setPadding(dpInt(16), 0, dpInt(16), 0);
             item.setMinHeight(dpInt(42));
@@ -1335,6 +1426,9 @@ public class EditorController {
         scroll.setFillViewport(false);
         scroll.setBackgroundColor(0xFF202329);
         scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
+        if (mUiSchemaBinder != null) {
+            mUiSchemaBinder.bindBackgroundTint("editor.popup.background", scroll);
+        }
         int popupWidth = dpInt(178);
         int maxPopupHeight = dpInt(280);
         scroll.measure(View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
@@ -1344,6 +1438,9 @@ public class EditorController {
         mEncodingPopup.setBackgroundDrawable(new ColorDrawable(0xFF202329));
         mEncodingPopup.setOutsideTouchable(true);
         mEncodingPopup.setElevation(dpInt(10));
+        mEncodingPopup.setOnDismissListener(() -> {
+            if (mUiSchemaBinder != null) mUiSchemaBinder.unregisterTree(scroll);
+        });
         int[] location = new int[2];
         mStatusEncodingGroup.getLocationOnScreen(location);
         int x = Math.max(dpInt(6), location[0] + mStatusEncodingGroup.getWidth() - popupWidth);

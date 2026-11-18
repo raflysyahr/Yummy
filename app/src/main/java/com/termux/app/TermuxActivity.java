@@ -739,9 +739,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFileManagerController != null) {
                 mFileManagerController.refreshUiSchemaBindings();
             }
+            if (mEditorController != null) {
+                mEditorController.refreshUiSchemaBindings();
+            }
         });
         if (mEditorController != null) {
             mEditorController.setAppThemeController(mAppThemeController);
+            mEditorController.setUiSchemaRuntime(mUiSchemaRuntime);
         }
         if (mFileManagerController != null) {
             mFileManagerController.setAppThemeController(mAppThemeController);
