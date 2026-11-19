@@ -265,7 +265,7 @@ public final class YummyUiSchemaResolver {
         private final String unit;
         private final String source;
 
-        private ResolvedValue(String type, Object value, String unit, String source) {
+        public ResolvedValue(String type, Object value, String unit, String source) {
             this.type = type;
             this.value = defensiveCopy(value);
             this.unit = unit;

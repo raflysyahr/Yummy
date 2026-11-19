@@ -34,6 +34,7 @@ public final class YummyUiSchemaRuntime {
     private final List<YummyUiRuntimeDiagnostic> runtimeDiagnostics = new ArrayList<>();
 
     private Map<String, YummyUiSchemaResolver.DefaultValue> defaults = Collections.emptyMap();
+    private Map<String, YummyUiSchemaResolver.ResolvedValue> colorSchemeOverrides = Collections.emptyMap();
     private JSONObject activeDocument;
     private YummyUiSchemaResolver.ResolutionResult activeResolution;
     private Listener listener;
@@ -113,9 +114,10 @@ public final class YummyUiSchemaRuntime {
         synchronized (lock) {
             ensureNotDisposedLocked();
             candidateSequence++;
-            if (activeResolution == null) return;
+            if (activeResolution == null && colorSchemeOverrides.isEmpty()) return;
             activeDocument = null;
             activeResolution = null;
+            colorSchemeOverrides = Collections.emptyMap();
             generation++;
             deactivatedGeneration = generation;
             runtimeDiagnostics.clear();
@@ -156,7 +158,7 @@ public final class YummyUiSchemaRuntime {
             ensureNotDisposedLocked();
             binding = registry.register(propertyId, expectedType, target, applier);
             currentGeneration = generation;
-            hasSnapshot = activeResolution != null;
+            hasSnapshot = activeResolution != null || !colorSchemeOverrides.isEmpty();
         }
         if (hasSnapshot) scheduleBinding(binding, currentGeneration);
         return binding;
@@ -193,8 +195,40 @@ public final class YummyUiSchemaRuntime {
 
     public YummyUiSchemaResolver.ResolvedValue getResolvedValue(String propertyId) {
         synchronized (lock) {
-            return activeResolution == null ? null : activeResolution.get(propertyId);
+            YummyUiSchemaResolver.ResolvedValue override = colorSchemeOverrides.get(propertyId);
+            return override != null ? override
+                : activeResolution == null ? null : activeResolution.get(propertyId);
         }
+    }
+
+    /**
+     * Installs resolved Color Scheme colors as the highest-priority values for matching component
+     * property IDs. Properties not present in the Color Scheme continue using ui-schema.json.
+     */
+    public void setColorSchemeOverrides(Map<String, String> colors) {
+        Map<String, YummyUiSchemaResolver.ResolvedValue> copy = new LinkedHashMap<>();
+        if (colors != null) {
+            for (Map.Entry<String, String> entry : colors.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) continue;
+                copy.put(entry.getKey(), new YummyUiSchemaResolver.ResolvedValue(
+                    "color", entry.getValue(), null, "color-scheme"));
+            }
+        }
+        final List<YummyUiComponentBinding> bindings;
+        final long targetGeneration;
+        synchronized (lock) {
+            ensureNotDisposedLocked();
+            colorSchemeOverrides = Collections.unmodifiableMap(copy);
+            generation++;
+            targetGeneration = generation;
+            bindings = registry.getBindingsSnapshot();
+        }
+        scheduleBindings(bindings, targetGeneration);
+    }
+
+    /** Removes Color Scheme overrides and reveals the underlying ui-schema.json values. */
+    public void clearColorSchemeOverrides() {
+        setColorSchemeOverrides(Collections.emptyMap());
     }
 
     public YummyUiSchemaResolver.ResolutionResult getActiveResolution() {
@@ -213,7 +247,7 @@ public final class YummyUiSchemaRuntime {
         final long currentGeneration;
         synchronized (lock) {
             ensureNotDisposedLocked();
-            if (activeResolution == null) return;
+            if (activeResolution == null && colorSchemeOverrides.isEmpty()) return;
             bindings = registry.getBindingsSnapshot();
             currentGeneration = generation;
         }
@@ -240,6 +274,7 @@ public final class YummyUiSchemaRuntime {
             candidateSequence++;
             activeDocument = null;
             activeResolution = null;
+            colorSchemeOverrides = Collections.emptyMap();
             listener = null;
             runtimeDiagnostics.clear();
             registry.clear();
@@ -275,7 +310,9 @@ public final class YummyUiSchemaRuntime {
         Listener currentListener;
         synchronized (lock) {
             if (disposed || generation != targetGeneration || !registry.isRegistered(binding)) return;
-            value = activeResolution == null ? null : activeResolution.get(binding.getPropertyId());
+            value = colorSchemeOverrides.get(binding.getPropertyId());
+            if (value == null) value = activeResolution == null ? null
+                : activeResolution.get(binding.getPropertyId());
             currentListener = listener;
         }
 

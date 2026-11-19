@@ -5,6 +5,7 @@ import android.util.Log;
 import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.storage.ThemePackageStorage;
+import com.termux.app.theme.storage.ThemeColorSchemeStorage;
 import com.termux.app.theme.storage.ThemeStorageException;
 import com.termux.app.theme.storage.ThemeUiSchemaStorage;
 
@@ -14,10 +15,10 @@ import java.io.File;
 import java.io.IOException;
 
 /**
- * Coordinates the UI Schema sidecar belonging to the currently selected App UI Color Theme.
- * Built-in themes deliberately use the existing Yummy UI defaults; imported themes load their
- * package-local ui-schema.json and watch it for atomic edits. Editor Syntax and terminal themes
- * are not managed here.
+ * Coordinates the UI Schema and Color Scheme sidecars belonging to the currently selected App UI
+ * Color Theme. Imported themes load and watch both package-local JSON files. Color Scheme values
+ * override matching UI Schema component properties; unresolved theme keys fall back to the
+ * underlying UI Schema/default values. Editor Syntax and terminal themes are not managed here.
  */
 public final class YummyUiSchemaThemeManager implements AutoCloseable {
     private static final String TAG = "YummyUiSchemaTheme";
@@ -25,7 +26,11 @@ public final class YummyUiSchemaThemeManager implements AutoCloseable {
     private final YummyUiSchemaRuntime runtime;
     private final ThemePackageStorage packageStorage;
     private final ThemeUiSchemaStorage schemaStorage;
+    private final ThemeColorSchemeStorage colorSchemeStorage;
+    private final YummyColorSchemeResolver colorSchemeResolver;
     private YummyUiSchemaFileObserver observer;
+    private YummyColorSchemeFileObserver colorSchemeObserver;
+    private LoadedTheme activeTheme;
     private String activeThemeId;
     private boolean closed;
 
@@ -37,13 +42,18 @@ public final class YummyUiSchemaThemeManager implements AutoCloseable {
         this.runtime = runtime;
         this.packageStorage = packageStorage;
         this.schemaStorage = new ThemeUiSchemaStorage();
+        this.colorSchemeStorage = new ThemeColorSchemeStorage();
+        this.colorSchemeResolver = new YummyColorSchemeResolver();
     }
 
     /** Stops the previous package observer and restores schema-owned values to their base values. */
     public synchronized void deactivate() {
         ensureOpen();
         closeObserver();
+        closeColorSchemeObserver();
         activeThemeId = null;
+        activeTheme = null;
+        runtime.clearColorSchemeOverrides();
         runtime.deactivate();
     }
 
@@ -52,10 +62,14 @@ public final class YummyUiSchemaThemeManager implements AutoCloseable {
         ensureOpen();
         if (theme == null) throw new IllegalArgumentException("Selected App UI theme is required");
         closeObserver();
+        closeColorSchemeObserver();
+        runtime.clearColorSchemeOverrides();
+        activeTheme = null;
         String themeId = theme.getMetadata().getId();
         if (theme.getMetadata().getSource() != ThemeSource.IMPORTED) {
             runtime.deactivate();
             activeThemeId = themeId;
+            activeTheme = theme;
             return new ActivationStatus(themeId, false, false);
         }
 
@@ -73,6 +87,8 @@ public final class YummyUiSchemaThemeManager implements AutoCloseable {
         }
 
         activeThemeId = themeId;
+        activeTheme = theme;
+        activateColorScheme(themeId, theme);
         observer = new YummyUiSchemaFileObserver(schemaFile, runtime,
             new YummyUiSchemaValidator(), YummyUiSchemaFileObserver.DEFAULT_DEBOUNCE_MILLIS, themeId);
         observer.setListener(new YummyUiSchemaFileObserver.Listener() {
@@ -101,6 +117,73 @@ public final class YummyUiSchemaThemeManager implements AutoCloseable {
         return new ActivationStatus(themeId, true, true);
     }
 
+    private void activateColorScheme(String themeId, LoadedTheme theme) {
+        try {
+            File colorSchemeFile = packageStorage.ensureColorSchemeFile(themeId);
+            loadAndApplyColorScheme(colorSchemeFile, theme);
+            colorSchemeObserver = new YummyColorSchemeFileObserver(
+                colorSchemeFile, colorSchemeStorage);
+            colorSchemeObserver.setListener(new YummyColorSchemeFileObserver.Listener() {
+                @Override public void onReload(JSONObject document) {
+                    synchronized (YummyUiSchemaThemeManager.this) {
+                        if (closed || activeTheme == null
+                            || !themeId.equals(activeThemeId)) return;
+                        applyColorSchemeDocument(document, theme);
+                    }
+                }
+
+                @Override public void onReloadFailed(String code, String message) {
+                    Log.w(TAG, "Could not reload Color Scheme for " + themeId
+                        + " [" + code + "]: " + message);
+                }
+            });
+            colorSchemeObserver.startWatching();
+        } catch (ThemeStorageException | IOException | RuntimeException error) {
+            closeColorSchemeObserver();
+            Log.w(TAG, "Color Scheme is unavailable for " + themeId, error);
+        }
+    }
+
+    private void loadAndApplyColorScheme(File file, LoadedTheme theme) {
+        try {
+            JSONObject document = colorSchemeStorage.load(file.getParentFile());
+            applyColorSchemeDocument(document, theme);
+        } catch (ThemeStorageException error) {
+            Log.w(TAG, "Could not load Color Scheme for " + theme.getMetadata().getId(), error);
+        }
+    }
+
+    private void applyColorSchemeDocument(JSONObject document, LoadedTheme theme) {
+        YummyColorSchemeResolver.ResolutionResult result =
+            colorSchemeResolver.resolve(document, theme);
+        if (!result.isUsable()) {
+            Log.w(TAG, "Rejected Color Scheme for " + theme.getMetadata().getId()
+                + ": " + summarizeDiagnostics(result.getDiagnostics()));
+            return;
+        }
+        runtime.setColorSchemeOverrides(result.getColors());
+        Log.i(TAG, "Applied Color Scheme for " + theme.getMetadata().getId()
+            + " (" + result.getColors().size() + " color properties)");
+    }
+
+    private void closeColorSchemeObserver() {
+        if (colorSchemeObserver != null) {
+            colorSchemeObserver.close();
+            colorSchemeObserver = null;
+        }
+    }
+
+    private static String summarizeDiagnostics(
+        java.util.List<YummyUiSchemaDiagnostic> diagnostics
+    ) {
+        StringBuilder message = new StringBuilder();
+        for (YummyUiSchemaDiagnostic diagnostic : diagnostics) {
+            if (message.length() > 0) message.append("; ");
+            message.append(diagnostic.getCode()).append(": ").append(diagnostic.getMessage());
+        }
+        return message.length() == 0 ? "Unknown Color Scheme error" : message.toString();
+    }
+
     public synchronized String getActiveThemeId() {
         return activeThemeId;
     }
@@ -109,12 +192,23 @@ public final class YummyUiSchemaThemeManager implements AutoCloseable {
         return observer != null && observer.isWatching();
     }
 
+    public synchronized boolean isColorSchemeWatching() {
+        return colorSchemeObserver != null && colorSchemeObserver.isWatching();
+    }
+
     @Override
     public synchronized void close() {
         if (closed) return;
         closed = true;
         closeObserver();
+        closeColorSchemeObserver();
         activeThemeId = null;
+        activeTheme = null;
+        try {
+            runtime.clearColorSchemeOverrides();
+        } catch (IllegalStateException ignored) {
+            // The owning Activity may already have disposed the runtime.
+        }
     }
 
     private void closeObserver() {

@@ -1779,7 +1779,13 @@ public final class ThemeSettingsController {
             YummyUiSchemaThemeManager.ActivationStatus status = uiSchemaThemeManager.activate(theme);
             if (status.isSchemaActive() && !status.isWatching()) {
                 android.util.Log.w("YummyUiSchemaTheme",
-                    "Schema is active for " + status.getThemeId() + " but live watching is unavailable");
+                    "UI Schema is active for " + status.getThemeId()
+                        + " but live UI Schema watching is unavailable");
+            }
+            if (status.isSchemaActive() && !uiSchemaThemeManager.isColorSchemeWatching()) {
+                android.util.Log.w("YummyUiSchemaTheme",
+                    "Color Scheme is active for " + status.getThemeId()
+                        + " but live Color Scheme watching is unavailable");
             }
         } catch (Exception error) {
             android.util.Log.e("YummyUiSchemaTheme",
