@@ -453,6 +453,35 @@ public final class FileManagerController {
         if (managerDialog != null) managerDialog.bindThemeViews();
     }
 
+    /** Opens an app-managed private file in the Editor using normal storage-backed save handling. */
+    public void openPrivateAppFile(@NonNull File file) {
+        if (destroyed) return;
+        try {
+            File appFilesRoot = activity.getFilesDir().getCanonicalFile();
+            File target = file.getCanonicalFile();
+            String rootPath = appFilesRoot.getPath();
+            String targetPath = target.getPath();
+            if (!target.isFile() || !target.canRead() || !target.canWrite()
+                || !targetPath.startsWith(rootPath + File.separator)) {
+                throw new IOException("The requested file is not an editable app-private file");
+            }
+            StorageProvider provider = registry.getProvider(StorageRegistry.APP_FILES_PROVIDER_ID);
+            if (provider == null || !provider.isAvailable()) {
+                throw new IOException("Yummy app-private storage is unavailable");
+            }
+            File parent = target.getParentFile();
+            if (parent == null) throw new IOException("The requested file has no parent directory");
+            StorageEntry entry = new StorageEntry(
+                provider.getId(), targetPath, parent.getCanonicalPath(), target.getName(),
+                "application/json", false, target.length(), target.lastModified(),
+                StorageCapability.READ | StorageCapability.WRITE
+            );
+            openFile(provider, entry, null);
+        } catch (IOException | SecurityException error) {
+            showError("Tidak dapat membuka file konfigurasi", error);
+        }
+    }
+
     /** Reapply schema values after the App Theme palette has been refreshed. */
     public void refreshUiSchemaBindings() {
         if (uiSchemaViewBinder != null) uiSchemaViewBinder.refresh();

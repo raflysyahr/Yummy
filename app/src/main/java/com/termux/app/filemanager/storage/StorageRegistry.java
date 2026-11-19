@@ -36,10 +36,12 @@ import java.util.UUID;
 public final class StorageRegistry {
     private static final String PREFS_NAME = "yummy_storage_registry";
     private static final String KEY_SAF_LOCATIONS = "saf_locations_v1";
+    public static final String APP_FILES_PROVIDER_ID = "yummy.appfiles";
 
     private final Context context;
     private final SharedPreferences preferences;
     private final Map<String, StorageProvider> providers = new LinkedHashMap<>();
+    @Nullable private StorageProvider appFilesProvider;
 
     public StorageRegistry(@NonNull Context context) {
         this.context = context.getApplicationContext();
@@ -56,6 +58,7 @@ public final class StorageRegistry {
 
     @Nullable
     public synchronized StorageProvider getProvider(@NonNull String providerId) {
+        if (APP_FILES_PROVIDER_ID.equals(providerId)) return appFilesProvider;
         return providers.get(providerId);
     }
 
@@ -139,6 +142,15 @@ public final class StorageRegistry {
 
     private void registerBuiltInLocations() {
         try {
+            // This provider is intentionally hidden from the File Manager location list.
+            // It is used only for app-managed configuration documents opened by Settings.
+            appFilesProvider = new LocalFileStorageProvider(
+                APP_FILES_PROVIDER_ID,
+                "Yummy App Files",
+                "Private application configuration files",
+                context.getFilesDir()
+            );
+
             // Keep Yummy's own workspace separate from Termux's $PREFIX. Exposing the
             // parent of $HOME would also expose /usr, where deleting files can break Termux.
             File yummyWorkspace = context.getDir("yummy-storage", Context.MODE_PRIVATE);

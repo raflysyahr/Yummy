@@ -255,6 +255,17 @@ public final class EditorSettingsController {
         content.addView(themesCard, themesCardParams);
         addThemeSettingsRow(themesCard);
 
+        TextView colorSchemeSection = label("COLOR SCHEME", 11, ACCENT, true);
+        LinearLayout.LayoutParams colorSchemeSectionParams = new LinearLayout.LayoutParams(-1, -2);
+        colorSchemeSectionParams.topMargin = dp(26);
+        content.addView(colorSchemeSection, colorSchemeSectionParams);
+
+        LinearLayout colorSchemeCard = card();
+        LinearLayout.LayoutParams colorSchemeCardParams = new LinearLayout.LayoutParams(-1, -2);
+        colorSchemeCardParams.topMargin = dp(12);
+        content.addView(colorSchemeCard, colorSchemeCardParams);
+        addColorSchemeRow(colorSchemeCard);
+
         TextView systemSection = label("SYSTEM", 11, ACCENT, true);
         LinearLayout.LayoutParams systemSectionParams = new LinearLayout.LayoutParams(-1, -2);
         systemSectionParams.topMargin = dp(26);
@@ -300,6 +311,26 @@ public final class EditorSettingsController {
                     () -> ((TermuxActivity) activity).showThemeSettings());
             } else {
                 Toast.makeText(activity, "Theme settings are unavailable", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void addColorSchemeRow(LinearLayout parent) {
+        LinearLayout row = optionRow(parent, "Color Scheme JSON",
+            "Edit the active App UI theme's component color mapping.");
+        TextView open = label("OPEN  ›", 12, ACCENT, true);
+        open.setGravity(Gravity.CENTER);
+        row.addView(open, new LinearLayout.LayoutParams(-2, dp(42)));
+        row.setBackground(rippleBackground(Color.TRANSPARENT, 0));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(view -> {
+            dismissPage();
+            if (activity instanceof TermuxActivity) {
+                activity.getWindow().getDecorView().post(
+                    () -> ((TermuxActivity) activity).openColorSchemeJson());
+            } else {
+                Toast.makeText(activity, "Color Scheme tidak tersedia", Toast.LENGTH_SHORT).show();
             }
         });
     }

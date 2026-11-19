@@ -61,6 +61,7 @@ import com.termux.app.theme.model.ResolvedEditorTheme;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.sora.SoraEditorThemeApplier;
 import com.termux.app.theme.storage.ThemePackageStorage;
+import com.termux.app.theme.storage.ThemeStorageException;
 import com.termux.app.theme.ui.AppThemeController;
 import com.termux.app.theme.schema.YummyUiSchemaRuntime;
 import com.termux.app.theme.schema.YummyUiSchemaThemeManager;
@@ -717,6 +718,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private AppThemeController mAppThemeController;
     private YummyUiSchemaRuntime mUiSchemaRuntime;
     private YummyUiSchemaThemeManager mUiSchemaThemeManager;
+    private ThemePackageStorage mThemePackageStorage;
     private ThemeSettingsController mThemeSettingsController;
     private boolean mBootstrapSetupRunning = false;
     private boolean mPendingFailsafeSession = false;
@@ -735,12 +737,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mThemeSettingsController.show();
     }
 
+    /** Opens the active imported App UI theme's Color Scheme JSON in the internal Editor. */
+    public void openColorSchemeJson() {
+        if (mIsInvalidState || isFinishing()) return;
+        if (mUiSchemaThemeManager == null || mThemePackageStorage == null
+            || mFileManagerController == null) {
+            Toast.makeText(this, "Color Scheme belum tersedia", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String activeThemeId = mUiSchemaThemeManager.getActiveThemeId();
+        if (activeThemeId == null || activeThemeId.trim().isEmpty()) {
+            Toast.makeText(this, "Tidak ada App UI Theme aktif", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            java.io.File colorSchemeFile = mThemePackageStorage.ensureColorSchemeFile(activeThemeId);
+            mFileManagerController.openPrivateAppFile(colorSchemeFile);
+        } catch (ThemeStorageException error) {
+            Toast.makeText(this,
+                "Color Scheme JSON hanya tersedia untuk tema App UI yang diimpor: "
+                    + error.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
     /** Initializes the independent App UI and Editor Syntax theme targets. */
     private void initializeThemeSystem() {
         mAppThemeController = new AppThemeController(this);
         mUiSchemaRuntime = new YummyUiSchemaRuntime();
+        mThemePackageStorage = new ThemePackageStorage(getApplicationContext());
         mUiSchemaThemeManager = new YummyUiSchemaThemeManager(
-            mUiSchemaRuntime, new ThemePackageStorage(getApplicationContext()));
+            mUiSchemaRuntime, mThemePackageStorage);
         bindApplicationThemeViews();
         mAppThemeController.setPaletteListener(theme -> {
             applyEditorAppTheme(theme);
@@ -760,9 +786,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFileManagerController.setUiSchemaRuntime(mUiSchemaRuntime);
         }
 
-        ThemePackageStorage storage = new ThemePackageStorage(getApplicationContext());
         YummyThemeRegistry registry = new YummyThemeRegistry(
-            getAssets(), storage.getImportedThemesDirectory());
+            getAssets(), mThemePackageStorage.getImportedThemesDirectory());
 
         Typeface uiTypeface;
         try {

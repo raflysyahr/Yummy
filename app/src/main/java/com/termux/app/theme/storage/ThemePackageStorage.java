@@ -136,6 +136,47 @@ public final class ThemePackageStorage {
     }
 
     /**
+     * Returns the editable Color Scheme JSON sidecar for an installed imported theme.
+     * Older packages receive an empty versioned document the first time it is opened.
+     */
+    public synchronized File ensureColorSchemeFile(String themeId) throws ThemeStorageException {
+        File schemaFile = ensureUiSchemaFile(themeId);
+        File packageDirectory = schemaFile.getParentFile();
+        if (packageDirectory == null || !packageDirectory.isDirectory()) {
+            throw new ThemeStorageException(ThemeStorageException.Code.PACKAGE_NOT_FOUND,
+                "Imported theme directory is unavailable: " + themeId);
+        }
+
+        File target = new File(packageDirectory, "color-scheme.json");
+        try {
+            File canonicalDirectory = packageDirectory.getCanonicalFile();
+            File canonicalTarget = target.getCanonicalFile();
+            if (!canonicalDirectory.equals(canonicalTarget.getParentFile())
+                || !target.getAbsoluteFile().equals(canonicalTarget)) {
+                throw new ThemeStorageException(ThemeStorageException.Code.UNSAFE_PATH,
+                    "Color Scheme path is redirected or resolves outside its theme package");
+            }
+            if (target.exists()) {
+                if (!target.isFile() || !target.canRead() || !target.canWrite()) {
+                    throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
+                        "Color Scheme JSON is not a readable and writable file");
+                }
+                return target;
+            }
+            try (FileOutputStream output = new FileOutputStream(target)) {
+                output.write("{\n  \"version\": 1\n}\n".getBytes(StandardCharsets.UTF_8));
+                output.flush();
+            }
+            return target;
+        } catch (ThemeStorageException error) {
+            throw error;
+        } catch (IOException error) {
+            throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
+                "Could not create Color Scheme JSON for theme " + themeId, error);
+        }
+    }
+
+    /**
      * Installs a new imported package. Existing packages and built-in IDs are never overwritten.
      * The source directory must already contain a valid Yummy package with source="imported".
      */
