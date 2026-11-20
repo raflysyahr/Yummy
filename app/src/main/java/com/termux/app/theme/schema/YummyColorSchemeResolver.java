@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
  * manual VS Code HEX color, or this.<local-property-path>.
  */
 public final class YummyColorSchemeResolver {
-    public static final int SUPPORTED_VERSION = 1;
+    public static final int SUPPORTED_VERSION = YummyColorSchemeDefaults.VERSION;
     private static final Pattern SEGMENT = Pattern.compile("^[A-Za-z][A-Za-z0-9_-]*$");
 
     public ResolutionResult resolve(JSONObject document, LoadedTheme theme) {

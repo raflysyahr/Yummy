@@ -1876,7 +1876,11 @@ public final class FileManagerController {
         }
 
         private void bindSidebarProgress(@Nullable ProgressBar view, AppThemeColorRole role) {
-            if (view != null && appThemeController != null) appThemeController.bindProgress(view, role);
+            if (view == null) return;
+            if (appThemeController != null) appThemeController.bindProgress(view, role);
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindProgressTint("sidebar.progress.foreground", view);
+            }
         }
 
         private void rebuildStorageRail() {

@@ -7,6 +7,7 @@ import android.graphics.drawable.VectorDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Switch;
 
@@ -43,6 +44,11 @@ public final class YummyUiSchemaViewBinder {
     public void bindHintTextColor(String propertyId, TextView view) {
         if (view == null) return;
         register(propertyId, view, new ColorPropertyApplier(ColorPropertyApplier.HINT));
+    }
+
+    public void bindProgressTint(String propertyId, ProgressBar view) {
+        if (view == null) return;
+        register(propertyId, view, new ColorPropertyApplier(ColorPropertyApplier.PROGRESS));
     }
 
     public void bindSwitchThumbTint(String propertyId, Switch view) {
@@ -119,6 +125,7 @@ public final class YummyUiSchemaViewBinder {
         static final int IMAGE = 4;
         static final int SWITCH_THUMB = 5;
         static final int SWITCH_TRACK = 6;
+        static final int PROGRESS = 7;
 
         private final int property;
         private ColorStateList original;
@@ -162,6 +169,11 @@ public final class YummyUiSchemaViewBinder {
                     if (original == null) original = trackSwitch.getTrackTintList();
                     trackSwitch.setTrackTintList(state);
                     break;
+                case PROGRESS:
+                    ProgressBar progress = (ProgressBar) target;
+                    if (original == null) original = progress.getProgressTintList();
+                    progress.setProgressTintList(state);
+                    break;
                 default:
                     throw new IllegalStateException("Unsupported UI Schema color property");
             }
@@ -187,6 +199,9 @@ public final class YummyUiSchemaViewBinder {
                     break;
                 case SWITCH_TRACK:
                     ((Switch) target).setTrackTintList(original);
+                    break;
+                case PROGRESS:
+                    ((ProgressBar) target).setProgressTintList(original);
                     break;
                 default:
                     throw new IllegalStateException("Unsupported UI Schema color property");

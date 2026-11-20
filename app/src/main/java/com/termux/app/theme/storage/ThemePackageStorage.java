@@ -13,6 +13,7 @@ import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.schema.YummyColorSchemeDefaults;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -165,15 +166,23 @@ public final class ThemePackageStorage {
                     throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
                         "Color Scheme JSON is not a readable and writable file");
                 }
-                // Step 1 created an empty version-only document. Upgrade only that exact
-                // untouched placeholder; never overwrite a user's partially or fully edited map.
+                // Add newly introduced component mappings without overwriting user choices.
+                // Existing scalar values and unknown extension keys always win over defaults.
                 try {
                     JSONObject existing = new ThemeColorSchemeStorage().load(packageDirectory);
-                    if (existing.length() == 1 && existing.has("version")) {
-                        writeDefaultColorScheme(target);
+                    Object rawVersion = existing.opt("version");
+                    if (rawVersion instanceof Number
+                        && ((Number) rawVersion).intValue() < YummyColorSchemeDefaults.VERSION) {
+                        JSONObject defaults = new JSONObject(YummyColorSchemeDefaults.toJson());
+                        mergeMissingDefaults(existing, defaults);
+                        existing.put("version", YummyColorSchemeDefaults.VERSION);
+                        writeColorScheme(target, existing.toString(2));
                     }
                 } catch (ThemeStorageException ignored) {
                     // Preserve malformed or unreadable user data for explicit repair in Editor.
+                } catch (JSONException error) {
+                    throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
+                        "Could not migrate default Color Scheme mappings", error);
                 }
                 return target;
             }
@@ -188,11 +197,37 @@ public final class ThemePackageStorage {
     }
 
     private static void writeDefaultColorScheme(File target) throws IOException {
+        writeColorScheme(target, YummyColorSchemeDefaults.toJson());
+    }
+
+    private static void writeColorScheme(File target, String json) throws IOException {
         try (FileOutputStream output = new FileOutputStream(target, false)) {
-            output.write(YummyColorSchemeDefaults.toJson().getBytes(StandardCharsets.UTF_8));
+            output.write(json.getBytes(StandardCharsets.UTF_8));
             output.flush();
             output.getFD().sync();
         }
+    }
+
+    /** Recursively adds missing default leaves while preserving every existing user value. */
+    private static boolean mergeMissingDefaults(JSONObject target, JSONObject defaults)
+        throws JSONException {
+        boolean changed = false;
+        java.util.Iterator<String> keys = defaults.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            Object defaultValue = defaults.opt(key);
+            if (!target.has(key)) {
+                target.put(key, defaultValue);
+                changed = true;
+            } else {
+                Object existingValue = target.opt(key);
+                if (existingValue instanceof JSONObject && defaultValue instanceof JSONObject) {
+                    changed |= mergeMissingDefaults((JSONObject) existingValue,
+                        (JSONObject) defaultValue);
+                }
+            }
+        }
+        return changed;
     }
 
     /**
