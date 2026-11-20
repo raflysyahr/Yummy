@@ -11,6 +11,9 @@ import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.ThemeMetadata;
 import com.termux.app.theme.model.ThemeSource;
 import com.termux.app.theme.registry.YummyThemeRegistry;
+import com.termux.app.theme.schema.YummyColorSchemeDefaults;
+
+import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -137,7 +140,8 @@ public final class ThemePackageStorage {
 
     /**
      * Returns the editable Color Scheme JSON sidecar for an installed imported theme.
-     * Older packages receive an empty versioned document the first time it is opened.
+     * New packages receive the built-in component mapping. The empty placeholder created by
+     * Color Scheme Engine Step 1 is upgraded once, while existing user mappings are preserved.
      */
     public synchronized File ensureColorSchemeFile(String themeId) throws ThemeStorageException {
         File schemaFile = ensureUiSchemaFile(themeId);
@@ -161,18 +165,33 @@ public final class ThemePackageStorage {
                     throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
                         "Color Scheme JSON is not a readable and writable file");
                 }
+                // Step 1 created an empty version-only document. Upgrade only that exact
+                // untouched placeholder; never overwrite a user's partially or fully edited map.
+                try {
+                    JSONObject existing = new ThemeColorSchemeStorage().load(packageDirectory);
+                    if (existing.length() == 1 && existing.has("version")) {
+                        writeDefaultColorScheme(target);
+                    }
+                } catch (ThemeStorageException ignored) {
+                    // Preserve malformed or unreadable user data for explicit repair in Editor.
+                }
                 return target;
             }
-            try (FileOutputStream output = new FileOutputStream(target)) {
-                output.write("{\n  \"version\": 1\n}\n".getBytes(StandardCharsets.UTF_8));
-                output.flush();
-            }
+            writeDefaultColorScheme(target);
             return target;
         } catch (ThemeStorageException error) {
             throw error;
         } catch (IOException error) {
             throw new ThemeStorageException(ThemeStorageException.Code.IO_FAILURE,
                 "Could not create Color Scheme JSON for theme " + themeId, error);
+        }
+    }
+
+    private static void writeDefaultColorScheme(File target) throws IOException {
+        try (FileOutputStream output = new FileOutputStream(target, false)) {
+            output.write(YummyColorSchemeDefaults.toJson().getBytes(StandardCharsets.UTF_8));
+            output.flush();
+            output.getFD().sync();
         }
     }
 
