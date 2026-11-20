@@ -1015,6 +1015,9 @@ public final class FileManagerController {
         });
 
         dialog.setContentView(card);
+        dialog.setOnDismissListener(ignored -> {
+            if (uiSchemaViewBinder != null) uiSchemaViewBinder.unregisterTree(card);
+        });
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -1026,6 +1029,8 @@ public final class FileManagerController {
                 | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
         }
         dialog.show();
+        bindFileManagerInputDialogColors(card, divider, titleView, input,
+            cancelButton, confirmButton);
         if (window != null) {
             int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
             int horizontalMargin = dp(32);
@@ -1046,12 +1051,37 @@ public final class FileManagerController {
         }, 180L);
     }
 
+    private void bindFileManagerInputDialogColors(
+        @NonNull View card,
+        @NonNull View divider,
+        @NonNull TextView title,
+        @NonNull EditText input,
+        @NonNull TextView cancel,
+        @NonNull TextView confirm
+    ) {
+        if (uiSchemaViewBinder == null) return;
+        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.background", card);
+        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.divider", divider);
+        uiSchemaViewBinder.bindTextColor("sidebar.dialog.foreground", title);
+        uiSchemaViewBinder.bindTextColor("sidebar.dialog.input.foreground", input);
+        uiSchemaViewBinder.bindHintTextColor("sidebar.dialog.input.hint", input);
+        uiSchemaViewBinder.bindTextColor("sidebar.dialog.button.secondary.foreground", cancel);
+        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.button.secondary.background", cancel);
+        uiSchemaViewBinder.bindTextColor("sidebar.dialog.button.primary.foreground", confirm);
+        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.button.primary.background", confirm);
+    }
+
     private AlertDialog.Builder nunitoDialogBuilder() {
         return new AlertDialog.Builder(new ContextThemeWrapper(activity, android.R.style.Theme_Material_Dialog_Alert)) {
             @Override
             public AlertDialog show() {
                 AlertDialog dialog = super.show();
                 applyNunitoToDialog(dialog);
+                dialog.setOnDismissListener(ignored -> {
+                    if (uiSchemaViewBinder != null && dialog.getWindow() != null) {
+                        uiSchemaViewBinder.unregisterTree(dialog.getWindow().getDecorView());
+                    }
+                });
                 return dialog;
             }
         };
@@ -1070,10 +1100,16 @@ public final class FileManagerController {
         if (title != null) {
             title.setTypeface(typeface);
             title.setTextColor(0xFFF4F5F7);
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.dialog.foreground", title);
+            }
         }
         if (message != null) {
             message.setTypeface(nunitoTypeface(false));
             message.setTextColor(0xFFD0D4DA);
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.dialog.secondaryForeground", message);
+            }
         }
 
         Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
@@ -1082,14 +1118,23 @@ public final class FileManagerController {
         if (positive != null) {
             positive.setTypeface(typeface);
             positive.setTextColor(0xFF3DDC84);
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.dialog.button.primary.foreground", positive);
+            }
         }
         if (negative != null) {
             negative.setTypeface(typeface);
             negative.setTextColor(0xFFB8BEC8);
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.dialog.button.secondary.foreground", negative);
+            }
         }
         if (neutral != null) {
             neutral.setTypeface(typeface);
             neutral.setTextColor(0xFF3DDC84);
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.dialog.button.primary.foreground", neutral);
+            }
         }
 
         View content = dialog.findViewById(android.R.id.content);
@@ -1103,6 +1148,10 @@ public final class FileManagerController {
             input.setTextColor(0xFFF4F5F7);
             input.setHintTextColor(0xFF969EA7);
             input.setBackground(roundRect(0xFF252A33, dp(8)));
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.dialog.input.foreground", input);
+                uiSchemaViewBinder.bindHintTextColor("sidebar.dialog.input.hint", input);
+            }
             input.setPadding(dp(12), dp(9), dp(12), dp(9));
         } else if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;

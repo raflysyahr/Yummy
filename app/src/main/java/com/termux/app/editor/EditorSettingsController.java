@@ -184,6 +184,7 @@ public final class EditorSettingsController {
 
         View toolbarDivider = new View(activity);
         toolbarDivider.setBackgroundColor(BORDER);
+        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.editor.divider", toolbarDivider);
         root.addView(toolbarDivider, new LinearLayout.LayoutParams(-1, dp(1)));
 
         ScrollView scroll = new ScrollView(activity);
@@ -572,6 +573,9 @@ public final class EditorSettingsController {
         TextView button = label(value, 17, PRIMARY, true);
         button.setGravity(Gravity.CENTER);
         button.setBackground(rippleBackground(SURFACE_ALT, 0));
+        if (uiSchemaBinder != null) {
+            uiSchemaBinder.bindBackgroundTint("settings.editor.control.buttonBackground", button);
+        }
         button.setClickable(true);
         button.setFocusable(true);
         return button;

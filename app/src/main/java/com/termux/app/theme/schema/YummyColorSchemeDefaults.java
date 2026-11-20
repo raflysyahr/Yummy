@@ -10,13 +10,13 @@ package com.termux.app.theme.schema;
  * Yummy components visually consistent without duplicating theme-key choices.</p>
  */
 public final class YummyColorSchemeDefaults {
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
 
     private YummyColorSchemeDefaults() { }
 
     public static String toJson() {
         return "{\n"
-            + "  \"version\": 2,\n"
+            + "  \"version\": 3,\n"
             + "  \"sidebar\": {\n"
             + "    \"background\": \"theme:sideBar.background\",\n"
             + "    \"foreground\": \"theme:sideBar.foreground\",\n"
@@ -46,6 +46,27 @@ public final class YummyColorSchemeDefaults {
             + "    },\n"
             + "    \"progress\": {\n"
             + "      \"foreground\": \"theme:progressBar.background\"\n"
+            + "    },\n"
+            + "    \"dialog\": {\n"
+            + "      \"background\": \"theme:editorWidget.background\",\n"
+            + "      \"foreground\": \"theme:editorWidget.foreground\",\n"
+            + "      \"secondaryForeground\": \"theme:descriptionForeground\",\n"
+            + "      \"divider\": \"theme:widget.border\",\n"
+            + "      \"input\": {\n"
+            + "        \"background\": \"theme:input.background\",\n"
+            + "        \"foreground\": \"theme:input.foreground\",\n"
+            + "        \"hint\": \"theme:input.placeholderForeground\"\n"
+            + "      },\n"
+            + "      \"button\": {\n"
+            + "        \"primary\": {\n"
+            + "          \"background\": \"theme:button.background\",\n"
+            + "          \"foreground\": \"theme:button.foreground\"\n"
+            + "        },\n"
+            + "        \"secondary\": {\n"
+            + "          \"background\": \"this.sidebar.dialog.background\",\n"
+            + "          \"foreground\": \"this.sidebar.dialog.secondaryForeground\"\n"
+            + "        }\n"
+            + "      }\n"
             + "    },\n"
             + "    \"selection\": {\n"
             + "      \"background\": \"theme:list.activeSelectionBackground\",\n"
@@ -118,7 +139,8 @@ public final class YummyColorSchemeDefaults {
             + "      \"divider\": \"theme:widget.border\",\n"
             + "      \"control\": {\n"
             + "        \"accent\": \"theme:focusBorder\",\n"
-            + "        \"track\": \"theme:button.background\"\n"
+            + "        \"track\": \"theme:button.background\",\n"
+            + "        \"buttonBackground\": \"theme:button.secondaryBackground\"\n"
             + "      },\n"
             + "      \"foreground\": \"theme:editor.foreground\",\n"
             + "      \"secondaryForeground\": \"theme:descriptionForeground\",\n"
