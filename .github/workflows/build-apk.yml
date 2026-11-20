@@ -208,6 +208,9 @@ jobs:
 
           echo "=== Pemeriksaan selesai ==="
 
+      - name: Gradlew test Resolver Scheme
+        run: ./gradlew :app:testDebugUnitTest --tests com.termux.app.theme.schema.YummyColorSchemeResolverTest
+        
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
