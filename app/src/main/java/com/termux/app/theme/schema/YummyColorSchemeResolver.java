@@ -212,12 +212,6 @@ public final class YummyColorSchemeResolver {
             YummyUiSchemaDiagnostic.SEVERITY_WARNING, path, path, message));
     }
 
-    private static void addWarning(List<YummyUiSchemaDiagnostic> diagnostics, String code,
-                                   String path, String message) {
-        diagnostics.add(new YummyUiSchemaDiagnostic(code,
-            YummyUiSchemaDiagnostic.SEVERITY_WARNING, path, path, message));
-    }
-
     public static final class ResolutionResult {
         private final boolean usable;
         private final Map<String, String> colors;
