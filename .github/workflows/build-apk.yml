@@ -210,7 +210,13 @@ jobs:
 
       - name: Gradlew test Resolver Scheme
         run: ./gradlew :app:testDebugUnitTest --tests com.termux.app.theme.schema.YummyColorSchemeResolverTest
-        
+
+      - name: Gradlew test runtime integration
+        run: ./gradlew :app:testDebugUnitTest --tests com.termux.app.theme.schema.YummyColorSchemeRuntimeIntegrationTest
+
+      - name: Run all test
+        run: ./gradlew :app:testDebugUnitTest
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
