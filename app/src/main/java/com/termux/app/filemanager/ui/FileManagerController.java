@@ -1063,6 +1063,7 @@ public final class FileManagerController {
         uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.background", card);
         uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.divider", divider);
         uiSchemaViewBinder.bindTextColor("sidebar.dialog.foreground", title);
+        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.input.background", input);
         uiSchemaViewBinder.bindTextColor("sidebar.dialog.input.foreground", input);
         uiSchemaViewBinder.bindHintTextColor("sidebar.dialog.input.hint", input);
         uiSchemaViewBinder.bindTextColor("sidebar.dialog.button.secondary.foreground", cancel);
@@ -1149,6 +1150,7 @@ public final class FileManagerController {
             input.setHintTextColor(0xFF969EA7);
             input.setBackground(roundRect(0xFF252A33, dp(8)));
             if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.input.background", input);
                 uiSchemaViewBinder.bindTextColor("sidebar.dialog.input.foreground", input);
                 uiSchemaViewBinder.bindHintTextColor("sidebar.dialog.input.hint", input);
             }
