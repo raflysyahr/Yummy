@@ -105,8 +105,9 @@ public class YummyColorSchemeFileObserverTest {
     private static YummyColorSchemeFileObserver newObserver(
         File file, BlockingQueue<ObserverEvent> events
     ) {
+        // Keep the production debounce intact while making worker-thread reloads deterministic.
         YummyColorSchemeFileObserver observer = new YummyColorSchemeFileObserver(
-            file, new ThemeColorSchemeStorage());
+            file, new ThemeColorSchemeStorage(), 0L);
         observer.setListener(new YummyColorSchemeFileObserver.Listener() {
             @Override public void onReload(JSONObject document) {
                 events.offer(ObserverEvent.loaded(document));

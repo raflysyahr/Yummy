@@ -24,6 +24,7 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
     private final Object lock = new Object();
     private final File requestedFile;
     private final ThemeColorSchemeStorage storage;
+    private final long debounceMillis;
     private File watchedFile;
     private final HandlerThread workerThread = new HandlerThread("YummyColorSchemeObserver");
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -35,10 +36,18 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
     private boolean closed;
 
     public YummyColorSchemeFileObserver(File file, ThemeColorSchemeStorage storage) {
+        this(file, storage, DEBOUNCE_MILLIS);
+    }
+
+    YummyColorSchemeFileObserver(
+        File file, ThemeColorSchemeStorage storage, long debounceMillis
+    ) {
         if (file == null) throw new IllegalArgumentException("Color Scheme file is required");
         if (storage == null) throw new IllegalArgumentException("Color Scheme storage is required");
+        if (debounceMillis < 0L) throw new IllegalArgumentException("Debounce delay cannot be negative");
         requestedFile = file;
         this.storage = storage;
+        this.debounceMillis = debounceMillis;
     }
 
     public void setListener(Listener listener) {
@@ -102,7 +111,7 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
 
     private void scheduleReload() {
         synchronized (lock) {
-            if (!closed && watching) scheduleReloadLocked(DEBOUNCE_MILLIS);
+            if (!closed && watching) scheduleReloadLocked(debounceMillis);
         }
     }
 
