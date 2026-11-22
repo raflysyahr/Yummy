@@ -1030,7 +1030,7 @@ public final class FileManagerController {
         }
         dialog.show();
         bindFileManagerInputDialogColors(card, divider, titleView, input,
-            cancelButton, confirmButton);
+            closeButton, cancelButton, confirmButton);
         if (window != null) {
             int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
             int horizontalMargin = dp(32);
@@ -1056,6 +1056,7 @@ public final class FileManagerController {
         @NonNull View divider,
         @NonNull TextView title,
         @NonNull EditText input,
+        @NonNull ImageButton closeButton,
         @NonNull TextView cancel,
         @NonNull TextView confirm
     ) {
@@ -1063,6 +1064,8 @@ public final class FileManagerController {
         uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.background", card);
         uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.divider", divider);
         uiSchemaViewBinder.bindTextColor("sidebar.dialog.foreground", title);
+        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.closeButton.background", closeButton);
+        uiSchemaViewBinder.bindVectorTint("sidebar.icon.foreground", closeButton);
         uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.input.background", input);
         uiSchemaViewBinder.bindTextColor("sidebar.dialog.input.foreground", input);
         uiSchemaViewBinder.bindHintTextColor("sidebar.dialog.input.hint", input);
@@ -1858,6 +1861,7 @@ public final class FileManagerController {
         private void bindUiSchemaViews() {
             if (uiSchemaViewBinder == null) return;
             uiSchemaViewBinder.bindBackgroundTint("sidebar.background", drawerPanel);
+            uiSchemaViewBinder.bindBackgroundTint("sidebar.overlay.background", scrim);
             uiSchemaViewBinder.bindBackgroundTint("sidebar.storage.background", storageRail);
             uiSchemaViewBinder.bindBackgroundTint("sidebar.content.background", rightPane);
             uiSchemaViewBinder.bindBackgroundTint("sidebar.header.background", header);

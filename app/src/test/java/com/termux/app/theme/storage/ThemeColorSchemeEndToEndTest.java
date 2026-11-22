@@ -56,6 +56,33 @@ public class ThemeColorSchemeEndToEndTest {
     }
 
     @Test
+    public void versionThreeColorSchemeMigrationAddsNewMappingsAndPreservesUserValues()
+        throws Exception {
+        ThemePackageStorage storage = newStorage();
+        storage.importPackage(createPackage("step15-migration"));
+
+        File colorSchemeFile = storage.ensureColorSchemeFile("step15-migration");
+        JSONObject versionThree = new JSONObject()
+            .put("version", 3)
+            .put("sidebar", new JSONObject()
+                .put("background", "#123456"));
+        write(colorSchemeFile, versionThree.toString(2));
+
+        File migratedFile = storage.ensureColorSchemeFile("step15-migration");
+        JSONObject migrated = new ThemeColorSchemeStorage()
+            .load(migratedFile.getParentFile());
+        JSONObject sidebar = migrated.getJSONObject("sidebar");
+
+        assertEquals(4, migrated.getInt("version"));
+        assertEquals("#123456", sidebar.getString("background"));
+        assertEquals("#66000000",
+            sidebar.getJSONObject("overlay").getString("background"));
+        assertEquals("#14FFFFFF",
+            sidebar.getJSONObject("dialog").getJSONObject("closeButton")
+                .getString("background"));
+    }
+
+    @Test
     public void backupAndRestorePreserveColorSchemeSidecarContents() throws Exception {
         ThemePackageStorage storage = newStorage();
         File source = createPackage("step12-restore");

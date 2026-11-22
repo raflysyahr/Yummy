@@ -35,5 +35,9 @@ public class YummyFileManagerColorSchemeTest {
             .getJSONObject("primary").has("background"));
         assertTrue(sidebar.getJSONObject("dialog").getJSONObject("button")
             .getJSONObject("primary").has("foreground"));
+        assertEquals("#66000000", sidebar.getJSONObject("overlay").getString("background"));
+        assertEquals("#14FFFFFF", sidebar.getJSONObject("dialog")
+            .getJSONObject("closeButton").getString("background"));
+        assertEquals(4, defaults.getInt("version"));
     }
 }

@@ -88,6 +88,39 @@ public class YummyUiSchemaViewBinderTest {
 
 
     @Test
+    public void fileManagerOverlayAndDialogCloseButtonFollowColorScheme() throws Exception {
+        JSONObject defaults = new JSONObject(YummyColorSchemeDefaults.toJson());
+        JSONObject sidebar = defaults.getJSONObject("sidebar");
+        assertEquals("#66000000", sidebar.getJSONObject("overlay").getString("background"));
+        assertEquals("#14FFFFFF", sidebar.getJSONObject("dialog")
+            .getJSONObject("closeButton").getString("background"));
+
+        YummyUiSchemaRuntime runtime = newRuntime();
+        try {
+            View scrim = new View(org.robolectric.RuntimeEnvironment.getApplication());
+            View closeButton = new View(org.robolectric.RuntimeEnvironment.getApplication());
+            YummyUiSchemaViewBinder binder = new YummyUiSchemaViewBinder(runtime);
+            binder.bindBackgroundTint("sidebar.overlay.background", scrim);
+            binder.bindBackgroundTint("sidebar.dialog.closeButton.background", closeButton);
+
+            YummyUiSchemaRuntime.ActivationResult result = runtime.activate(schema(
+                "sidebar.overlay.background", "#33010203",
+                "sidebar.dialog.closeButton.background", "#445566"));
+            assertTrue(result.getResolution().getDiagnostics().toString(), result.isAccepted());
+            assertEquals(Color.argb(0x33, 1, 2, 3),
+                scrim.getBackgroundTintList().getDefaultColor());
+            assertEquals(Color.rgb(0x44, 0x55, 0x66),
+                closeButton.getBackgroundTintList().getDefaultColor());
+
+            binder.unregisterAll();
+            assertEquals(0, runtime.getBindingCount());
+            runtime.deactivate();
+        } finally {
+            runtime.dispose();
+        }
+    }
+
+    @Test
     public void successiveColorSchemeRefreshesRestoreOriginallyNullBackgroundTint() throws Exception {
         YummyUiSchemaRuntime runtime = newRuntime();
         try {
