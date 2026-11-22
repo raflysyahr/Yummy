@@ -23,6 +23,8 @@ jobs:
       YUMMY_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
       YUMMY_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       YUMMY_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      # Must match app/build.gradle; Robolectric runtime artifacts bypass Gradle repositories.
+      ROBOLECTRIC_DEPENDENCY_REPO_URL: https://repo.maven.apache.org/maven2
 
     steps:
       - name: Checkout source code
@@ -207,6 +209,21 @@ jobs:
             grep -E -m 30 '/data/data/com\.termux|/data/data/com\.yummy' || true
 
           echo "=== Pemeriksaan selesai ==="
+
+      - name: Verify Robolectric runtime repository
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE="${ROBOLECTRIC_DEPENDENCY_REPO_URL%/}"
+          ARTIFACT="org/robolectric/android-all-instrumented/9-robolectric-4913185-2-i4/android-all-instrumented-9-robolectric-4913185-2-i4.pom"
+
+          echo "Memeriksa repository runtime Robolectric: $BASE"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 20 --max-time 60 \
+            "$BASE/$ARTIFACT" -o /dev/null
+
+          echo "Repository dapat mengakses POM android-all-instrumented yang dibutuhkan."
 
       - name: Gradlew test Resolver Scheme
         run: ./gradlew :app:testDebugUnitTest --tests com.termux.app.theme.schema.YummyColorSchemeResolverTest

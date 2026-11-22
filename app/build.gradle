@@ -145,6 +145,17 @@ android {
         unitTests {
             includeAndroidResources = true
         }
+
+        // Robolectric downloads instrumented Android framework jars at test runtime
+        // through HttpURLConnection, outside Gradle's dependency repository handling.
+        // Use the canonical Maven Central hostname instead of Robolectric's repo1 default.
+        unitTests.all {
+            systemProperty(
+                "robolectric.dependency.repo.url",
+                System.getenv("ROBOLECTRIC_DEPENDENCY_REPO_URL") ?: "https://repo.maven.apache.org/maven2"
+            )
+            systemProperty("robolectric.dependency.repo.id", "mavenCentral")
+        }
     }
 
     packagingOptions {
