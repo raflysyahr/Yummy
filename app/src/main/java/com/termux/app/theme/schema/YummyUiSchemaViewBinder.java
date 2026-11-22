@@ -112,7 +112,7 @@ public final class YummyUiSchemaViewBinder {
             for (YummyUiPropertyApplier applier : properties.values()) {
                 try {
                     applier.reset(view);
-                } catch (RuntimeException error) {
+                } catch (Exception error) {
                     android.util.Log.w("YummyUiSchema", "Could not restore recycled View", error);
                 }
             }
