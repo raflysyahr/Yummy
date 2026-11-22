@@ -346,12 +346,12 @@ public class YummyUiSchemaViewBinderTest {
             updated.put("sidebar.dialog.background", "#AABBCC");
             updated.put("sidebar.dialog.border", "#DDEEFF");
             runtime.setColorSchemeOverrides(updated);
-            applied = (GradientDrawable) view.getBackground();
+            applied = (InspectableGradientDrawable) view.getBackground();
             assertEquals(Color.rgb(170, 187, 204), applied.getColor().getDefaultColor());
             assertEquals(Color.rgb(221, 238, 255), applied.recordedStrokeColor());
 
             runtime.clearColorSchemeOverrides();
-            applied = (GradientDrawable) view.getBackground();
+            applied = (InspectableGradientDrawable) view.getBackground();
             assertEquals(Color.rgb(17, 34, 51), applied.getColor().getDefaultColor());
             assertEquals(Color.rgb(68, 85, 102), applied.recordedStrokeColor());
 
