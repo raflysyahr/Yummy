@@ -245,7 +245,7 @@ public final class YummyComponentProperty {
 
     private static void requireLiteralUnitWhenNeeded(JSONObject source) {
         if (SOURCE_LITERAL.equals(source.optString("source", null))) {
-            requireString(source, "unit", "literal dimension/spacing unit");
+            requireString(source, "unit", "explicit unit for literal dimension/spacing");
         }
     }
 

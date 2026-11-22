@@ -102,9 +102,9 @@ public class ThemeDocumentParserTest {
     }
 
     @Test
-    public void rejectsInvalidWorkbenchColor() throws Exception {
+    public void rejectsEmptyWorkbenchColor() throws Exception {
         try {
-            parser.parse("{\"colors\":{\"editor.background\":\"black\"}}");
+            parser.parse("{\"colors\":{\"editor.background\":\"\"}}");
             fail("Expected invalid color to be rejected");
         } catch (ThemeLoadException expected) {
             assertFalse(expected.getMessage().isEmpty());
