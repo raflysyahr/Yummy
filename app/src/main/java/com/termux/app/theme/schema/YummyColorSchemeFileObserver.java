@@ -59,11 +59,7 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
             workerHandler = new Handler(workerThread.getLooper());
             directoryObserver = new FileObserver(parent.getAbsolutePath(), WATCH_MASK | DIRECTORY_GONE_MASK) {
                 @Override public void onEvent(int event, String path) {
-                    if ((event & DIRECTORY_GONE_MASK) != 0) {
-                        notifyFailure("directory_unavailable", "Color Scheme directory is unavailable");
-                    } else if (path == null || ThemeColorSchemeStorage.FILE_NAME.equals(path)) {
-                        scheduleReload();
-                    }
+                    handleDirectoryEvent(event, path);
                 }
             };
             try {
@@ -94,6 +90,14 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
             listener = null;
         }
         workerThread.quitSafely();
+    }
+
+    void handleDirectoryEvent(int event, String path) {
+        if ((event & DIRECTORY_GONE_MASK) != 0) {
+            notifyFailure("directory_unavailable", "Color Scheme directory is unavailable");
+        } else if (path == null || ThemeColorSchemeStorage.FILE_NAME.equals(path)) {
+            scheduleReload();
+        }
     }
 
     private void scheduleReload() {

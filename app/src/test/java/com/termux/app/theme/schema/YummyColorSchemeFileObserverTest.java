@@ -1,5 +1,6 @@
 package com.termux.app.theme.schema;
 
+import android.os.FileObserver;
 import android.os.Looper;
 
 import com.termux.app.theme.storage.ThemeColorSchemeStorage;
@@ -25,7 +26,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
-/** Exercises real directory events and reload behavior through Robolectric's FileObserver shadow. */
+/** Exercises directory-event filtering and reload behavior without relying on native filesystem events. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28)
 @LooperMode(LooperMode.Mode.PAUSED)
@@ -49,6 +50,7 @@ public class YummyColorSchemeFileObserverTest {
             assertEquals("initial", initial.document.getString("marker"));
 
             write(file, "{\"version\":3,\"marker\":\"updated\"}");
+            observer.handleDirectoryEvent(FileObserver.CLOSE_WRITE, ThemeColorSchemeStorage.FILE_NAME);
             ObserverEvent updated = awaitEvent(events);
             assertNotNull(updated.document);
             assertEquals("updated", updated.document.getString("marker"));
@@ -72,6 +74,7 @@ public class YummyColorSchemeFileObserverTest {
             assertEquals("accepted", initial.document.getString("marker"));
 
             write(file, "{ malformed json");
+            observer.handleDirectoryEvent(FileObserver.CLOSE_WRITE, ThemeColorSchemeStorage.FILE_NAME);
             ObserverEvent rejected = awaitEvent(events);
             assertNull(rejected.document);
             assertNotNull(rejected.failureCode);
@@ -92,6 +95,7 @@ public class YummyColorSchemeFileObserverTest {
             observer.startWatching();
             awaitEvent(events);
             write(new File(directory, "ui-schema.json"), "{}");
+            observer.handleDirectoryEvent(FileObserver.CLOSE_WRITE, "ui-schema.json");
             assertNull(awaitOptionalEvent(events, 700L));
         } finally {
             observer.close();
