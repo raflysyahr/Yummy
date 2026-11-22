@@ -14,6 +14,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
+import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -25,6 +26,20 @@ import static org.junit.Assert.assertTrue;
 /** Exercises the real Android View adapters used by Color Scheme component integrations. */
 @RunWith(RobolectricTestRunner.class)
 public class YummyUiSchemaViewBinderTest {
+
+    private ColorStateList readColorStateListField(Object target, String fieldName) throws Exception {
+        Class<?> type = target.getClass();
+        while (type != null) {
+            try {
+                Field field = type.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                return (ColorStateList) field.get(target);
+            } catch (NoSuchFieldException ignored) {
+                type = type.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(fieldName + " on " + target.getClass().getName());
+    }
 
     private YummyUiSchemaRuntime newRuntime() {
         return new YummyUiSchemaRuntime(
@@ -270,7 +285,7 @@ public class YummyUiSchemaViewBinderTest {
 
             GradientDrawable applied = (GradientDrawable) view.getBackground();
             assertEquals(Color.rgb(17, 34, 51), applied.getColor().getDefaultColor());
-            assertEquals(Color.rgb(68, 85, 102), applied.getStrokeColor().getDefaultColor());
+            assertEquals(Color.rgb(68, 85, 102), readColorStateListField(applied, "mStrokeColors").getDefaultColor());
 
             Map<String, String> updated = new LinkedHashMap<>();
             updated.put("sidebar.dialog.background", "#AABBCC");
@@ -278,17 +293,17 @@ public class YummyUiSchemaViewBinderTest {
             runtime.setColorSchemeOverrides(updated);
             applied = (GradientDrawable) view.getBackground();
             assertEquals(Color.rgb(170, 187, 204), applied.getColor().getDefaultColor());
-            assertEquals(Color.rgb(221, 238, 255), applied.getStrokeColor().getDefaultColor());
+            assertEquals(Color.rgb(221, 238, 255), readColorStateListField(applied, "mStrokeColors").getDefaultColor());
 
             runtime.clearColorSchemeOverrides();
             applied = (GradientDrawable) view.getBackground();
             assertEquals(Color.rgb(17, 34, 51), applied.getColor().getDefaultColor());
-            assertEquals(Color.rgb(68, 85, 102), applied.getStrokeColor().getDefaultColor());
+            assertEquals(Color.rgb(68, 85, 102), readColorStateListField(applied, "mStrokeColors").getDefaultColor());
 
             binder.unregisterAll();
             GradientDrawable restored = (GradientDrawable) view.getBackground();
             assertEquals(Color.WHITE, restored.getColor().getDefaultColor());
-            assertEquals(Color.MAGENTA, restored.getStrokeColor().getDefaultColor());
+            assertEquals(Color.MAGENTA, readColorStateListField(restored, "mStrokeColors").getDefaultColor());
         } finally {
             runtime.dispose();
         }
@@ -310,11 +325,11 @@ public class YummyUiSchemaViewBinderTest {
                 "sidebar.dialog.closeButton.ripple", "#123456"));
             assertTrue(result.getResolution().getDiagnostics().toString(), result.isAccepted());
             assertEquals(Color.rgb(18, 52, 86),
-                ((RippleDrawable) view.getBackground()).getColor().getDefaultColor());
+                readColorStateListField(view.getBackground(), "mColor").getDefaultColor());
 
             binder.unregisterAll();
             assertEquals(Color.GRAY,
-                ((RippleDrawable) view.getBackground()).getColor().getDefaultColor());
+                readColorStateListField(view.getBackground(), "mColor").getDefaultColor());
         } finally {
             runtime.dispose();
         }
