@@ -129,6 +129,7 @@ public final class YummyUiSchemaViewBinder {
 
         private final int property;
         private ColorStateList original;
+        private boolean originalCaptured;
 
         ColorPropertyApplier(int property) {
             this.property = property;
@@ -140,38 +141,59 @@ public final class YummyUiSchemaViewBinder {
             ColorStateList state = ColorStateList.valueOf(color);
             switch (property) {
                 case BACKGROUND:
-                    if (original == null) original = target.getBackgroundTintList();
+                    if (!originalCaptured) {
+                        original = target.getBackgroundTintList();
+                        originalCaptured = true;
+                    }
                     target.setBackgroundTintList(state);
                     break;
                 case TEXT:
                     TextView text = (TextView) target;
-                    if (original == null) original = text.getTextColors();
+                    if (!originalCaptured) {
+                        original = text.getTextColors();
+                        originalCaptured = true;
+                    }
                     text.setTextColor(state);
                     break;
                 case HINT:
                     TextView input = (TextView) target;
-                    if (original == null) original = input.getHintTextColors();
+                    if (!originalCaptured) {
+                        original = input.getHintTextColors();
+                        originalCaptured = true;
+                    }
                     input.setHintTextColor(state);
                     break;
                 case IMAGE:
                     ImageView image = (ImageView) target;
                     if (!(image.getDrawable() instanceof VectorDrawable)) return;
-                    if (original == null) original = image.getImageTintList();
+                    if (!originalCaptured) {
+                        original = image.getImageTintList();
+                        originalCaptured = true;
+                    }
                     image.setImageTintList(state);
                     break;
                 case SWITCH_THUMB:
                     Switch thumbSwitch = (Switch) target;
-                    if (original == null) original = thumbSwitch.getThumbTintList();
+                    if (!originalCaptured) {
+                        original = thumbSwitch.getThumbTintList();
+                        originalCaptured = true;
+                    }
                     thumbSwitch.setThumbTintList(state);
                     break;
                 case SWITCH_TRACK:
                     Switch trackSwitch = (Switch) target;
-                    if (original == null) original = trackSwitch.getTrackTintList();
+                    if (!originalCaptured) {
+                        original = trackSwitch.getTrackTintList();
+                        originalCaptured = true;
+                    }
                     trackSwitch.setTrackTintList(state);
                     break;
                 case PROGRESS:
                     ProgressBar progress = (ProgressBar) target;
-                    if (original == null) original = progress.getProgressTintList();
+                    if (!originalCaptured) {
+                        original = progress.getProgressTintList();
+                        originalCaptured = true;
+                    }
                     progress.setProgressTintList(state);
                     break;
                 default:
@@ -207,6 +229,7 @@ public final class YummyUiSchemaViewBinder {
                     throw new IllegalStateException("Unsupported UI Schema color property");
             }
             original = null;
+            originalCaptured = false;
         }
 
         private static int parseColor(Object raw) {

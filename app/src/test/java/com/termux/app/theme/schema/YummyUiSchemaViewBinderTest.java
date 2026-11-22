@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /** Exercises the real Android View adapters used by Color Scheme component integrations. */
@@ -80,6 +81,34 @@ public class YummyUiSchemaViewBinderTest {
             assertEquals(Color.rgb(17, 34, 51), view.getBackgroundTintList().getDefaultColor());
             binder.unregisterAll();
             runtime.deactivate();
+        } finally {
+            runtime.dispose();
+        }
+    }
+
+
+    @Test
+    public void successiveColorSchemeRefreshesRestoreOriginallyNullBackgroundTint() throws Exception {
+        YummyUiSchemaRuntime runtime = newRuntime();
+        try {
+            View view = new View(org.robolectric.RuntimeEnvironment.getApplication());
+            assertNull(view.getBackgroundTintList());
+            YummyUiSchemaViewBinder binder = new YummyUiSchemaViewBinder(runtime);
+            binder.bindBackgroundTint("sidebar.background", view);
+
+            Map<String, String> first = new LinkedHashMap<>();
+            first.put("sidebar.background", "#112233");
+            runtime.setColorSchemeOverrides(first);
+            assertEquals(Color.rgb(17, 34, 51), view.getBackgroundTintList().getDefaultColor());
+
+            Map<String, String> second = new LinkedHashMap<>();
+            second.put("sidebar.background", "#AABBCC");
+            runtime.setColorSchemeOverrides(second);
+            assertEquals(Color.rgb(170, 187, 204), view.getBackgroundTintList().getDefaultColor());
+
+            runtime.clearColorSchemeOverrides();
+            assertNull(view.getBackgroundTintList());
+            binder.unregisterAll();
         } finally {
             runtime.dispose();
         }
