@@ -73,13 +73,18 @@ public class ThemeColorSchemeEndToEndTest {
             .load(migratedFile.getParentFile());
         JSONObject sidebar = migrated.getJSONObject("sidebar");
 
-        assertEquals(4, migrated.getInt("version"));
+        assertEquals(5, migrated.getInt("version"));
         assertEquals("#123456", sidebar.getString("background"));
         assertEquals("#66000000",
             sidebar.getJSONObject("overlay").getString("background"));
-        assertEquals("#14FFFFFF",
-            sidebar.getJSONObject("dialog").getJSONObject("closeButton")
-                .getString("background"));
+        JSONObject dialog = sidebar.getJSONObject("dialog");
+        assertEquals("#14FFFFFF", dialog.getJSONObject("closeButton")
+            .getString("background"));
+        assertEquals("theme:widget.border", dialog.getString("border"));
+        assertEquals("#33FFFFFF", dialog.getJSONObject("closeButton")
+            .getString("ripple"));
+        assertEquals("theme:focusBorder", dialog.getJSONObject("input")
+            .getString("border"));
     }
 
     @Test

@@ -938,7 +938,8 @@ public final class FileManagerController {
         closeButton.setPadding(dp(8), dp(8), dp(8), dp(8));
         GradientDrawable closeBackground = roundRect(0x14FFFFFF, dp(16));
         closeBackground.setShape(GradientDrawable.OVAL);
-        closeButton.setBackground(closeBackground);
+        closeButton.setBackground(new RippleDrawable(
+            ColorStateList.valueOf(0x33FFFFFF), closeBackground, null));
         closeButton.setContentDescription("Close");
         closeButton.setClickable(true);
         closeButton.setFocusable(true);
@@ -1061,12 +1062,15 @@ public final class FileManagerController {
         @NonNull TextView confirm
     ) {
         if (uiSchemaViewBinder == null) return;
-        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.background", card);
+        uiSchemaViewBinder.bindBackgroundFill("sidebar.dialog.background", card);
+        uiSchemaViewBinder.bindBackgroundStroke("sidebar.dialog.border", card, dp(1));
         uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.divider", divider);
         uiSchemaViewBinder.bindTextColor("sidebar.dialog.foreground", title);
-        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.closeButton.background", closeButton);
+        uiSchemaViewBinder.bindBackgroundFill("sidebar.dialog.closeButton.background", closeButton);
+        uiSchemaViewBinder.bindBackgroundRipple("sidebar.dialog.closeButton.ripple", closeButton);
         uiSchemaViewBinder.bindVectorTint("sidebar.icon.foreground", closeButton);
-        uiSchemaViewBinder.bindBackgroundTint("sidebar.dialog.input.background", input);
+        uiSchemaViewBinder.bindBackgroundFill("sidebar.dialog.input.background", input);
+        uiSchemaViewBinder.bindBackgroundStroke("sidebar.dialog.input.border", input, dp(2));
         uiSchemaViewBinder.bindTextColor("sidebar.dialog.input.foreground", input);
         uiSchemaViewBinder.bindHintTextColor("sidebar.dialog.input.hint", input);
         uiSchemaViewBinder.bindTextColor("sidebar.dialog.button.secondary.foreground", cancel);

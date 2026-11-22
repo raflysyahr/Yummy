@@ -10,13 +10,13 @@ package com.termux.app.theme.schema;
  * Yummy components visually consistent without duplicating theme-key choices.</p>
  */
 public final class YummyColorSchemeDefaults {
-    public static final int VERSION = 4;
+    public static final int VERSION = 5;
 
     private YummyColorSchemeDefaults() { }
 
     public static String toJson() {
         return "{\n"
-            + "  \"version\": 4,\n"
+            + "  \"version\": 5,\n"
             + "  \"sidebar\": {\n"
             + "    \"background\": \"theme:sideBar.background\",\n"
             + "    \"foreground\": \"theme:sideBar.foreground\",\n"
@@ -52,14 +52,17 @@ public final class YummyColorSchemeDefaults {
             + "    },\n"
             + "    \"dialog\": {\n"
             + "      \"background\": \"theme:editorWidget.background\",\n"
+            + "      \"border\": \"theme:widget.border\",\n"
             + "      \"closeButton\": {\n"
-            + "        \"background\": \"#14FFFFFF\"\n"
+            + "        \"background\": \"#14FFFFFF\",\n"
+            + "        \"ripple\": \"#33FFFFFF\"\n"
             + "      },\n"
             + "      \"foreground\": \"theme:editorWidget.foreground\",\n"
             + "      \"secondaryForeground\": \"theme:descriptionForeground\",\n"
             + "      \"divider\": \"theme:widget.border\",\n"
             + "      \"input\": {\n"
             + "        \"background\": \"theme:input.background\",\n"
+            + "        \"border\": \"theme:focusBorder\",\n"
             + "        \"foreground\": \"theme:input.foreground\",\n"
             + "        \"hint\": \"theme:input.placeholderForeground\"\n"
             + "      },\n"

@@ -1,6 +1,9 @@
 package com.termux.app.theme.schema;
 
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.content.res.ColorStateList;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.Switch;
@@ -246,4 +249,99 @@ public class YummyUiSchemaViewBinderTest {
             runtime.dispose();
         }
     }
+
+    @Test
+    public void drawableFillAndStrokeRefreshTogetherAndRestoreOriginalBackground() throws Exception {
+        YummyUiSchemaRuntime runtime = newRuntime();
+        try {
+            View view = new View(org.robolectric.RuntimeEnvironment.getApplication());
+            GradientDrawable original = new GradientDrawable();
+            original.setColor(Color.WHITE);
+            original.setStroke(3, Color.MAGENTA);
+            view.setBackground(original);
+
+            YummyUiSchemaViewBinder binder = new YummyUiSchemaViewBinder(runtime);
+            binder.bindBackgroundFill("sidebar.dialog.background", view);
+            binder.bindBackgroundStroke("sidebar.dialog.border", view, 2);
+            YummyUiSchemaRuntime.ActivationResult result = runtime.activate(schema(
+                "sidebar.dialog.background", "#112233",
+                "sidebar.dialog.border", "#445566"));
+            assertTrue(result.getResolution().getDiagnostics().toString(), result.isAccepted());
+
+            GradientDrawable applied = (GradientDrawable) view.getBackground();
+            assertEquals(Color.rgb(17, 34, 51), applied.getColor().getDefaultColor());
+            assertEquals(Color.rgb(68, 85, 102), applied.getStrokeColor().getDefaultColor());
+
+            Map<String, String> updated = new LinkedHashMap<>();
+            updated.put("sidebar.dialog.background", "#AABBCC");
+            updated.put("sidebar.dialog.border", "#DDEEFF");
+            runtime.setColorSchemeOverrides(updated);
+            applied = (GradientDrawable) view.getBackground();
+            assertEquals(Color.rgb(170, 187, 204), applied.getColor().getDefaultColor());
+            assertEquals(Color.rgb(221, 238, 255), applied.getStrokeColor().getDefaultColor());
+
+            runtime.clearColorSchemeOverrides();
+            applied = (GradientDrawable) view.getBackground();
+            assertEquals(Color.rgb(17, 34, 51), applied.getColor().getDefaultColor());
+            assertEquals(Color.rgb(68, 85, 102), applied.getStrokeColor().getDefaultColor());
+
+            binder.unregisterAll();
+            GradientDrawable restored = (GradientDrawable) view.getBackground();
+            assertEquals(Color.WHITE, restored.getColor().getDefaultColor());
+            assertEquals(Color.MAGENTA, restored.getStrokeColor().getDefaultColor());
+        } finally {
+            runtime.dispose();
+        }
+    }
+
+    @Test
+    public void rippleColorFollowsThemeAndRestoresOriginalColor() throws Exception {
+        YummyUiSchemaRuntime runtime = newRuntime();
+        try {
+            View view = new View(org.robolectric.RuntimeEnvironment.getApplication());
+            ColorStateList originalRipple = ColorStateList.valueOf(Color.GRAY);
+            GradientDrawable content = new GradientDrawable();
+            content.setColor(Color.BLACK);
+            view.setBackground(new RippleDrawable(originalRipple, content, null));
+
+            YummyUiSchemaViewBinder binder = new YummyUiSchemaViewBinder(runtime);
+            binder.bindBackgroundRipple("sidebar.dialog.closeButton.ripple", view);
+            YummyUiSchemaRuntime.ActivationResult result = runtime.activate(schema(
+                "sidebar.dialog.closeButton.ripple", "#123456"));
+            assertTrue(result.getResolution().getDiagnostics().toString(), result.isAccepted());
+            assertEquals(Color.rgb(18, 52, 86),
+                ((RippleDrawable) view.getBackground()).getColor().getDefaultColor());
+
+            binder.unregisterAll();
+            assertEquals(Color.GRAY,
+                ((RippleDrawable) view.getBackground()).getColor().getDefaultColor());
+        } finally {
+            runtime.dispose();
+        }
+    }
+
+    @Test
+    public void compoundDrawableTintTracksThemeAndRestoresOriginalTint() throws Exception {
+        YummyUiSchemaRuntime runtime = newRuntime();
+        try {
+            android.widget.TextView view = new android.widget.TextView(
+                org.robolectric.RuntimeEnvironment.getApplication());
+            ColorStateList original = ColorStateList.valueOf(Color.GRAY);
+            view.setCompoundDrawableTintList(original);
+            YummyUiSchemaViewBinder binder = new YummyUiSchemaViewBinder(runtime);
+            binder.bindCompoundDrawableTint("sidebar.icon.foreground", view);
+
+            YummyUiSchemaRuntime.ActivationResult result = runtime.activate(schema(
+                "sidebar.icon.foreground", "#ABCDEF"));
+            assertTrue(result.getResolution().getDiagnostics().toString(), result.isAccepted());
+            assertEquals(Color.rgb(171, 205, 239),
+                view.getCompoundDrawableTintList().getDefaultColor());
+
+            binder.unregisterAll();
+            assertEquals(Color.GRAY, view.getCompoundDrawableTintList().getDefaultColor());
+        } finally {
+            runtime.dispose();
+        }
+    }
+
 }
