@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -102,10 +103,69 @@ public class YummyColorSchemeFileObserverTest {
         }
     }
 
+
+    @Test
+    public void queuedReloadCallbackIsSuppressedAfterObserverClose() throws Exception {
+        File directory = temporaryFolder.newFolder("closed-reload-package");
+        File file = new File(directory, ThemeColorSchemeStorage.FILE_NAME);
+        write(file, "{\"version\":3,\"marker\":\"queued\"}");
+
+        BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
+        AtomicInteger delivered = new AtomicInteger();
+        YummyColorSchemeFileObserver observer = new YummyColorSchemeFileObserver(
+            file, new ThemeColorSchemeStorage(), 0L, callbacks::offer);
+        observer.setListener(new YummyColorSchemeFileObserver.Listener() {
+            @Override public void onReload(JSONObject document) { delivered.incrementAndGet(); }
+            @Override public void onReloadFailed(String code, String message) { delivered.incrementAndGet(); }
+        });
+        try {
+            observer.startWatching();
+            Runnable queuedCallback = awaitCallback(callbacks);
+            observer.close();
+            queuedCallback.run();
+            assertEquals("A callback queued before close must not reach the listener", 0,
+                delivered.get());
+        } finally {
+            observer.close();
+        }
+    }
+
+    @Test
+    public void queuedFailureCallbackIsSuppressedAfterObserverClose() throws Exception {
+        File directory = temporaryFolder.newFolder("closed-failure-package");
+        File file = new File(directory, ThemeColorSchemeStorage.FILE_NAME);
+        write(file, "{ malformed json");
+
+        BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
+        AtomicInteger failures = new AtomicInteger();
+        YummyColorSchemeFileObserver observer = new YummyColorSchemeFileObserver(
+            file, new ThemeColorSchemeStorage(), 0L, callbacks::offer);
+        observer.setListener(new YummyColorSchemeFileObserver.Listener() {
+            @Override public void onReload(JSONObject document) { failures.incrementAndGet(); }
+            @Override public void onReloadFailed(String code, String message) { failures.incrementAndGet(); }
+        });
+        try {
+            observer.startWatching();
+            Runnable queuedCallback = awaitCallback(callbacks);
+            observer.close();
+            queuedCallback.run();
+            assertEquals("A failure callback queued before close must not reach the listener", 0,
+                failures.get());
+        } finally {
+            observer.close();
+        }
+    }
+
+    private static Runnable awaitCallback(BlockingQueue<Runnable> callbacks) throws Exception {
+        Runnable callback = callbacks.poll(EVENT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        if (callback == null) throw new AssertionError("Timed out waiting for dispatched observer callback");
+        return callback;
+    }
+
     private static YummyColorSchemeFileObserver newObserver(
         File file, BlockingQueue<ObserverEvent> events
     ) {
-        // Keep the production debounce intact while making worker-thread reloads deterministic.
+        // Use a zero debounce to keep worker-thread reload tests deterministic.
         YummyColorSchemeFileObserver observer = new YummyColorSchemeFileObserver(
             file, new ThemeColorSchemeStorage(), 0L);
         observer.setListener(new YummyColorSchemeFileObserver.Listener() {

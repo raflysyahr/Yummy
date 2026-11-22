@@ -25,9 +25,9 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
     private final File requestedFile;
     private final ThemeColorSchemeStorage storage;
     private final long debounceMillis;
+    private final CallbackDispatcher callbackDispatcher;
     private File watchedFile;
     private final HandlerThread workerThread = new HandlerThread("YummyColorSchemeObserver");
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler workerHandler;
     private FileObserver directoryObserver;
     private Runnable pendingReload;
@@ -36,18 +36,27 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
     private boolean closed;
 
     public YummyColorSchemeFileObserver(File file, ThemeColorSchemeStorage storage) {
-        this(file, storage, DEBOUNCE_MILLIS);
+        this(file, storage, DEBOUNCE_MILLIS, createMainThreadDispatcher());
     }
 
     YummyColorSchemeFileObserver(
         File file, ThemeColorSchemeStorage storage, long debounceMillis
     ) {
+        this(file, storage, debounceMillis, createMainThreadDispatcher());
+    }
+
+    YummyColorSchemeFileObserver(
+        File file, ThemeColorSchemeStorage storage, long debounceMillis,
+        CallbackDispatcher callbackDispatcher
+    ) {
         if (file == null) throw new IllegalArgumentException("Color Scheme file is required");
         if (storage == null) throw new IllegalArgumentException("Color Scheme storage is required");
         if (debounceMillis < 0L) throw new IllegalArgumentException("Debounce delay cannot be negative");
+        if (callbackDispatcher == null) throw new IllegalArgumentException("Callback dispatcher is required");
         requestedFile = file;
         this.storage = storage;
         this.debounceMillis = debounceMillis;
+        this.callbackDispatcher = callbackDispatcher;
     }
 
     public void setListener(Listener listener) {
@@ -127,12 +136,10 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
                     }
                     if (currentFile == null) return;
                     JSONObject document = storage.load(currentFile.getParentFile());
-                    final Listener target;
                     synchronized (lock) {
                         if (closed || !watching) return;
-                        target = listener;
                     }
-                    if (target != null) mainHandler.post(() -> target.onReload(document));
+                    postReload(document);
                 } catch (ThemeStorageException error) {
                     notifyFailure(error.getCode().name(), error.getMessage());
                 }
@@ -142,12 +149,39 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
     }
 
     private void notifyFailure(String code, String message) {
-        final Listener target;
         synchronized (lock) {
-            if (closed) return;
-            target = listener;
+            if (closed || listener == null) return;
         }
-        if (target != null) mainHandler.post(() -> target.onReloadFailed(code, message));
+        postFailure(code, message);
+    }
+
+    /** Dispatches only while this observer session is still active. */
+    private void postReload(JSONObject document) {
+        callbackDispatcher.post(() -> {
+            Listener target;
+            synchronized (lock) {
+                if (closed || !watching) return;
+                target = listener;
+            }
+            if (target != null) target.onReload(document);
+        });
+    }
+
+    /** Failure callbacks use the same close-safe delivery rule as successful reloads. */
+    private void postFailure(String code, String message) {
+        callbackDispatcher.post(() -> {
+            Listener target;
+            synchronized (lock) {
+                if (closed || !watching) return;
+                target = listener;
+            }
+            if (target != null) target.onReloadFailed(code, message);
+        });
+    }
+
+    private static CallbackDispatcher createMainThreadDispatcher() {
+        Handler handler = new Handler(Looper.getMainLooper());
+        return handler::post;
     }
 
     private static File validatePath(File file) throws IOException {
@@ -164,6 +198,10 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
 
     private void ensureOpen() {
         if (closed) throw new IllegalStateException("Color Scheme observer is closed");
+    }
+
+    interface CallbackDispatcher {
+        boolean post(Runnable task);
     }
 
     public interface Listener {
