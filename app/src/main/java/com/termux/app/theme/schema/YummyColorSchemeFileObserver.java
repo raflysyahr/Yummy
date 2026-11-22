@@ -16,13 +16,15 @@ import java.io.IOException;
 /** Watches color-scheme.json in its package directory and reloads complete JSON documents. */
 public final class YummyColorSchemeFileObserver implements AutoCloseable {
     private static final long DEBOUNCE_MILLIS = 350L;
-    private static final int WATCH_MASK = FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO
-        | FileObserver.CREATE | FileObserver.DELETE | FileObserver.MOVED_FROM | FileObserver.ATTRIB;
+    private static final int WATCH_MASK = FileObserver.CLOSE_WRITE | FileObserver.MODIFY
+        | FileObserver.MOVED_TO | FileObserver.CREATE | FileObserver.DELETE
+        | FileObserver.MOVED_FROM | FileObserver.ATTRIB;
     private static final int DIRECTORY_GONE_MASK = FileObserver.DELETE_SELF | FileObserver.MOVE_SELF;
 
     private final Object lock = new Object();
     private final File requestedFile;
     private final ThemeColorSchemeStorage storage;
+    private File watchedFile;
     private final HandlerThread workerThread = new HandlerThread("YummyColorSchemeObserver");
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler workerHandler;
@@ -52,6 +54,7 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
         synchronized (lock) {
             ensureOpen();
             if (watching) return;
+            watchedFile = resolved;
             workerThread.start();
             workerHandler = new Handler(workerThread.getLooper());
             directoryObserver = new FileObserver(parent.getAbsolutePath(), WATCH_MASK | DIRECTORY_GONE_MASK) {
@@ -104,7 +107,13 @@ public final class YummyColorSchemeFileObserver implements AutoCloseable {
         pendingReload = new Runnable() {
             @Override public void run() {
                 try {
-                    JSONObject document = storage.load(requestedFile.getParentFile());
+                    File currentFile;
+                    synchronized (lock) {
+                        if (closed || !watching) return;
+                        currentFile = watchedFile;
+                    }
+                    if (currentFile == null) return;
+                    JSONObject document = storage.load(currentFile.getParentFile());
                     final Listener target;
                     synchronized (lock) {
                         if (closed || !watching) return;
