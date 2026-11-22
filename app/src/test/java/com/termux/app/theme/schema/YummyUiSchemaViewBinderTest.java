@@ -1,8 +1,10 @@
 package com.termux.app.theme.schema;
 
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.content.res.Resources;
 import android.content.res.ColorStateList;
 import android.widget.EditText;
 import android.widget.ProgressBar;
@@ -14,7 +16,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
-import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -27,18 +28,72 @@ import static org.junit.Assert.assertTrue;
 @RunWith(RobolectricTestRunner.class)
 public class YummyUiSchemaViewBinderTest {
 
-    private ColorStateList readColorStateListField(Object target, String fieldName) throws Exception {
-        Class<?> type = target.getClass();
-        while (type != null) {
-            try {
-                Field field = type.getDeclaredField(fieldName);
-                field.setAccessible(true);
-                return (ColorStateList) field.get(target);
-            } catch (NoSuchFieldException ignored) {
-                type = type.getSuperclass();
-            }
+    /** Test drawable that exposes the stroke value through a stable test-only accessor. */
+    private static final class InspectableGradientDrawable extends GradientDrawable {
+        private int recordedStrokeColor = Color.TRANSPARENT;
+        private int recordedStrokeWidth;
+
+        @Override
+        public void setStroke(int width, int color) {
+            super.setStroke(width, color);
+            recordedStrokeWidth = width;
+            recordedStrokeColor = color;
         }
-        throw new NoSuchFieldException(fieldName + " on " + target.getClass().getName());
+
+        int recordedStrokeColor() { return recordedStrokeColor; }
+        int recordedStrokeWidth() { return recordedStrokeWidth; }
+
+        @Override
+        public ConstantState getConstantState() {
+            final int fill = getColor() == null ? Color.TRANSPARENT : getColor().getDefaultColor();
+            final int stroke = recordedStrokeColor;
+            final int width = recordedStrokeWidth;
+            return new ConstantState() {
+                @Override public Drawable newDrawable() {
+                    InspectableGradientDrawable drawable = new InspectableGradientDrawable();
+                    drawable.setColor(fill);
+                    if (width > 0) drawable.setStroke(width, stroke);
+                    return drawable;
+                }
+                @Override public Drawable newDrawable(Resources resources) { return newDrawable(); }
+                @Override public int getChangingConfigurations() { return 0; }
+            };
+        }
+    }
+
+    /** Test ripple that records setColor calls without depending on hidden framework fields. */
+    private static final class InspectableRippleDrawable extends RippleDrawable {
+        private ColorStateList recordedRippleColor;
+
+        InspectableRippleDrawable(ColorStateList color, Drawable content) {
+            super(color, content, null);
+            recordedRippleColor = color;
+        }
+
+        @Override
+        public void setColor(ColorStateList color) {
+            super.setColor(color);
+            recordedRippleColor = color;
+        }
+
+        ColorStateList recordedRippleColor() { return recordedRippleColor; }
+
+        @Override
+        public ConstantState getConstantState() {
+            final ColorStateList color = recordedRippleColor;
+            final Drawable.ConstantState contentState = getDrawable(0).getConstantState();
+            return new ConstantState() {
+                @Override public Drawable newDrawable() {
+                    Drawable content = contentState == null ? null : contentState.newDrawable();
+                    return new InspectableRippleDrawable(color, content);
+                }
+                @Override public Drawable newDrawable(Resources resources) {
+                    Drawable content = contentState == null ? null : contentState.newDrawable(resources);
+                    return new InspectableRippleDrawable(color, content);
+                }
+                @Override public int getChangingConfigurations() { return 0; }
+            };
+        }
     }
 
     private YummyUiSchemaRuntime newRuntime() {
@@ -270,7 +325,7 @@ public class YummyUiSchemaViewBinderTest {
         YummyUiSchemaRuntime runtime = newRuntime();
         try {
             View view = new View(org.robolectric.RuntimeEnvironment.getApplication());
-            GradientDrawable original = new GradientDrawable();
+            InspectableGradientDrawable original = new InspectableGradientDrawable();
             original.setColor(Color.WHITE);
             original.setStroke(3, Color.MAGENTA);
             view.setBackground(original);
@@ -283,9 +338,9 @@ public class YummyUiSchemaViewBinderTest {
                 "sidebar.dialog.border", "#445566"));
             assertTrue(result.getResolution().getDiagnostics().toString(), result.isAccepted());
 
-            GradientDrawable applied = (GradientDrawable) view.getBackground();
+            InspectableGradientDrawable applied = (InspectableGradientDrawable) view.getBackground();
             assertEquals(Color.rgb(17, 34, 51), applied.getColor().getDefaultColor());
-            assertEquals(Color.rgb(68, 85, 102), readColorStateListField(applied, "mStrokeColors").getDefaultColor());
+            assertEquals(Color.rgb(68, 85, 102), applied.recordedStrokeColor());
 
             Map<String, String> updated = new LinkedHashMap<>();
             updated.put("sidebar.dialog.background", "#AABBCC");
@@ -293,17 +348,17 @@ public class YummyUiSchemaViewBinderTest {
             runtime.setColorSchemeOverrides(updated);
             applied = (GradientDrawable) view.getBackground();
             assertEquals(Color.rgb(170, 187, 204), applied.getColor().getDefaultColor());
-            assertEquals(Color.rgb(221, 238, 255), readColorStateListField(applied, "mStrokeColors").getDefaultColor());
+            assertEquals(Color.rgb(221, 238, 255), applied.recordedStrokeColor());
 
             runtime.clearColorSchemeOverrides();
             applied = (GradientDrawable) view.getBackground();
             assertEquals(Color.rgb(17, 34, 51), applied.getColor().getDefaultColor());
-            assertEquals(Color.rgb(68, 85, 102), readColorStateListField(applied, "mStrokeColors").getDefaultColor());
+            assertEquals(Color.rgb(68, 85, 102), applied.recordedStrokeColor());
 
             binder.unregisterAll();
-            GradientDrawable restored = (GradientDrawable) view.getBackground();
+            InspectableGradientDrawable restored = (InspectableGradientDrawable) view.getBackground();
             assertEquals(Color.WHITE, restored.getColor().getDefaultColor());
-            assertEquals(Color.MAGENTA, readColorStateListField(restored, "mStrokeColors").getDefaultColor());
+            assertEquals(Color.MAGENTA, restored.recordedStrokeColor());
         } finally {
             runtime.dispose();
         }
@@ -317,7 +372,7 @@ public class YummyUiSchemaViewBinderTest {
             ColorStateList originalRipple = ColorStateList.valueOf(Color.GRAY);
             GradientDrawable content = new GradientDrawable();
             content.setColor(Color.BLACK);
-            view.setBackground(new RippleDrawable(originalRipple, content, null));
+            view.setBackground(new InspectableRippleDrawable(originalRipple, content));
 
             YummyUiSchemaViewBinder binder = new YummyUiSchemaViewBinder(runtime);
             binder.bindBackgroundRipple("sidebar.dialog.closeButton.ripple", view);
@@ -325,11 +380,11 @@ public class YummyUiSchemaViewBinderTest {
                 "sidebar.dialog.closeButton.ripple", "#123456"));
             assertTrue(result.getResolution().getDiagnostics().toString(), result.isAccepted());
             assertEquals(Color.rgb(18, 52, 86),
-                readColorStateListField(view.getBackground(), "mColor").getDefaultColor());
+                ((InspectableRippleDrawable) view.getBackground()).recordedRippleColor().getDefaultColor());
 
             binder.unregisterAll();
             assertEquals(Color.GRAY,
-                readColorStateListField(view.getBackground(), "mColor").getDefaultColor());
+                ((InspectableRippleDrawable) view.getBackground()).recordedRippleColor().getDefaultColor());
         } finally {
             runtime.dispose();
         }
