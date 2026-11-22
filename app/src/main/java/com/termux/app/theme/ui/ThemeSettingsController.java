@@ -471,7 +471,10 @@ public final class ThemeSettingsController {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(12), dp(10), dp(12), dp(10));
         card.setBackground(rect(surfaceColor(), borderColor()));
-        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.surface.background", card);
+        if (uiSchemaBinder != null) {
+            uiSchemaBinder.bindBackgroundFill("settings.dialog.surface.background", card);
+            uiSchemaBinder.bindBackgroundStroke("settings.dialog.surface.border", card, dp(1));
+        }
         card.addView(text(theme.getMetadata().getLabel(), 15, textColor(), true));
         card.addView(text(details.toString(), 11, mutedColor(), false),
             marginParams(0, dp(4), 0, dp(8)));
@@ -1079,7 +1082,10 @@ public final class ThemeSettingsController {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(12), dp(10), dp(12), dp(10));
         card.setBackground(rect(surfaceColor(), borderColor()));
-        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.surface.background", card);
+        if (uiSchemaBinder != null) {
+            uiSchemaBinder.bindBackgroundFill("settings.dialog.surface.background", card);
+            uiSchemaBinder.bindBackgroundStroke("settings.dialog.surface.border", card, dp(1));
+        }
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -1211,7 +1217,10 @@ public final class ThemeSettingsController {
                     card.setOrientation(LinearLayout.VERTICAL);
                     card.setPadding(dp(12), dp(10), dp(12), dp(10));
                     card.setBackground(rect(surfaceColor(), borderColor()));
-        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.surface.background", card);
+                    if (uiSchemaBinder != null) {
+                        uiSchemaBinder.bindBackgroundFill("settings.dialog.surface.background", card);
+                        uiSchemaBinder.bindBackgroundStroke("settings.dialog.surface.border", card, dp(1));
+                    }
                     card.addView(text(info.getLabel(), 15, textColor(), true));
                     card.addView(text(info.getId() + " · " + info.getDefinitionCount()
                         + " definitions · " + info.getWarningCount() + " warnings",
@@ -1400,7 +1409,10 @@ public final class ThemeSettingsController {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(12), dp(10), dp(12), dp(10));
         card.setBackground(rect(surfaceColor(), borderColor()));
-        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.surface.background", card);
+        if (uiSchemaBinder != null) {
+            uiSchemaBinder.bindBackgroundFill("settings.dialog.surface.background", card);
+            uiSchemaBinder.bindBackgroundStroke("settings.dialog.surface.border", card, dp(1));
+        }
 
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -1843,12 +1855,19 @@ public final class ThemeSettingsController {
         root.setPadding(dp(18), dp(18), dp(18), dp(18));
         root.setBackground(rect(backgroundColor(), borderColor()));
         if (uiSchemaBinder != null) {
-            uiSchemaBinder.bindBackgroundTint("settings.dialog.background", root);
+            uiSchemaBinder.bindBackgroundFill("settings.dialog.background", root);
+            uiSchemaBinder.bindBackgroundStroke("settings.dialog.border", root, dp(1));
         }
         return root;
     }
 
     private TextView text(String value, int sizeSp, int color, boolean bold) {
+        return text(value, sizeSp, color, bold, null);
+    }
+
+    private TextView text(
+        String value, int sizeSp, int color, boolean bold, String schemaColorProperty
+    ) {
         TextView view = new TextView(activity);
         view.setText(value == null ? "" : value);
         view.setTextSize(sizeSp);
@@ -1860,9 +1879,13 @@ public final class ThemeSettingsController {
             view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         }
         if (uiSchemaBinder != null) {
-            String property = color == mutedColor()
-                ? "settings.dialog.secondaryForeground"
-                : (color == accentColor() ? "settings.dialog.accentForeground" : "settings.dialog.foreground");
+            String property = schemaColorProperty;
+            if (property == null) {
+                property = color == mutedColor()
+                    ? "settings.dialog.secondaryForeground"
+                    : (color == accentColor()
+                        ? "settings.dialog.accentForeground" : "settings.dialog.foreground");
+            }
             uiSchemaBinder.bindTextColor(property, view);
         }
         return view;
@@ -1875,7 +1898,9 @@ public final class ThemeSettingsController {
         // transparent surface. Use the dedicated button foreground/background pair instead.
         int actionBackground = primary ? buttonBackgroundColor() : surfaceColor();
         int actionForeground = primary ? buttonForegroundColor() : textColor();
-        TextView view = text(label, 13, actionForeground, true);
+        TextView view = text(label, 13, actionForeground, true, primary
+            ? "settings.dialog.button.primary.foreground"
+            : "settings.dialog.button.secondary.foreground");
         view.setGravity(Gravity.CENTER);
         view.setPadding(dp(12), dp(10), dp(12), dp(10));
         view.setBackground(rect(actionBackground, borderColor()));
@@ -1883,9 +1908,10 @@ public final class ThemeSettingsController {
         view.setFocusable(true);
         view.setOnClickListener(ignored -> callback.run());
         if (uiSchemaBinder != null) {
-            uiSchemaBinder.bindBackgroundTint(primary
-                ? "settings.dialog.button.primary.background"
-                : "settings.dialog.button.secondary.background", view);
+            String prefix = primary
+                ? "settings.dialog.button.primary" : "settings.dialog.button.secondary";
+            uiSchemaBinder.bindBackgroundFill(prefix + ".background", view);
+            uiSchemaBinder.bindBackgroundStroke(prefix + ".border", view, dp(1));
         }
         return view;
     }

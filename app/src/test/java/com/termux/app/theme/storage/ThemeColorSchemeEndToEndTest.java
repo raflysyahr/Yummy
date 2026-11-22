@@ -73,7 +73,7 @@ public class ThemeColorSchemeEndToEndTest {
             .load(migratedFile.getParentFile());
         JSONObject sidebar = migrated.getJSONObject("sidebar");
 
-        assertEquals(5, migrated.getInt("version"));
+        assertEquals(6, migrated.getInt("version"));
         assertEquals("#123456", sidebar.getString("background"));
         assertEquals("#66000000",
             sidebar.getJSONObject("overlay").getString("background"));
@@ -85,6 +85,51 @@ public class ThemeColorSchemeEndToEndTest {
             .getString("ripple"));
         assertEquals("theme:focusBorder", dialog.getJSONObject("input")
             .getString("border"));
+        JSONObject settingsDialog = migrated.getJSONObject("settings").getJSONObject("dialog");
+        assertEquals("theme:widget.border", settingsDialog.getString("border"));
+        assertEquals("theme:widget.border",
+            settingsDialog.getJSONObject("surface").getString("border"));
+        assertEquals("theme:button.foreground",
+            settingsDialog.getJSONObject("button").getJSONObject("primary")
+                .getString("foreground"));
+        assertEquals("theme:foreground",
+            settingsDialog.getJSONObject("button").getJSONObject("secondary")
+                .getString("foreground"));
+    }
+
+    @Test
+    public void versionFiveColorSchemeMigrationAddsThemeManagementMappingsAndPreservesValues()
+        throws Exception {
+        ThemePackageStorage storage = newStorage();
+        storage.importPackage(createPackage("step17-version-five"));
+
+        File colorSchemeFile = storage.ensureColorSchemeFile("step17-version-five");
+        JSONObject custom = new JSONObject()
+            .put("version", 5)
+            .put("futureExtension", new JSONObject().put("keep", "untouched"))
+            .put("settings", new JSONObject().put("dialog", new JSONObject()
+                .put("background", "#123456")
+                .put("button", new JSONObject().put("primary",
+                    new JSONObject().put("background", "#ABCDEF")))));
+        write(colorSchemeFile, custom.toString(2));
+
+        File migratedFile = storage.ensureColorSchemeFile("step17-version-five");
+        JSONObject migrated = new ThemeColorSchemeStorage()
+            .load(migratedFile.getParentFile());
+        JSONObject settingsDialog = migrated.getJSONObject("settings").getJSONObject("dialog");
+
+        assertEquals(6, migrated.getInt("version"));
+        assertEquals("#123456", settingsDialog.getString("background"));
+        assertEquals("#ABCDEF", settingsDialog.getJSONObject("button")
+            .getJSONObject("primary").getString("background"));
+        assertEquals("theme:widget.border", settingsDialog.getString("border"));
+        assertEquals("theme:widget.border",
+            settingsDialog.getJSONObject("surface").getString("border"));
+        assertEquals("theme:button.foreground",
+            settingsDialog.getJSONObject("button").getJSONObject("primary")
+                .getString("foreground"));
+        assertEquals("untouched", migrated.getJSONObject("futureExtension")
+            .getString("keep"));
     }
 
     @Test

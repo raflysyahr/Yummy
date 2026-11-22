@@ -951,11 +951,20 @@ public final class ThemeImportController {
         root.setVisibility(android.view.View.VISIBLE);
         root.setAlpha(1f);
         root.setBackground(rect(backgroundColor(), borderColor()));
-        if (uiSchemaBinder != null) uiSchemaBinder.bindBackgroundTint("settings.dialog.background", root);
+        if (uiSchemaBinder != null) {
+            uiSchemaBinder.bindBackgroundFill("settings.dialog.background", root);
+            uiSchemaBinder.bindBackgroundStroke("settings.dialog.border", root, dp(1));
+        }
         return root;
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
+        return text(value, size, color, bold, null);
+    }
+
+    private TextView text(
+        String value, int size, int color, boolean bold, String schemaColorProperty
+    ) {
         TextView view = new TextView(activity);
         view.setText(value == null ? "" : value);
         view.setTextSize(size);
@@ -964,16 +973,22 @@ public final class ThemeImportController {
         if (uiTypeface != null) view.setTypeface(uiTypeface, bold ? Typeface.BOLD : Typeface.NORMAL);
         else if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         if (uiSchemaBinder != null) {
-            String property = color == mutedColor()
-                ? "settings.dialog.secondaryForeground"
-                : (color == accentForegroundColor() ? "settings.dialog.accentForeground" : "settings.dialog.foreground");
+            String property = schemaColorProperty;
+            if (property == null) {
+                property = color == mutedColor()
+                    ? "settings.dialog.secondaryForeground"
+                    : (color == accentForegroundColor()
+                        ? "settings.dialog.accentForeground" : "settings.dialog.foreground");
+            }
             uiSchemaBinder.bindTextColor(property, view);
         }
         return view;
     }
 
     private TextView action(String label, boolean primary, Runnable callback) {
-        TextView view = text(label, 13, primary ? accentForegroundColor() : textColor(), true);
+        TextView view = text(label, 13, primary ? accentForegroundColor() : textColor(), true,
+            primary ? "settings.dialog.button.primary.foreground"
+                : "settings.dialog.button.secondary.foreground");
         view.setGravity(Gravity.CENTER);
         view.setPadding(dp(12), dp(10), dp(12), dp(10));
         view.setBackground(rect(primary ? accentColor() : surfaceColor(), borderColor()));
@@ -981,9 +996,10 @@ public final class ThemeImportController {
         view.setFocusable(true);
         view.setOnClickListener(ignored -> callback.run());
         if (uiSchemaBinder != null) {
-            uiSchemaBinder.bindBackgroundTint(primary
-                ? "settings.dialog.button.primary.background"
-                : "settings.dialog.button.secondary.background", view);
+            String prefix = primary
+                ? "settings.dialog.button.primary" : "settings.dialog.button.secondary";
+            uiSchemaBinder.bindBackgroundFill(prefix + ".background", view);
+            uiSchemaBinder.bindBackgroundStroke(prefix + ".border", view, dp(1));
         }
         return view;
     }

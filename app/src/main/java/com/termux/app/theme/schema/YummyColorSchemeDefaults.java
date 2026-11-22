@@ -10,13 +10,13 @@ package com.termux.app.theme.schema;
  * Yummy components visually consistent without duplicating theme-key choices.</p>
  */
 public final class YummyColorSchemeDefaults {
-    public static final int VERSION = 5;
+    public static final int VERSION = 6;
 
     private YummyColorSchemeDefaults() { }
 
     public static String toJson() {
         return "{\n"
-            + "  \"version\": 5,\n"
+            + "  \"version\": 6,\n"
             + "  \"sidebar\": {\n"
             + "    \"background\": \"theme:sideBar.background\",\n"
             + "    \"foreground\": \"theme:sideBar.foreground\",\n"
@@ -160,8 +160,10 @@ public final class YummyColorSchemeDefaults {
             + "    },\n"
             + "    \"dialog\": {\n"
             + "      \"background\": \"theme:editorWidget.background\",\n"
+            + "      \"border\": \"theme:widget.border\",\n"
             + "      \"surface\": {\n"
-            + "        \"background\": \"this.sidebar.background\"\n"
+            + "        \"background\": \"this.sidebar.background\",\n"
+            + "        \"border\": \"theme:widget.border\"\n"
             + "      },\n"
             + "      \"divider\": \"theme:widget.border\",\n"
             + "      \"foreground\": \"theme:foreground\",\n"
@@ -169,10 +171,14 @@ public final class YummyColorSchemeDefaults {
             + "      \"accentForeground\": \"theme:button.foreground\",\n"
             + "      \"button\": {\n"
             + "        \"primary\": {\n"
-            + "          \"background\": \"theme:button.background\"\n"
+            + "          \"background\": \"theme:button.background\",\n"
+            + "          \"foreground\": \"theme:button.foreground\",\n"
+            + "          \"border\": \"theme:button.border\"\n"
             + "        },\n"
             + "        \"secondary\": {\n"
-            + "          \"background\": \"this.settings.dialog.surface.background\"\n"
+            + "          \"background\": \"this.settings.dialog.surface.background\",\n"
+            + "          \"foreground\": \"theme:foreground\",\n"
+            + "          \"border\": \"theme:widget.border\"\n"
             + "        }\n"
             + "      }\n"
             + "    }\n"
