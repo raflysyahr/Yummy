@@ -57,13 +57,26 @@ public class YummyEditorSessionIndicatorColorSchemeTest {
         assertEquals("#00000000", session.getJSONObject("saved").getString("background"));
         assertEquals("#FF89919B", session.getJSONObject("saved").getString("foreground"));
 
+        // Resolve only the new session subtree. The full bundled defaults also contain
+        // theme:<key> expressions, which correctly require an active LoadedTheme.
+        JSONObject sessionDocument = new JSONObject()
+            .put("version", defaults.getInt("version"))
+            .put("editor", new JSONObject()
+                .put("statusBar", new JSONObject().put("session", session)));
         YummyColorSchemeResolver.ResolutionResult result =
-            new YummyColorSchemeResolver().resolve(defaults, null);
+            new YummyColorSchemeResolver().resolve(sessionDocument, null);
+
         assertTrue(result.getDiagnostics().toString(), result.isUsable());
         assertEquals("#FF16A34A", result.getColors().get(
             YummyEditorSessionIndicatorColorProperties.SAVING_BACKGROUND));
+        assertEquals("#FFFFFFFF", result.getColors().get(
+            YummyEditorSessionIndicatorColorProperties.SAVING_FOREGROUND));
         assertEquals("#FFDC2626", result.getColors().get(
             YummyEditorSessionIndicatorColorProperties.FAILED_BACKGROUND));
+        assertEquals("#FFFFFFFF", result.getColors().get(
+            YummyEditorSessionIndicatorColorProperties.FAILED_FOREGROUND));
+        assertEquals("#00000000", result.getColors().get(
+            YummyEditorSessionIndicatorColorProperties.SAVED_BACKGROUND));
         assertEquals("#FF89919B", result.getColors().get(
             YummyEditorSessionIndicatorColorProperties.SAVED_FOREGROUND));
     }
