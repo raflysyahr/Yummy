@@ -107,15 +107,24 @@ public final class YummyUiSchemaViewBinder {
                 unregisterTree(group.getChildAt(i));
             }
         }
-        if (registered.remove(view) != null) runtime.unregister(view);
+        Map<String, YummyUiPropertyApplier> properties = registered.remove(view);
+        if (properties != null) {
+            for (YummyUiPropertyApplier applier : properties.values()) {
+                try {
+                    applier.reset(view);
+                } catch (RuntimeException error) {
+                    android.util.Log.w("YummyUiSchema", "Could not restore recycled View", error);
+                }
+            }
+            runtime.unregister(view);
+        }
     }
 
     /** Detaches every View owned by this binder. Call when the owning dialog is destroyed. */
     public void unregisterAll() {
-        for (View view : registered.keySet()) {
-            runtime.unregister(view);
+        for (View view : new java.util.ArrayList<>(registered.keySet())) {
+            unregisterTree(view);
         }
-        registered.clear();
     }
 
     private static final class ColorPropertyApplier implements YummyUiPropertyApplier {
@@ -203,6 +212,7 @@ public final class YummyUiSchemaViewBinder {
 
         @Override
         public void reset(View target) {
+            if (!originalCaptured) return;
             switch (property) {
                 case BACKGROUND:
                     target.setBackgroundTintList(original);

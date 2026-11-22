@@ -2095,6 +2095,9 @@ public final class FileManagerController {
                 String iconSlot = iconSlotForAction(iconResource);
                 if (iconSlot != null) appThemeController.bindCompoundUiIcon(button, iconSlot);
             }
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.foreground", button);
+            }
             button.setOnClickListener(v -> action.run());
         }
 
@@ -2115,6 +2118,12 @@ public final class FileManagerController {
                     appThemeController.bindBackground(useFolderButton, AppThemeColorRole.BUTTON_BACKGROUND);
                     appThemeController.bindText(useFolderButton, AppThemeColorRole.BUTTON_FOREGROUND);
                 }
+                if (uiSchemaViewBinder != null) {
+                    uiSchemaViewBinder.bindBackgroundTint(
+                        "sidebar.dialog.button.primary.background", useFolderButton);
+                    uiSchemaViewBinder.bindTextColor(
+                        "sidebar.dialog.button.primary.foreground", useFolderButton);
+                }
                 useFolderButton.setEnabled(currentProvider != null && currentDirectory != null);
                 useFolderButton.setOnClickListener(v -> {
                     if (pendingTransfer != PendingTransfer.NONE) executeTransfer();
@@ -2126,6 +2135,9 @@ public final class FileManagerController {
             selectionBar.addView(selectionCountView, new LinearLayout.LayoutParams(0, -1, 1));
             if (appThemeController != null) {
                 appThemeController.bindText(selectionCountView, AppThemeColorRole.SIDEBAR_FOREGROUND);
+            }
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.foreground", selectionCountView);
             }
             addFooterAction("Copy", R.drawable.ic_fm_copy, () -> beginTransfer(PendingTransfer.COPY));
             addFooterAction("Move", R.drawable.ic_fm_move, () -> beginTransfer(PendingTransfer.MOVE));
@@ -2147,6 +2159,9 @@ public final class FileManagerController {
                 appThemeController.bindText(button, AppThemeColorRole.SIDEBAR_FOREGROUND);
                 String iconSlot = iconSlotForAction(iconResource);
                 if (iconSlot != null) appThemeController.bindCompoundUiIcon(button, iconSlot);
+            }
+            if (uiSchemaViewBinder != null) {
+                uiSchemaViewBinder.bindTextColor("sidebar.foreground", button);
             }
             button.setOnClickListener(v -> action.run());
         }
@@ -3323,6 +3338,11 @@ public final class FileManagerController {
                     container.addView(check, new LinearLayout.LayoutParams(dp(20), dp(38)));
                 }
 
+                // Restore Color Scheme tints first, then let AppTheme restore its own palette
+                // values. This keeps the two independent theme layers from restoring stale colors.
+                if (uiSchemaViewBinder != null) {
+                    uiSchemaViewBinder.unregisterTree(container);
+                }
                 if (appThemeController != null) {
                     appThemeController.unbind(container);
                     appThemeController.unbindIcon(badge);
@@ -3426,7 +3446,9 @@ public final class FileManagerController {
                     }
                 }
                 if (uiSchemaViewBinder != null) {
-                    uiSchemaViewBinder.bindBackgroundTint("sidebar.tree.row.background", container);
+                    uiSchemaViewBinder.bindBackgroundTint(
+                        YummyFileManagerColorProperties.treeRowBackgroundProperty(selected || current),
+                        container);
                     uiSchemaViewBinder.bindTextColor("sidebar.foreground", name);
                     uiSchemaViewBinder.bindTextColor("sidebar.secondaryForeground", subtitle);
                     uiSchemaViewBinder.bindVectorTint("sidebar.icon.foreground", disclosure);

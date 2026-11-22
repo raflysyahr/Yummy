@@ -137,6 +137,57 @@ public class YummyUiSchemaViewBinderTest {
         }
     }
 
+
+    @Test
+    public void unregisterTreeRestoresOriginalTintBeforeViewCanBeReused() throws Exception {
+        YummyUiSchemaRuntime runtime = newRuntime();
+        try {
+            View view = new View(org.robolectric.RuntimeEnvironment.getApplication());
+            assertNull(view.getBackgroundTintList());
+            YummyUiSchemaViewBinder binder = new YummyUiSchemaViewBinder(runtime);
+            binder.bindBackgroundTint("sidebar.tree.row.background", view);
+
+            Map<String, String> selected = new LinkedHashMap<>();
+            selected.put("sidebar.tree.row.background", "#112233");
+            runtime.setColorSchemeOverrides(selected);
+            assertEquals(Color.rgb(17, 34, 51), view.getBackgroundTintList().getDefaultColor());
+
+            binder.unregisterTree(view);
+            assertNull(view.getBackgroundTintList());
+            assertEquals(0, runtime.getBindingCount());
+
+            binder.bindBackgroundTint("sidebar.selection.background", view);
+            Map<String, String> normal = new LinkedHashMap<>();
+            normal.put("sidebar.selection.background", "#AABBCC");
+            runtime.setColorSchemeOverrides(normal);
+            assertEquals(Color.rgb(170, 187, 204), view.getBackgroundTintList().getDefaultColor());
+        } finally {
+            runtime.dispose();
+        }
+    }
+
+    @Test
+    public void unregisterAllRestoresCapturedTextColors() throws Exception {
+        YummyUiSchemaRuntime runtime = newRuntime();
+        try {
+            android.widget.TextView view = new android.widget.TextView(
+                org.robolectric.RuntimeEnvironment.getApplication());
+            int original = view.getCurrentTextColor();
+            YummyUiSchemaViewBinder binder = new YummyUiSchemaViewBinder(runtime);
+            binder.bindTextColor("sidebar.foreground", view);
+            Map<String, String> colors = new LinkedHashMap<>();
+            colors.put("sidebar.foreground", "#123456");
+            runtime.setColorSchemeOverrides(colors);
+            assertEquals(Color.rgb(18, 52, 86), view.getCurrentTextColor());
+
+            binder.unregisterAll();
+            assertEquals(original, view.getCurrentTextColor());
+            assertEquals(0, runtime.getBindingCount());
+        } finally {
+            runtime.dispose();
+        }
+    }
+
     @Test
     public void progressAndSwitchAdaptersApplyTheirDedicatedTintLists() throws Exception {
         YummyUiSchemaRuntime runtime = newRuntime();
