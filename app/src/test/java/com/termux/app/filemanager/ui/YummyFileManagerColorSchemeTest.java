@@ -55,6 +55,6 @@ public class YummyFileManagerColorSchemeTest {
         assertEquals("theme:activityBar.foreground", storageItem.getString("selectedForeground"));
         assertEquals("theme:activityBar.foreground",
             storageItem.getString("selectedIconForeground"));
-        assertEquals(7, defaults.getInt("version"));
+        assertEquals(8, defaults.getInt("version"));
     }
 }

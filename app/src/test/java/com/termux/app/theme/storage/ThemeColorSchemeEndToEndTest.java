@@ -73,7 +73,7 @@ public class ThemeColorSchemeEndToEndTest {
             .load(migratedFile.getParentFile());
         JSONObject sidebar = migrated.getJSONObject("sidebar");
 
-        assertEquals(7, migrated.getInt("version"));
+        assertEquals(8, migrated.getInt("version"));
         assertEquals("#123456", sidebar.getString("background"));
         assertEquals("#66000000",
             sidebar.getJSONObject("overlay").getString("background"));
@@ -122,7 +122,7 @@ public class ThemeColorSchemeEndToEndTest {
             .load(migratedFile.getParentFile());
         JSONObject settingsDialog = migrated.getJSONObject("settings").getJSONObject("dialog");
 
-        assertEquals(7, migrated.getInt("version"));
+        assertEquals(8, migrated.getInt("version"));
         assertEquals("#123456", settingsDialog.getString("background"));
         assertEquals("#ABCDEF", settingsDialog.getJSONObject("button")
             .getJSONObject("primary").getString("background"));
@@ -157,10 +157,38 @@ public class ThemeColorSchemeEndToEndTest {
             .load(migratedFile.getParentFile());
         JSONObject item = migrated.getJSONObject("storage_bar").getJSONObject("item");
 
-        assertEquals(7, migrated.getInt("version"));
+        assertEquals(8, migrated.getInt("version"));
         assertEquals("#123456", item.getString("selectedForeground"));
         assertEquals("theme:activityBar.foreground", item.getString("selectedIconForeground"));
         assertEquals("v6-custom", migrated.getJSONObject("futureExtension").getString("keep"));
+    }
+
+    @Test
+    public void versionSevenMigrationAddsEditorSessionIndicatorColorsAndPreservesUserValues()
+        throws Exception {
+        ThemePackageStorage storage = newStorage();
+        storage.importPackage(createPackage("step19-version-seven"));
+
+        File colorSchemeFile = storage.ensureColorSchemeFile("step19-version-seven");
+        JSONObject custom = new JSONObject()
+            .put("version", 7)
+            .put("futureExtension", new JSONObject().put("keep", "v7-custom"))
+            .put("editor", new JSONObject().put("statusBar", new JSONObject()
+                .put("background", "#123456")));
+        write(colorSchemeFile, custom.toString(2));
+
+        File migratedFile = storage.ensureColorSchemeFile("step19-version-seven");
+        JSONObject migrated = new ThemeColorSchemeStorage()
+            .load(migratedFile.getParentFile());
+        JSONObject statusBar = migrated.getJSONObject("editor").getJSONObject("statusBar");
+        JSONObject session = statusBar.getJSONObject("session");
+
+        assertEquals(8, migrated.getInt("version"));
+        assertEquals("#123456", statusBar.getString("background"));
+        assertEquals("#FF16A34A", session.getJSONObject("saving").getString("background"));
+        assertEquals("#FFDC2626", session.getJSONObject("failed").getString("background"));
+        assertEquals("#FF89919B", session.getJSONObject("saved").getString("foreground"));
+        assertEquals("v7-custom", migrated.getJSONObject("futureExtension").getString("keep"));
     }
 
     @Test

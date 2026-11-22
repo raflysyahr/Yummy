@@ -10,13 +10,13 @@ package com.termux.app.theme.schema;
  * Yummy components visually consistent without duplicating theme-key choices.</p>
  */
 public final class YummyColorSchemeDefaults {
-    public static final int VERSION = 7;
+    public static final int VERSION = 8;
 
     private YummyColorSchemeDefaults() { }
 
     public static String toJson() {
         return "{\n"
-            + "  \"version\": 7,\n"
+            + "  \"version\": 8,\n"
             + "  \"sidebar\": {\n"
             + "    \"background\": \"theme:sideBar.background\",\n"
             + "    \"foreground\": \"theme:sideBar.foreground\",\n"
@@ -123,7 +123,21 @@ public final class YummyColorSchemeDefaults {
             + "    \"statusBar\": {\n"
             + "      \"background\": \"theme:statusBar.background\",\n"
             + "      \"foreground\": \"theme:statusBar.foreground\",\n"
-            + "      \"secondaryForeground\": \"this.editor.statusBar.foreground\"\n"
+            + "      \"secondaryForeground\": \"this.editor.statusBar.foreground\",\n"
+            + "      \"session\": {\n"
+            + "        \"saving\": {\n"
+            + "          \"background\": \"#FF16A34A\",\n"
+            + "          \"foreground\": \"#FFFFFFFF\"\n"
+            + "        },\n"
+            + "        \"failed\": {\n"
+            + "          \"background\": \"#FFDC2626\",\n"
+            + "          \"foreground\": \"#FFFFFFFF\"\n"
+            + "        },\n"
+            + "        \"saved\": {\n"
+            + "          \"background\": \"#00000000\",\n"
+            + "          \"foreground\": \"#FF89919B\"\n"
+            + "        }\n"
+            + "      }\n"
             + "    },\n"
             + "    \"keys\": {\n"
             + "      \"background\": \"this.editor.toolbar.background\",\n"

@@ -56,6 +56,7 @@ import com.termux.app.theme.ui.AppThemeController;
 import com.termux.app.theme.registry.YummyUiIconRegistry;
 import com.termux.app.theme.schema.YummyUiSchemaRuntime;
 import com.termux.app.theme.schema.YummyUiSchemaViewBinder;
+import com.termux.app.theme.schema.YummyUiPropertyApplier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -92,6 +93,8 @@ public class EditorController {
     private View mSessionSavingPill;
     private ImageView mSessionSavingIcon;
     private Animation mSessionSavingAnimation;
+    private boolean mSessionSaving;
+    private boolean mSessionSaveFailed;
     private Typeface mNunitoRegular;
     private Typeface mNunitoSemiBold;
 
@@ -407,18 +410,14 @@ public class EditorController {
     }
 
     private void updateSessionSavingIndicator(boolean saving, boolean failed) {
+        mSessionSaving = saving;
+        mSessionSaveFailed = failed;
         if (mSessionSavingPill == null || mSessionSavingIcon == null) return;
         if (mSessionSavingAnimation != null) {
             mSessionSavingIcon.clearAnimation();
             mSessionSavingAnimation = null;
         }
-        int backgroundColor = saving ? 0xFF16A34A : (failed ? 0xFFDC2626 : Color.TRANSPARENT);
-        int iconColor = (saving || failed) ? Color.WHITE : 0xFF89919B;
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(backgroundColor);
-        background.setCornerRadius(dpInt(999));
-        mSessionSavingPill.setBackground(background);
-        mSessionSavingIcon.setColorFilter(iconColor);
+        applySessionSavingIndicatorColors();
         mSessionSavingIcon.setContentDescription(
             saving ? "Menyimpan sesi" : (failed ? "Gagal menyimpan sesi" : "Sesi tersimpan")
         );
@@ -434,6 +433,59 @@ public class EditorController {
             mSessionSavingAnimation = rotation;
             mSessionSavingIcon.startAnimation(rotation);
         }
+    }
+
+    /** Recolors the current session state without restarting its save animation. */
+    private void applySessionSavingIndicatorColors() {
+        if (mSessionSavingPill == null || mSessionSavingIcon == null) return;
+        String backgroundProperty = YummyEditorSessionIndicatorColorProperties
+            .backgroundProperty(mSessionSaving, mSessionSaveFailed);
+        String foregroundProperty = YummyEditorSessionIndicatorColorProperties
+            .foregroundProperty(mSessionSaving, mSessionSaveFailed);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(resolveSessionIndicatorColor(backgroundProperty));
+        background.setCornerRadius(dpInt(999));
+        mSessionSavingPill.setBackground(background);
+        mSessionSavingIcon.setColorFilter(resolveSessionIndicatorColor(foregroundProperty));
+    }
+
+    private int resolveSessionIndicatorColor(String propertyId) {
+        int fallback = YummyEditorSessionIndicatorColorProperties.fallbackColor(propertyId);
+        if (mUiSchemaRuntime == null) return fallback;
+        com.termux.app.theme.schema.YummyUiSchemaResolver.ResolvedValue value =
+            mUiSchemaRuntime.getResolvedValue(propertyId);
+        if (value == null) return fallback;
+        Object rawColor = value.getValue();
+        if (!(rawColor instanceof String)) return fallback;
+        try {
+            return Color.parseColor((String) rawColor);
+        } catch (IllegalArgumentException ignored) {
+            return fallback;
+        }
+    }
+
+    private void bindSessionIndicatorColorProperties() {
+        if (mUiSchemaRuntime == null || mSessionSavingPill == null) {
+            applySessionSavingIndicatorColors();
+            return;
+        }
+        mUiSchemaRuntime.unregister(mSessionSavingPill);
+        for (String propertyId : YummyEditorSessionIndicatorColorProperties.propertyIds()) {
+            mUiSchemaRuntime.register(propertyId, "color", mSessionSavingPill,
+                new YummyUiPropertyApplier() {
+                    @Override
+                    public void apply(View target,
+                        com.termux.app.theme.schema.YummyUiSchemaResolver.ResolvedValue value) {
+                        applySessionSavingIndicatorColors();
+                    }
+
+                    @Override
+                    public void reset(View target) {
+                        applySessionSavingIndicatorColors();
+                    }
+                });
+        }
+        applySessionSavingIndicatorColors();
     }
 
     public void setDocumentActionListener(@Nullable DocumentActionListener listener) {
@@ -452,10 +504,14 @@ public class EditorController {
 
     /** Supplies the shared UI Schema runtime for Editor-owned app UI components. */
     public void setUiSchemaRuntime(@Nullable YummyUiSchemaRuntime runtime) {
+        if (mUiSchemaRuntime != null && mSessionSavingPill != null) {
+            mUiSchemaRuntime.unregister(mSessionSavingPill);
+        }
         if (mUiSchemaBinder != null) mUiSchemaBinder.unregisterAll();
         mUiSchemaRuntime = runtime;
         mUiSchemaBinder = runtime == null ? null : new YummyUiSchemaViewBinder(runtime);
         bindEditorUiSchemaViews();
+        bindSessionIndicatorColorProperties();
         renderTabs();
     }
 
@@ -463,6 +519,7 @@ public class EditorController {
     public void refreshUiSchemaBindings() {
         bindEditorUiSchemaViews();
         if (mUiSchemaBinder != null) mUiSchemaBinder.refresh();
+        applySessionSavingIndicatorColors();
     }
 
     private void bindEditorUiSchemaViews() {
