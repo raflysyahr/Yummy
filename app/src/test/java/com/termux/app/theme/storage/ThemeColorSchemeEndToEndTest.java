@@ -73,7 +73,7 @@ public class ThemeColorSchemeEndToEndTest {
             .load(migratedFile.getParentFile());
         JSONObject sidebar = migrated.getJSONObject("sidebar");
 
-        assertEquals(6, migrated.getInt("version"));
+        assertEquals(7, migrated.getInt("version"));
         assertEquals("#123456", sidebar.getString("background"));
         assertEquals("#66000000",
             sidebar.getJSONObject("overlay").getString("background"));
@@ -95,6 +95,10 @@ public class ThemeColorSchemeEndToEndTest {
         assertEquals("theme:foreground",
             settingsDialog.getJSONObject("button").getJSONObject("secondary")
                 .getString("foreground"));
+        JSONObject storageItem = migrated.getJSONObject("storage_bar").getJSONObject("item");
+        assertEquals("theme:activityBar.foreground", storageItem.getString("selectedForeground"));
+        assertEquals("theme:activityBar.foreground",
+            storageItem.getString("selectedIconForeground"));
     }
 
     @Test
@@ -118,7 +122,7 @@ public class ThemeColorSchemeEndToEndTest {
             .load(migratedFile.getParentFile());
         JSONObject settingsDialog = migrated.getJSONObject("settings").getJSONObject("dialog");
 
-        assertEquals(6, migrated.getInt("version"));
+        assertEquals(7, migrated.getInt("version"));
         assertEquals("#123456", settingsDialog.getString("background"));
         assertEquals("#ABCDEF", settingsDialog.getJSONObject("button")
             .getJSONObject("primary").getString("background"));
@@ -128,8 +132,35 @@ public class ThemeColorSchemeEndToEndTest {
         assertEquals("theme:button.foreground",
             settingsDialog.getJSONObject("button").getJSONObject("primary")
                 .getString("foreground"));
+        assertEquals("theme:activityBar.foreground", migrated.getJSONObject("storage_bar")
+            .getJSONObject("item").getString("selectedForeground"));
         assertEquals("untouched", migrated.getJSONObject("futureExtension")
             .getString("keep"));
+    }
+
+    @Test
+    public void versionSixColorSchemeMigrationAddsStorageRailMappingsAndPreservesValues()
+        throws Exception {
+        ThemePackageStorage storage = newStorage();
+        storage.importPackage(createPackage("step18-version-six"));
+
+        File colorSchemeFile = storage.ensureColorSchemeFile("step18-version-six");
+        JSONObject custom = new JSONObject()
+            .put("version", 6)
+            .put("futureExtension", new JSONObject().put("keep", "v6-custom"))
+            .put("storage_bar", new JSONObject()
+                .put("item", new JSONObject().put("selectedForeground", "#123456")));
+        write(colorSchemeFile, custom.toString(2));
+
+        File migratedFile = storage.ensureColorSchemeFile("step18-version-six");
+        JSONObject migrated = new ThemeColorSchemeStorage()
+            .load(migratedFile.getParentFile());
+        JSONObject item = migrated.getJSONObject("storage_bar").getJSONObject("item");
+
+        assertEquals(7, migrated.getInt("version"));
+        assertEquals("#123456", item.getString("selectedForeground"));
+        assertEquals("theme:activityBar.foreground", item.getString("selectedIconForeground"));
+        assertEquals("v6-custom", migrated.getJSONObject("futureExtension").getString("keep"));
     }
 
     @Test

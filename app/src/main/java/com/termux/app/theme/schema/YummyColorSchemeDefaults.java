@@ -10,13 +10,13 @@ package com.termux.app.theme.schema;
  * Yummy components visually consistent without duplicating theme-key choices.</p>
  */
 public final class YummyColorSchemeDefaults {
-    public static final int VERSION = 6;
+    public static final int VERSION = 7;
 
     private YummyColorSchemeDefaults() { }
 
     public static String toJson() {
         return "{\n"
-            + "  \"version\": 6,\n"
+            + "  \"version\": 7,\n"
             + "  \"sidebar\": {\n"
             + "    \"background\": \"theme:sideBar.background\",\n"
             + "    \"foreground\": \"theme:sideBar.foreground\",\n"
@@ -98,7 +98,9 @@ public final class YummyColorSchemeDefaults {
             + "      \"foreground\": \"this.sidebar.icon.foreground\"\n"
             + "    },\n"
             + "    \"item\": {\n"
-            + "      \"selectedBackground\": \"this.sidebar.selection.background\"\n"
+            + "      \"selectedBackground\": \"this.sidebar.selection.background\",\n"
+            + "      \"selectedForeground\": \"theme:activityBar.foreground\",\n"
+            + "      \"selectedIconForeground\": \"theme:activityBar.foreground\"\n"
             + "    }\n"
             + "  },\n"
             + "  \"editor\": {\n"

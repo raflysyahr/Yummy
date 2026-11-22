@@ -31,7 +31,7 @@ public class YummyThemeManagementColorSchemeTest {
         JSONObject primary = buttons.getJSONObject("primary");
         JSONObject secondary = buttons.getJSONObject("secondary");
 
-        assertEquals(6, defaults.getInt("version"));
+        assertEquals(7, defaults.getInt("version"));
         assertEquals("theme:widget.border", dialog.getString("border"));
         assertEquals("theme:widget.border", surface.getString("border"));
         assertEquals("theme:button.foreground", primary.getString("foreground"));

@@ -25,6 +25,18 @@ public class YummyFileManagerColorSchemeTest {
     }
 
     @Test
+    public void storageRailUsesDistinctSelectedAndInactiveForegroundProperties() {
+        assertEquals("sidebar.storage.foreground",
+            YummyFileManagerColorProperties.storageItemForegroundProperty(false));
+        assertEquals("sidebar.storage.item.selectedForeground",
+            YummyFileManagerColorProperties.storageItemForegroundProperty(true));
+        assertEquals("sidebar.storage.icon.foreground",
+            YummyFileManagerColorProperties.storageItemIconForegroundProperty(false));
+        assertEquals("sidebar.storage.item.selectedIconForeground",
+            YummyFileManagerColorProperties.storageItemIconForegroundProperty(true));
+    }
+
+    @Test
     public void rowAndActionPropertiesExistInDefaultColorScheme() throws Exception {
         JSONObject defaults = new JSONObject(YummyColorSchemeDefaults.toJson());
         JSONObject sidebar = defaults.getJSONObject("sidebar");
@@ -38,6 +50,11 @@ public class YummyFileManagerColorSchemeTest {
         assertEquals("#66000000", sidebar.getJSONObject("overlay").getString("background"));
         assertEquals("#14FFFFFF", sidebar.getJSONObject("dialog")
             .getJSONObject("closeButton").getString("background"));
-        assertEquals(6, defaults.getInt("version"));
+        JSONObject storageBar = defaults.getJSONObject("storage_bar");
+        JSONObject storageItem = storageBar.getJSONObject("item");
+        assertEquals("theme:activityBar.foreground", storageItem.getString("selectedForeground"));
+        assertEquals("theme:activityBar.foreground",
+            storageItem.getString("selectedIconForeground"));
+        assertEquals(7, defaults.getInt("version"));
     }
 }

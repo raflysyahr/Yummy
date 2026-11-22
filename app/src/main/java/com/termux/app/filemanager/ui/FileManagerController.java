@@ -2049,8 +2049,10 @@ public final class FileManagerController {
                 }
             }
             if (uiSchemaViewBinder != null) {
-                uiSchemaViewBinder.bindTextColor("sidebar.storage.foreground", name);
-                uiSchemaViewBinder.bindVectorTint("sidebar.storage.icon.foreground", icon);
+                uiSchemaViewBinder.bindTextColor(
+                    YummyFileManagerColorProperties.storageItemForegroundProperty(selected), name);
+                uiSchemaViewBinder.bindVectorTint(
+                    YummyFileManagerColorProperties.storageItemIconForegroundProperty(selected), icon);
                 if (selected) {
                     uiSchemaViewBinder.bindBackgroundTint("sidebar.storage.item.selectedBackground", icon);
                 }

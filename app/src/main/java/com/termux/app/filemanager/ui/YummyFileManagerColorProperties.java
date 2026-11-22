@@ -9,4 +9,16 @@ final class YummyFileManagerColorProperties {
             ? "sidebar.selection.background"
             : "sidebar.tree.row.background";
     }
+
+    static String storageItemForegroundProperty(boolean selected) {
+        return selected
+            ? "sidebar.storage.item.selectedForeground"
+            : "sidebar.storage.foreground";
+    }
+
+    static String storageItemIconForegroundProperty(boolean selected) {
+        return selected
+            ? "sidebar.storage.item.selectedIconForeground"
+            : "sidebar.storage.icon.foreground";
+    }
 }

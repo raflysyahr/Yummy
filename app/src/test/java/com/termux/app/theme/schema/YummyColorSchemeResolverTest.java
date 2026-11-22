@@ -53,11 +53,19 @@ public class YummyColorSchemeResolverTest {
         JSONObject document = new JSONObject()
             .put("version", YummyColorSchemeDefaults.VERSION)
             .put("storage_bar", new JSONObject()
-                .put("foreground", "#123456"));
-        YummyColorSchemeResolver.ResolutionResult result = resolver.resolve(document, null);
+                .put("foreground", "#123456")
+                .put("item", new JSONObject()
+                    .put("selectedForeground", "theme:activityBar.foreground")
+                    .put("selectedIconForeground", "theme:activityBar.foreground")));
+        LoadedTheme theme = theme(new JSONObject().put("activityBar.foreground", "#ABCDEF"));
+        YummyColorSchemeResolver.ResolutionResult result = resolver.resolve(document, theme);
 
         assertTrue(result.getDiagnostics().toString(), result.isUsable());
         assertEquals("#123456", result.getColors().get("sidebar.storage.foreground"));
+        assertEquals("#ABCDEF",
+            result.getColors().get("sidebar.storage.item.selectedForeground"));
+        assertEquals("#ABCDEF",
+            result.getColors().get("sidebar.storage.item.selectedIconForeground"));
     }
 
     @Test
