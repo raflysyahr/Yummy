@@ -70,10 +70,10 @@ import java.util.concurrent.Executors;
 /**
  * Yummy theme settings and preview UI.
  *
- * <p>The App UI Color Scheme and Editor Syntax Theme selectors are separate. Previewing a
- * theme is read-only: it does not register a Sora theme, apply an App UI palette, or alter the
- * currently active editor/terminal. A selection is persisted only after its target applier
- * reports success.</p>
+ * <p>App UI, Editor UI, and Editor Syntax Theme selections are independent. App UI and
+ * Editor Syntax have runtime appliers; Editor UI selection is persisted independently while
+ * its editor-view application is delivered by the subsequent Editor UI integration stage.
+ * Previewing any target is read-only and never changes the active editor or terminal.</p>
  *
  * <p>The host must pass its existing Nunito typeface. This controller does not change fonts,
  * grammar configuration, document content, tabs, undo history, or terminal settings.</p>
@@ -147,7 +147,7 @@ public final class ThemeSettingsController {
         uiSchemaThemeManager = manager;
     }
 
-    /** Reloads available packages and displays the two independent theme selectors. */
+    /** Reloads available packages and displays the independent theme selectors. */
     public void show() {
         requireMainThread();
         snapshot = registry.reload();
@@ -156,9 +156,9 @@ public final class ThemeSettingsController {
     }
 
     /**
-     * Applies the two persisted selections after their respective UI/editor owners are ready.
-     * Each target is attempted independently: an Editor Syntax failure does not undo a working
-     * App UI theme, and vice versa. Call after AppThemeController bindings and Sora TextMate
+     * Applies persisted App UI and Editor Syntax selections after their respective owners are
+     * ready. Editor UI selection is retained independently; its view applier is connected in a
+     * later integration stage. Call after AppThemeController bindings and Sora TextMate
      * initialization have completed.
      */
     public void applySavedThemes() {
@@ -250,8 +250,7 @@ public final class ThemeSettingsController {
             && declaredDefault.getMetadata().supports(target)) {
             return declaredDefault;
         }
-        List<LoadedTheme> available = target == ThemeTarget.APP_UI
-            ? snapshot.getAppUiThemes() : snapshot.getEditorSyntaxThemes();
+        List<LoadedTheme> available = snapshot.getThemesFor(target);
         for (LoadedTheme candidate : available) {
             if (candidate != null && candidate.getMetadata().supports(target)
                 && !failedThemeId.equals(candidate.getMetadata().getId())) {
@@ -349,7 +348,7 @@ public final class ThemeSettingsController {
         LinearLayout root = createRoot();
         root.addView(text("Themes", 22, textColor(), true));
         root.addView(text(
-            "Application UI, editor syntax, and file icon themes are managed independently.",
+            "Application UI, editor UI, editor syntax, and file icon themes are managed independently.",
             13, mutedColor(), false
         ), marginParams(0, dp(5), 0, dp(18)));
 
@@ -358,6 +357,12 @@ public final class ThemeSettingsController {
             "APPLICATION UI COLOR SCHEME",
             ThemeTarget.APP_UI,
             selection.getAppColorSchemeId()
+        );
+        addSelectionSection(
+            root,
+            "EDITOR UI THEME",
+            ThemeTarget.EDITOR_UI,
+            selection.getEditorUiThemeId()
         );
         addSelectionSection(
             root,
@@ -457,6 +462,9 @@ public final class ThemeSettingsController {
         details.append("\nVersion: ").append(theme.getMetadata().getVersion());
         if (theme.getMetadata().supports(ThemeTarget.APP_UI)) {
             details.append("\nApplication UI");
+        }
+        if (theme.getMetadata().supports(ThemeTarget.EDITOR_UI)) {
+            details.append(" · Editor UI");
         }
         if (theme.getMetadata().supports(ThemeTarget.EDITOR_SYNTAX)) {
             if (details.charAt(details.length() - 1) != '\n') details.append(" · ");
@@ -1337,9 +1345,14 @@ public final class ThemeSettingsController {
         TextView selectedLabel = text(value, 15, textColor(), true);
         root.addView(selectedLabel);
 
-        String helper = target == ThemeTarget.APP_UI
-            ? "Controls Yummy surfaces only. Terminal colors are not affected."
-            : "Controls syntax highlighting in the Sora code editor only.";
+        String helper;
+        if (target == ThemeTarget.APP_UI) {
+            helper = "Controls Yummy application surfaces. Editor UI and terminal settings remain independent.";
+        } else if (target == ThemeTarget.EDITOR_UI) {
+            helper = "Stores the independent editor workbench palette. Visual application to editor Views is the next integration stage.";
+        } else {
+            helper = "Controls syntax highlighting in the Sora code editor only.";
+        }
         root.addView(text(helper, 12, mutedColor(), false),
             marginParams(0, dp(3), 0, dp(9)));
 
@@ -1368,8 +1381,7 @@ public final class ThemeSettingsController {
     }
 
     private void showThemeChooser(ThemeTarget target) {
-        List<LoadedTheme> themes = target == ThemeTarget.APP_UI
-            ? snapshot.getAppUiThemes() : snapshot.getEditorSyntaxThemes();
+        List<LoadedTheme> themes = snapshot.getThemesFor(target);
         if (themes.isEmpty()) {
             showUnavailableMessage("No themes are available for " + targetLabel(target));
             return;
@@ -1474,6 +1486,8 @@ public final class ThemeSettingsController {
 
         if (target == ThemeTarget.APP_UI) {
             addAppUiPreview(root, theme);
+        } else if (target == ThemeTarget.EDITOR_UI) {
+            addEditorUiPreview(root, theme);
         } else {
             addEditorSyntaxPreview(root, theme);
         }
@@ -1530,6 +1544,47 @@ public final class ThemeSettingsController {
         root.addView(text(
             "This is a palette preview. Only Views explicitly bound through AppThemeController "
                 + "receive these colors; terminal Views remain excluded.",
+            11, mutedColor(), false
+        ), marginParams(0, dp(10), 0, 0));
+    }
+
+    /** Shows a read-only sample of VS Code editor workbench colors for the Editor UI target. */
+    private void addEditorUiPreview(LinearLayout root, LoadedTheme theme) {
+        root.addView(text("EDITOR UI WORKBENCH COLORS", 11, accentColor(), true),
+            marginParams(0, 0, 0, dp(7)));
+
+        String[][] identifiers = {
+            {"Editor background", "editor.background"},
+            {"Editor foreground", "editor.foreground"},
+            {"Line number", "editorLineNumber.foreground"},
+            {"Cursor", "editorCursor.foreground"},
+            {"Selection", "editor.selectionBackground"},
+            {"Current line", "editor.lineHighlightBackground"},
+            {"Inactive selection", "editor.inactiveSelectionBackground"},
+            {"Indent guide", "editorIndentGuide.background"},
+            {"Active indent guide", "editorIndentGuide.activeBackground"},
+            {"Bracket match", "editorBracketMatch.background"},
+            {"Editor widget background", "editorWidget.background"},
+            {"Editor widget foreground", "editorWidget.foreground"},
+            {"Editor widget border", "editorWidget.border"},
+            {"Suggestion selected", "editorSuggestWidget.selectedBackground"}
+        };
+        for (String[] entry : identifiers) {
+            Integer color = null;
+            String value = theme.getColorTheme().getColor(entry[1]);
+            if (value != null) {
+                try {
+                    color = AppThemeColorValueParser.parseHexColor(value);
+                } catch (IllegalArgumentException ignored) {
+                    // Unsupported VS Code values remain visible as "Not mapped" in this preview.
+                }
+            }
+            addColorRow(root, entry[0], color, entry[1]);
+        }
+        root.addView(text(
+            "This preview reads editor workbench colors only. Selecting this theme stores the "
+                + "Editor UI target without changing App UI, syntax highlighting, or terminal. "
+                + "Editor View application is implemented in the next integration stage.",
             11, mutedColor(), false
         ), marginParams(0, dp(10), 0, 0));
     }
@@ -1768,6 +1823,11 @@ public final class ThemeSettingsController {
                     Toast.makeText(activity, "App UI updated; File Icon Theme fell back to Yummy: "
                         + safeMessage(iconError), Toast.LENGTH_LONG).show();
                 }
+            } else if (target == ThemeTarget.EDITOR_UI) {
+                // Step 21 exposes and persists the independent target. Editor View binding is
+                // intentionally deferred so selecting this target cannot accidentally mutate
+                // App UI or syntax colors before the dedicated editor applier is integrated.
+                selectionStore.selectEditorUiTheme(theme.getMetadata().getId());
             } else {
                 if (editorSyntaxThemeApplier == null) {
                     throw new IllegalStateException("Editor Syntax applier is not connected");
@@ -1776,7 +1836,10 @@ public final class ThemeSettingsController {
                 selectionStore.selectEditorSyntaxTheme(theme.getMetadata().getId());
             }
             selection = selectionStore.read(snapshot);
-            Toast.makeText(activity, targetLabel(target) + " updated", Toast.LENGTH_SHORT).show();
+            String confirmation = target == ThemeTarget.EDITOR_UI
+                ? "Editor UI theme selected. Visual application is coming in the next integration step."
+                : targetLabel(target) + " updated";
+            Toast.makeText(activity, confirmation, Toast.LENGTH_SHORT).show();
             showSettingsDialog();
         } catch (Exception error) {
             Toast.makeText(activity,
@@ -1814,8 +1877,9 @@ public final class ThemeSettingsController {
     }
 
     private String selectedId(ThemeTarget target) {
-        return target == ThemeTarget.APP_UI
-            ? selection.getAppColorSchemeId() : selection.getEditorSyntaxThemeId();
+        if (target == ThemeTarget.APP_UI) return selection.getAppColorSchemeId();
+        if (target == ThemeTarget.EDITOR_UI) return selection.getEditorUiThemeId();
+        return selection.getEditorSyntaxThemeId();
     }
 
     private void showUnavailableMessage(String detail) {
@@ -1936,7 +2000,9 @@ public final class ThemeSettingsController {
     }
 
     private static String targetLabel(ThemeTarget target) {
-        return target == ThemeTarget.APP_UI ? "Application UI Color Scheme" : "Editor Syntax Theme";
+        if (target == ThemeTarget.APP_UI) return "Application UI Color Scheme";
+        if (target == ThemeTarget.EDITOR_UI) return "Editor UI Theme";
+        return "Editor Syntax Theme";
     }
 
     private static String sourceLabel(LoadedTheme theme) {

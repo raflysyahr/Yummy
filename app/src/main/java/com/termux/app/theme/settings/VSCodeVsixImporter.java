@@ -1083,6 +1083,8 @@ public final class VSCodeVsixImporter {
         public String getNormalizedJson() { return normalizedJson; }
         public String getTokenColorsReference() { return tokenColorsReference; }
         public boolean supportsAppUi() { return supportsAppUi; }
+        /** VS Code workbench colors are currently eligible for both independent UI targets. */
+        public boolean supportsEditorUi() { return supportsAppUi; }
         public boolean supportsEditorSyntax() { return supportsEditorSyntax; }
     }
 }

@@ -347,6 +347,7 @@ public final class ThemeImportController {
                 debug("JSON_PARSE", "SUCCESS; name=" + preview.getName()
                     + "; id=" + preview.getSuggestedId()
                     + "; appUi=" + preview.supportsAppUi()
+                    + "; editorUi=" + preview.supportsAppUi()
                     + "; editorSyntax=" + preview.supportsEditorSyntax());
                 postToMain(() -> showDebugDialog(
                     "JSON read and parsed successfully",
@@ -401,7 +402,10 @@ public final class ThemeImportController {
                 marginParams(0, dp(7), 0, dp(3)));
             for (VSCodeVsixImporter.ThemeEntry entry : preview.getThemes()) {
                 String targets = (entry.supportsAppUi() ? "App UI" : "")
-                    + (entry.supportsAppUi() && entry.supportsEditorSyntax() ? " · " : "")
+                    + (entry.supportsAppUi() && entry.supportsEditorUi() ? " · " : "")
+                    + (entry.supportsEditorUi() ? "Editor UI" : "")
+                    + ((entry.supportsAppUi() || entry.supportsEditorUi())
+                        && entry.supportsEditorSyntax() ? " · " : "")
                     + (entry.supportsEditorSyntax() ? "Editor Syntax" : "");
                 themeList.addView(text(entry.getLabel(), 13, textColor(), true),
                     marginParams(0, dp(4), 0, 0));
