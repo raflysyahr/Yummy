@@ -83,6 +83,10 @@ public final class ThemeSettingsController {
         void apply(LoadedTheme theme) throws Exception;
     }
 
+    public interface EditorUiThemeApplier {
+        void apply(LoadedTheme theme) throws Exception;
+    }
+
     private static final int COLOR_BACKGROUND = Color.rgb(12, 13, 15);
     private static final int COLOR_SURFACE = Color.rgb(22, 24, 28);
     private static final int COLOR_BORDER = Color.rgb(39, 42, 48);
@@ -96,6 +100,7 @@ public final class ThemeSettingsController {
     private final YummyThemeRegistry registry;
     private final AppThemeController appThemeController;
     private final EditorSyntaxThemeApplier editorSyntaxThemeApplier;
+    private EditorUiThemeApplier editorUiThemeApplier;
     private final ThemeSelectionStore selectionStore;
     private final ThemePackageStorage packageStorage;
     private final IconThemeStorage iconThemeStorage;
@@ -134,6 +139,11 @@ public final class ThemeSettingsController {
         this.uiTypeface = uiTypeface;
     }
 
+    /** Connects the independent Editor UI selection to its Sora runtime applier. */
+    public void setEditorUiThemeApplier(EditorUiThemeApplier applier) {
+        editorUiThemeApplier = applier;
+    }
+
     /** Connects Yummy-owned theme dialogs to the shared application UI Schema runtime. */
     public void setUiSchemaRuntime(YummyUiSchemaRuntime runtime) {
         if (uiSchemaBinder != null) uiSchemaBinder.unregisterAll();
@@ -156,10 +166,8 @@ public final class ThemeSettingsController {
     }
 
     /**
-     * Applies persisted App UI and Editor Syntax selections after their respective owners are
-     * ready. Editor UI selection is retained independently; its view applier is connected in a
-     * later integration stage. Call after AppThemeController bindings and Sora TextMate
-     * initialization have completed.
+     * Applies persisted App UI, Editor UI, and Editor Syntax selections after their owners are
+     * ready. Call after AppThemeController bindings and Sora TextMate initialization complete.
      */
     public void applySavedThemes() {
         requireMainThread();
@@ -218,6 +226,28 @@ public final class ThemeSettingsController {
                     recoveries.add("Editor Syntax restored with '" + fallback.getMetadata().getLabel() + "'");
                 } catch (Exception recoveryError) {
                     failures.add("Editor Syntax: " + safeMessage(recoveryError));
+                }
+            }
+        }
+
+        LoadedTheme editorUiTheme = snapshot.findById(selection.getEditorUiThemeId());
+        if (editorUiTheme != null && editorUiTheme.getMetadata().supports(ThemeTarget.EDITOR_UI)) {
+            try {
+                if (editorUiThemeApplier == null) {
+                    throw new IllegalStateException("Editor UI applier is not connected");
+                }
+                editorUiThemeApplier.apply(editorUiTheme);
+            } catch (Exception error) {
+                try {
+                    LoadedTheme fallback = findRecoveryTheme(
+                        ThemeTarget.EDITOR_UI, selection.getEditorUiThemeId());
+                    if (fallback == null || editorUiThemeApplier == null) throw error;
+                    editorUiThemeApplier.apply(fallback);
+                    selectionStore.selectEditorUiTheme(fallback.getMetadata().getId());
+                    selection = selection.withEditorUiTheme(fallback.getMetadata().getId());
+                    recoveries.add("Editor UI restored with '" + fallback.getMetadata().getLabel() + "'");
+                } catch (Exception recoveryError) {
+                    failures.add("Editor UI: " + safeMessage(recoveryError));
                 }
             }
         }
@@ -1824,9 +1854,10 @@ public final class ThemeSettingsController {
                         + safeMessage(iconError), Toast.LENGTH_LONG).show();
                 }
             } else if (target == ThemeTarget.EDITOR_UI) {
-                // Step 21 exposes and persists the independent target. Editor View binding is
-                // intentionally deferred so selecting this target cannot accidentally mutate
-                // App UI or syntax colors before the dedicated editor applier is integrated.
+                if (editorUiThemeApplier == null) {
+                    throw new IllegalStateException("Editor UI applier is not connected");
+                }
+                editorUiThemeApplier.apply(theme);
                 selectionStore.selectEditorUiTheme(theme.getMetadata().getId());
             } else {
                 if (editorSyntaxThemeApplier == null) {
@@ -1836,9 +1867,7 @@ public final class ThemeSettingsController {
                 selectionStore.selectEditorSyntaxTheme(theme.getMetadata().getId());
             }
             selection = selectionStore.read(snapshot);
-            String confirmation = target == ThemeTarget.EDITOR_UI
-                ? "Editor UI theme selected. Visual application is coming in the next integration step."
-                : targetLabel(target) + " updated";
+            String confirmation = targetLabel(target) + " updated";
             Toast.makeText(activity, confirmation, Toast.LENGTH_SHORT).show();
             showSettingsDialog();
         } catch (Exception error) {

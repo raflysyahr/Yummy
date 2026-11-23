@@ -60,6 +60,7 @@ import com.termux.app.theme.model.ResolvedAppTheme;
 import com.termux.app.theme.model.ResolvedEditorTheme;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.sora.SoraEditorThemeApplier;
+import com.termux.app.theme.sora.SoraEditorUiThemeController;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.storage.ThemeStorageException;
 import com.termux.app.theme.ui.AppThemeController;
@@ -417,6 +418,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mUiSchemaThemeManager.close();
             mUiSchemaThemeManager = null;
         }
+        if (mEditorUiThemeController != null) {
+            mEditorUiThemeController.clear();
+            mEditorUiThemeController = null;
+        }
         if (mAppThemeController != null) {
             mAppThemeController.release();
             mAppThemeController = null;
@@ -716,6 +721,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private EditorController mEditorController;
     private FileManagerController mFileManagerController;
     private AppThemeController mAppThemeController;
+    private SoraEditorUiThemeController mEditorUiThemeController;
     private YummyUiSchemaRuntime mUiSchemaRuntime;
     private YummyUiSchemaThemeManager mUiSchemaThemeManager;
     private ThemePackageStorage mThemePackageStorage;
@@ -760,9 +766,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** Initializes the independent App UI and Editor Syntax theme targets. */
+    /** Initializes the independent App UI, Editor UI, and Editor Syntax theme targets. */
     private void initializeThemeSystem() {
         mAppThemeController = new AppThemeController(this);
+        CodeEditor editor = findViewById(R.id.yummy_code_editor);
+        if (editor != null) {
+            mEditorUiThemeController = new SoraEditorUiThemeController(editor);
+        }
         mUiSchemaRuntime = new YummyUiSchemaRuntime();
         mThemePackageStorage = new ThemePackageStorage(getApplicationContext());
         mUiSchemaThemeManager = new YummyUiSchemaThemeManager(
@@ -770,6 +780,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bindApplicationThemeViews();
         mAppThemeController.setPaletteListener(theme -> {
             applyEditorAppTheme(theme);
+            if (mEditorUiThemeController != null) {
+                mEditorUiThemeController.refreshBaseAndReapply();
+            }
             if (mFileManagerController != null) {
                 mFileManagerController.refreshUiSchemaBindings();
             }
@@ -796,7 +809,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             uiTypeface = Typeface.DEFAULT;
         }
 
-        CodeEditor editor = findViewById(R.id.yummy_code_editor);
         mThemeSettingsController = new ThemeSettingsController(
             this,
             registry,
@@ -806,6 +818,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         );
         mThemeSettingsController.setUiSchemaRuntime(mUiSchemaRuntime);
         mThemeSettingsController.setUiSchemaThemeManager(mUiSchemaThemeManager);
+        mThemeSettingsController.setEditorUiThemeApplier(theme -> {
+            if (mEditorUiThemeController == null) {
+                throw new IllegalStateException("Sora Editor UI controller is unavailable");
+            }
+            mEditorUiThemeController.apply(theme);
+        });
 
         // TextMate support is initialized synchronously by EditorController.setup(), so both
         // independently stored selections can now be restored without changing terminal colors.
@@ -826,6 +844,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the separately selected App UI editor surface after syntax activation.
         applyEditorAppTheme(mAppThemeController == null
             ? null : mAppThemeController.getCurrentTheme());
+        if (mEditorUiThemeController != null) {
+            mEditorUiThemeController.refreshBaseAndReapply();
+        }
     }
 
     /** Applies only the app/editor canvas colors; TextMate token colors remain separate. */
