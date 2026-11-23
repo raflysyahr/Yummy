@@ -62,6 +62,8 @@ public final class EditorUiThemeAdapter {
         addMapping(result, "editorLineNumber.foreground", "LINE_NUMBER");
         addMapping(result, "editorLineNumber.activeForeground", "LINE_NUMBER_CURRENT");
         addMapping(result, "editorGutter.background", "LINE_NUMBER_BACKGROUND");
+        // VS Code has no dedicated gutter-divider color; use the gutter surface as fallback.
+        addMapping(result, "editorGutter.background", "LINE_DIVIDER");
         addMapping(result, "editor.lineHighlightBackground", "CURRENT_LINE");
         addMapping(result, "editor.selectionBackground", "SELECTED_TEXT_BACKGROUND");
         addMapping(result, "editorCursor.foreground", "SELECTION_INSERT");

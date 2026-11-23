@@ -193,6 +193,23 @@ public class EditorUiThemeAdapterTest {
     }
 
     @Test
+    public void resolvesEditorGutterDividerFromAvailableGutterSurfaceColor()
+        throws Exception {
+        LoadedTheme theme = theme(
+            "{\"name\":\"Gutter Divider\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorGutter.background\":\"#AABBCC\"}}"
+        );
+
+        ResolvedEditorUiTheme resolved = adapter.resolve(theme);
+        java.util.Map<String, Integer> colors = resolved.getColorsBySoraField();
+        assertEquals(Integer.valueOf(0xFFAABBCC), colors.get("LINE_NUMBER_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFFAABBCC), colors.get("LINE_DIVIDER"));
+        assertEquals("editorGutter.background",
+            resolved.getSourceIdentifiers().get("LINE_DIVIDER"));
+        assertFalse(colors.containsKey("KEYWORD"));
+    }
+
+    @Test
     public void missingAndDefaultColorsAreOmittedSoRuntimeCanRestoreBasePalette()
         throws Exception {
         LoadedTheme theme = theme(
