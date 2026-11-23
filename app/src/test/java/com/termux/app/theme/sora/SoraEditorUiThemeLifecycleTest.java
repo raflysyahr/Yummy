@@ -69,12 +69,15 @@ public class SoraEditorUiThemeLifecycleTest {
 
     @Test
     public void everyEditorUiMappingTargetsAFieldInPinnedSoraVersion() throws Exception {
-        for (String fieldName : new EditorUiThemeAdapter().getIdentifierMappings().values()) {
-            Field field = EditorColorScheme.class.getField(fieldName);
-            assertEquals("Sora color field must be an int: " + fieldName,
-                int.class, field.getType());
-            assertEquals("Sora color field must be static: " + fieldName,
-                true, Modifier.isStatic(field.getModifiers()));
+        for (java.util.List<String> fieldNames
+            : new EditorUiThemeAdapter().getIdentifierMappings().values()) {
+            for (String fieldName : fieldNames) {
+                Field field = EditorColorScheme.class.getField(fieldName);
+                assertEquals("Sora color field must be an int: " + fieldName,
+                    int.class, field.getType());
+                assertEquals("Sora color field must be static: " + fieldName,
+                    true, Modifier.isStatic(field.getModifiers()));
+            }
         }
     }
 
@@ -110,6 +113,63 @@ public class SoraEditorUiThemeLifecycleTest {
         assertEquals(0xFF313233, scheme.getColor(EditorColorScheme.PROBLEM_ERROR));
         assertEquals(0xFF414243, scheme.getColor(EditorColorScheme.TEXT_INLAY_HINT_FOREGROUND));
         assertEquals(0xFF010203, scheme.getColor(EditorColorScheme.KEYWORD));
+        activity.finish();
+    }
+
+    @Test
+    public void secondaryWidgetColorsApplyAndRestoreAsIndependentSoraFields() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CodeEditor editor = new CodeEditor(activity);
+        EditorColorScheme scheme = editor.getColorScheme();
+        assertNotNull("Sora must initialize a color scheme", scheme);
+        scheme.setColor(EditorColorScheme.COMPLETION_WND_TEXT_SECONDARY, 0xFF010203);
+        scheme.setColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_BACKGROUND, 0xFF111213);
+        scheme.setColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_BRIEF_MSG, 0xFF212223);
+        scheme.setColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_DETAILED_MSG, 0xFF313233);
+        scheme.setColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_ACTION, 0xFF414243);
+        scheme.setColor(EditorColorScheme.SIGNATURE_BACKGROUND, 0xFF515253);
+        scheme.setColor(EditorColorScheme.SIGNATURE_TEXT_NORMAL, 0xFF616263);
+        scheme.setColor(EditorColorScheme.SIGNATURE_TEXT_HIGHLIGHTED_PARAMETER, 0xFF717273);
+        scheme.setColor(EditorColorScheme.SIGNATURE_BORDER, 0xFF818283);
+        scheme.setColor(EditorColorScheme.TEXT_ACTION_WINDOW_BACKGROUND, 0xFF919293);
+        scheme.setColor(EditorColorScheme.TEXT_ACTION_WINDOW_ICON_COLOR, 0xFFA1A2A3);
+
+        SoraEditorUiThemeController controller = new SoraEditorUiThemeController(editor);
+        controller.apply(theme("secondary-widgets",
+            "{\"name\":\"Secondary Widgets\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorSuggestWidget.descriptionForeground\":\"#AABBCC\","
+                + "\"editorHoverWidget.background\":\"#DDEEFF\","
+                + "\"editorHoverWidget.foreground\":\"#112233\","
+                + "\"editorHoverWidget.highlightForeground\":\"#223344\","
+                + "\"editorHoverWidget.border\":\"#334455\","
+                + "\"textLink.foreground\":\"#445566\","
+                + "\"menu.background\":\"#556677\","
+                + "\"menu.foreground\":\"#667788\"}}"));
+
+        assertEquals(0xFFAABBCC, scheme.getColor(EditorColorScheme.COMPLETION_WND_TEXT_SECONDARY));
+        assertEquals(0xFFDDEEFF, scheme.getColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_BACKGROUND));
+        assertEquals(0xFF112233, scheme.getColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_BRIEF_MSG));
+        assertEquals(0xFF112233, scheme.getColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_DETAILED_MSG));
+        assertEquals(0xFF445566, scheme.getColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_ACTION));
+        assertEquals(0xFFDDEEFF, scheme.getColor(EditorColorScheme.SIGNATURE_BACKGROUND));
+        assertEquals(0xFF112233, scheme.getColor(EditorColorScheme.SIGNATURE_TEXT_NORMAL));
+        assertEquals(0xFF223344, scheme.getColor(EditorColorScheme.SIGNATURE_TEXT_HIGHLIGHTED_PARAMETER));
+        assertEquals(0xFF334455, scheme.getColor(EditorColorScheme.SIGNATURE_BORDER));
+        assertEquals(0xFF556677, scheme.getColor(EditorColorScheme.TEXT_ACTION_WINDOW_BACKGROUND));
+        assertEquals(0xFF667788, scheme.getColor(EditorColorScheme.TEXT_ACTION_WINDOW_ICON_COLOR));
+
+        controller.clear();
+        assertEquals(0xFF010203, scheme.getColor(EditorColorScheme.COMPLETION_WND_TEXT_SECONDARY));
+        assertEquals(0xFF111213, scheme.getColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_BACKGROUND));
+        assertEquals(0xFF212223, scheme.getColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_BRIEF_MSG));
+        assertEquals(0xFF313233, scheme.getColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_DETAILED_MSG));
+        assertEquals(0xFF414243, scheme.getColor(EditorColorScheme.DIAGNOSTIC_TOOLTIP_ACTION));
+        assertEquals(0xFF515253, scheme.getColor(EditorColorScheme.SIGNATURE_BACKGROUND));
+        assertEquals(0xFF616263, scheme.getColor(EditorColorScheme.SIGNATURE_TEXT_NORMAL));
+        assertEquals(0xFF717273, scheme.getColor(EditorColorScheme.SIGNATURE_TEXT_HIGHLIGHTED_PARAMETER));
+        assertEquals(0xFF818283, scheme.getColor(EditorColorScheme.SIGNATURE_BORDER));
+        assertEquals(0xFF919293, scheme.getColor(EditorColorScheme.TEXT_ACTION_WINDOW_BACKGROUND));
+        assertEquals(0xFFA1A2A3, scheme.getColor(EditorColorScheme.TEXT_ACTION_WINDOW_ICON_COLOR));
         activity.finish();
     }
 

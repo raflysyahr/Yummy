@@ -109,6 +109,34 @@ public class EditorUiThemeAdapterTest {
     }
 
     @Test
+    public void resolvesSecondarySoraWidgetsFromWorkbenchColors() throws Exception {
+        LoadedTheme theme = theme(
+            "{\"name\":\"Secondary Widgets\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorSuggestWidget.descriptionForeground\":\"#101112\","
+                + "\"editorHoverWidget.background\":\"#202122\","
+                + "\"editorHoverWidget.foreground\":\"#303132\","
+                + "\"editorHoverWidget.highlightForeground\":\"#404142\","
+                + "\"editorHoverWidget.border\":\"#505152\","
+                + "\"textLink.foreground\":\"#606162\","
+                + "\"menu.background\":\"#707172\","
+                + "\"menu.foreground\":\"#808182\"}}"
+        );
+
+        java.util.Map<String, Integer> colors = adapter.resolve(theme).getColorsBySoraField();
+        assertEquals(Integer.valueOf(0xFF101112), colors.get("COMPLETION_WND_TEXT_SECONDARY"));
+        assertEquals(Integer.valueOf(0xFF202122), colors.get("DIAGNOSTIC_TOOLTIP_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFF303132), colors.get("DIAGNOSTIC_TOOLTIP_BRIEF_MSG"));
+        assertEquals(Integer.valueOf(0xFF303132), colors.get("DIAGNOSTIC_TOOLTIP_DETAILED_MSG"));
+        assertEquals(Integer.valueOf(0xFF606162), colors.get("DIAGNOSTIC_TOOLTIP_ACTION"));
+        assertEquals(Integer.valueOf(0xFF202122), colors.get("SIGNATURE_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFF303132), colors.get("SIGNATURE_TEXT_NORMAL"));
+        assertEquals(Integer.valueOf(0xFF404142), colors.get("SIGNATURE_TEXT_HIGHLIGHTED_PARAMETER"));
+        assertEquals(Integer.valueOf(0xFF505152), colors.get("SIGNATURE_BORDER"));
+        assertEquals(Integer.valueOf(0xFF707172), colors.get("TEXT_ACTION_WINDOW_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFF808182), colors.get("TEXT_ACTION_WINDOW_ICON_COLOR"));
+    }
+
+    @Test
     public void missingAndDefaultColorsAreOmittedSoRuntimeCanRestoreBasePalette()
         throws Exception {
         LoadedTheme theme = theme(

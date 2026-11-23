@@ -105,13 +105,15 @@ public final class SoraEditorUiThemeController {
         EditorColorScheme scheme = editor.getColorScheme();
         if (scheme == null) return false;
         destination.clear();
-        for (String fieldName : adapter.getIdentifierMappings().values()) {
-            Integer colorId = findColorId(fieldName);
-            if (colorId == null || destination.containsKey(colorId)) continue;
-            try {
-                destination.put(colorId, scheme.getColor(colorId));
-            } catch (RuntimeException error) {
-                Log.w(TAG, "Cannot snapshot Sora color field " + fieldName, error);
+        for (java.util.List<String> fieldNames : adapter.getIdentifierMappings().values()) {
+            for (String fieldName : fieldNames) {
+                Integer colorId = findColorId(fieldName);
+                if (colorId == null || destination.containsKey(colorId)) continue;
+                try {
+                    destination.put(colorId, scheme.getColor(colorId));
+                } catch (RuntimeException error) {
+                    Log.w(TAG, "Cannot snapshot Sora color field " + fieldName, error);
+                }
             }
         }
         return !destination.isEmpty();
