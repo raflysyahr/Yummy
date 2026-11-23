@@ -69,6 +69,31 @@ public class SoraEditorColorFieldCoverageTest {
         }
     }
 
+    @Test
+    public void mappedSoraColorIdsAreUniqueAndDoNotOverlapTextMateFields() throws Exception {
+        Map<String, List<String>> mappings = new EditorUiThemeAdapter().getIdentifierMappings();
+        Set<Integer> mappedIds = new HashSet<>();
+        for (List<String> fieldNames : mappings.values()) {
+            for (String fieldName : fieldNames) {
+                Field field = EditorColorScheme.class.getField(fieldName);
+                int colorId = field.getInt(null);
+                assertTrue("Mapped Sora color IDs must be unique: " + fieldName,
+                    mappedIds.add(colorId));
+            }
+        }
+
+        for (String syntaxFieldName : names(
+            "ATTRIBUTE_VALUE", "ATTRIBUTE_NAME", "HTML_TAG", "ANNOTATION",
+            "FUNCTION_NAME", "IDENTIFIER_NAME", "IDENTIFIER_VAR", "LITERAL",
+            "OPERATOR", "COMMENT", "KEYWORD", "STATIC_SPAN_BACKGROUND",
+            "STATIC_SPAN_FOREGROUND")) {
+            Field syntaxField = EditorColorScheme.class.getField(syntaxFieldName);
+            int syntaxColorId = syntaxField.getInt(null);
+            assertFalse("Editor UI mapping must not alias TextMate color ID: "
+                + syntaxFieldName, mappedIds.contains(syntaxColorId));
+        }
+    }
+
     private static Set<String> mappedFields(Map<String, List<String>> mappings) {
         Set<String> result = new HashSet<>();
         for (List<String> fields : mappings.values()) result.addAll(fields);
