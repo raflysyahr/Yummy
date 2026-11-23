@@ -11,14 +11,15 @@ import com.termux.app.theme.registry.ThemeRegistrySnapshot;
 import java.util.List;
 
 /**
- * Persists the two Yummy theme targets independently.
+ * Persists the three Yummy theme targets independently.
  *
- * <p>App UI and Editor Syntax use separate preference keys. Updating one target never writes
- * the other key, and the terminal theme is deliberately not represented by this store.</p>
+ * <p>App UI, Editor UI, and Editor Syntax use separate preference keys. Updating one target
+ * never writes the other keys, and the terminal theme is deliberately not represented here.</p>
  */
 public final class ThemeSelectionStore {
     public static final String PREFERENCES_NAME = "yummy_theme_selection";
     public static final String KEY_APP_UI_THEME_ID = "app_ui_theme_id";
+    public static final String KEY_EDITOR_UI_THEME_ID = "editor_ui_theme_id";
     public static final String KEY_EDITOR_SYNTAX_THEME_ID = "editor_syntax_theme_id";
 
     private final SharedPreferences preferences;
@@ -34,6 +35,8 @@ public final class ThemeSelectionStore {
     public ThemeSelection read() {
         String appId = preferences.getString(
             KEY_APP_UI_THEME_ID, ThemeSelection.DEFAULT_APP_THEME_ID);
+        String editorUiId = preferences.getString(
+            KEY_EDITOR_UI_THEME_ID, ThemeSelection.DEFAULT_EDITOR_UI_THEME_ID);
         String editorId = preferences.getString(
             KEY_EDITOR_SYNTAX_THEME_ID, ThemeSelection.DEFAULT_EDITOR_THEME_ID);
 
@@ -45,11 +48,18 @@ public final class ThemeSelectionStore {
             appId = ThemeSelection.DEFAULT_APP_THEME_ID;
         }
         try {
-            new ThemeSelection(ThemeSelection.DEFAULT_APP_THEME_ID, editorId);
+            new ThemeSelection(ThemeSelection.DEFAULT_APP_THEME_ID, editorUiId,
+                ThemeSelection.DEFAULT_EDITOR_THEME_ID);
+        } catch (IllegalArgumentException invalidEditorUiId) {
+            editorUiId = ThemeSelection.DEFAULT_EDITOR_UI_THEME_ID;
+        }
+        try {
+            new ThemeSelection(ThemeSelection.DEFAULT_APP_THEME_ID,
+                ThemeSelection.DEFAULT_EDITOR_UI_THEME_ID, editorId);
         } catch (IllegalArgumentException invalidEditorId) {
             editorId = ThemeSelection.DEFAULT_EDITOR_THEME_ID;
         }
-        return new ThemeSelection(appId, editorId);
+        return new ThemeSelection(appId, editorUiId, editorId);
     }
 
     /**
@@ -66,15 +76,23 @@ public final class ThemeSelectionStore {
             snapshot.getAppUiThemes(),
             snapshot.getDefaultThemeFor(ThemeTarget.APP_UI)
         );
+        String editorUiId = resolveAvailableId(
+            stored.getEditorUiThemeId(),
+            snapshot.getEditorUiThemes(),
+            snapshot.getDefaultThemeFor(ThemeTarget.EDITOR_UI)
+        );
         String editorId = resolveAvailableId(
             stored.getEditorSyntaxThemeId(),
             snapshot.getEditorSyntaxThemes(),
             snapshot.getDefaultThemeFor(ThemeTarget.EDITOR_SYNTAX)
         );
 
-        ThemeSelection resolved = new ThemeSelection(appId, editorId);
+        ThemeSelection resolved = new ThemeSelection(appId, editorUiId, editorId);
         if (!appId.equals(stored.getAppColorSchemeId())) {
             preferences.edit().putString(KEY_APP_UI_THEME_ID, appId).apply();
+        }
+        if (!editorUiId.equals(stored.getEditorUiThemeId())) {
+            preferences.edit().putString(KEY_EDITOR_UI_THEME_ID, editorUiId).apply();
         }
         if (!editorId.equals(stored.getEditorSyntaxThemeId())) {
             preferences.edit().putString(KEY_EDITOR_SYNTAX_THEME_ID, editorId).apply();
@@ -91,6 +109,15 @@ public final class ThemeSelectionStore {
             .apply();
     }
 
+    /** Updates only the Editor UI preference key. */
+    public void selectEditorUiTheme(String themeId) {
+        ThemeSelection current = read();
+        ThemeSelection validated = current.withEditorUiTheme(themeId);
+        preferences.edit()
+            .putString(KEY_EDITOR_UI_THEME_ID, validated.getEditorUiThemeId())
+            .apply();
+    }
+
     /** Updates only the Editor Syntax preference key. */
     public void selectEditorSyntaxTheme(String themeId) {
         ThemeSelection current = read();
@@ -100,11 +127,12 @@ public final class ThemeSelectionStore {
             .apply();
     }
 
-    /** Writes both fields when an explicit complete selection object is supplied. */
+    /** Writes all three fields when an explicit complete selection object is supplied. */
     public void write(ThemeSelection selection) {
         if (selection == null) throw new IllegalArgumentException("Theme selection is required");
         preferences.edit()
             .putString(KEY_APP_UI_THEME_ID, selection.getAppColorSchemeId())
+            .putString(KEY_EDITOR_UI_THEME_ID, selection.getEditorUiThemeId())
             .putString(KEY_EDITOR_SYNTAX_THEME_ID, selection.getEditorSyntaxThemeId())
             .apply();
     }

@@ -10,10 +10,12 @@
   "author": "Yummy",
   "capabilities": {
     "appUi": true,
+    "editorUi": true,
     "editorSyntax": true
   },
   "defaultFor": [
     "app",
+    "editor-ui",
     "editor"
   ]
 }

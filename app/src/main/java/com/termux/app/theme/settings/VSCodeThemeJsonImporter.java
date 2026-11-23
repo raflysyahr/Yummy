@@ -236,6 +236,8 @@ public final class VSCodeThemeJsonImporter {
     ) throws JSONException {
         JSONObject capabilities = new JSONObject();
         capabilities.put("appUi", preview.supportsAppUi());
+        // A VS Code workbench color object can independently theme the Editor chrome/canvas.
+        capabilities.put("editorUi", preview.supportsAppUi());
         capabilities.put("editorSyntax", preview.supportsEditorSyntax());
 
         JSONObject metadata = new JSONObject();

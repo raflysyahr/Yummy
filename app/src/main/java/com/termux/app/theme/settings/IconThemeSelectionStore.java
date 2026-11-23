@@ -5,7 +5,7 @@ import android.content.SharedPreferences;
 
 import java.util.regex.Pattern;
 
-/** Persists the File Icon Theme independently from App UI and Editor Syntax selections. */
+/** Persists the File Icon Theme independently from App UI, Editor UI, and Editor Syntax selections. */
 public final class IconThemeSelectionStore {
     public static final String PREFERENCES_NAME = "yummy_icon_theme_selection";
     public static final String KEY_ICON_THEME_ID = "icon_theme_id";

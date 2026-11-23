@@ -25,7 +25,7 @@ import com.termux.app.theme.model.VSCodeIconTheme;
  *
  * <p>It resolves only the App UI capability and applies the resulting palette to Views
  * explicitly registered by Yummy UI controllers. It does not persist the selected theme;
- * independent App UI and Editor Syntax selections are handled by the theme selection layer.</p>
+ * independent App UI, Editor UI, and Editor Syntax selections are handled by the theme selection layer.</p>
  *
  * <p>Terminal Views must never be registered here.</p>
  */

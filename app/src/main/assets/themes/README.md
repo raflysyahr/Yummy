@@ -12,13 +12,15 @@ Yummy keeps the VS Code Color Theme file separate from Yummy-owned package metad
 
 ## Independent selections
 
-App UI and Editor Syntax are independent targets. A theme may support either target or
-both, but the selected IDs are stored separately. Changing one selection must not
-implicitly change the other.
+App UI, Editor UI, and Editor Syntax are independent Color Theme targets. A package may
+support any combination of them, and each selected ID is stored separately. Changing one
+selection must not implicitly change either of the others. Legacy metadata without the
+`editorUi` capability inherits that capability from `appUi` so existing packages remain valid.
 
 The initial default keeps the current Yummy appearance and the existing TextMate theme:
 
 - App UI default ID: `yummy-default`
+- Editor UI default ID: `yummy-default`
 - Editor Syntax default ID: `yummy-default`
 - Existing editor theme asset: `textmate/yummy-dark.json`
 
@@ -105,10 +107,10 @@ imported package is reported as a duplicate. Package directory names must match 
 metadata IDs. Discovery is intentionally non-recursive, and imported package paths are
 canonicalized to prevent package directories from escaping the configured import root.
 
-Use `snapshot.getAppUiThemes()` and `snapshot.getEditorSyntaxThemes()` to populate the
-separate App UI and Editor Syntax theme lists. `snapshot.getDefaultThemeFor(target)`
+Use `snapshot.getAppUiThemes()`, `snapshot.getEditorUiThemes()`, and
+`snapshot.getEditorSyntaxThemes()` to populate the three independent Color Theme lists. `snapshot.getDefaultThemeFor(target)`
 returns the declared default, preferring a built-in default when conflicting defaults
-exist. The current `yummy-default` package remains the declared default for both targets.
+exist. The current `yummy-default` package remains the declared default for all three Color Theme targets.
 
 ## Theme package storage (Stage 5)
 

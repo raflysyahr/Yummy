@@ -5,7 +5,8 @@ import java.util.Locale;
 /** Independent Yummy surface that can consume a VS Code Color Theme. */
 public enum ThemeTarget {
     APP_UI("app"),
-    EDITOR_SYNTAX("editor");
+    EDITOR_SYNTAX("editor"),
+    EDITOR_UI("editor-ui");
 
     private final String metadataValue;
 

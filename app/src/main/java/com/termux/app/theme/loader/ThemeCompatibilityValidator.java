@@ -38,6 +38,10 @@ public final class ThemeCompatibilityValidator {
             throw new ThemeLoadException(
                 "Theme '" + metadata.getId() + "' declares appUi support but has no colors object");
         }
+        if (metadata.supports(ThemeTarget.EDITOR_UI) && !theme.hasColors()) {
+            throw new ThemeLoadException(
+                "Theme '" + metadata.getId() + "' declares editorUi support but has no colors object");
+        }
         if (metadata.supports(ThemeTarget.EDITOR_SYNTAX)
             && !theme.hasTokenColors() && !theme.hasSemanticTokenColors()) {
             throw new ThemeLoadException(

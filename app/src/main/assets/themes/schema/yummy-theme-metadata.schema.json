@@ -74,15 +74,16 @@
       "required": ["appUi", "editorSyntax"],
       "properties": {
         "appUi": { "type": "boolean" },
+        "editorUi": { "type": "boolean", "description": "Optional for legacy packages; when omitted, follows appUi." },
         "editorSyntax": { "type": "boolean" }
       }
     },
     "defaultFor": {
       "type": "array",
       "uniqueItems": true,
-      "maxItems": 2,
+      "maxItems": 3,
       "items": {
-        "enum": ["app", "editor"]
+        "enum": ["app", "editor-ui", "editor"]
       }
     }
   }

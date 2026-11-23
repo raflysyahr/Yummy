@@ -1,7 +1,7 @@
 package com.termux.app.theme.model;
 
 /**
- * The user's independently selected App UI and Editor Syntax themes.
+ * The user's independently selected App UI, Editor UI, and Editor Syntax themes.
  * Persistence is intentionally left to the settings/storage layer.
  */
 public final class ThemeSelection {
@@ -10,17 +10,27 @@ public final class ThemeSelection {
 
     public static final String DEFAULT_APP_THEME_ID = "yummy-default";
     public static final String DEFAULT_EDITOR_THEME_ID = "yummy-default";
+    public static final String DEFAULT_EDITOR_UI_THEME_ID = "yummy-default";
 
     private final String appColorSchemeId;
+    private final String editorUiThemeId;
     private final String editorSyntaxThemeId;
 
+    /** Backwards-compatible constructor for callers that predate the independent Editor UI target. */
     public ThemeSelection(String appColorSchemeId, String editorSyntaxThemeId) {
+        this(appColorSchemeId, DEFAULT_EDITOR_UI_THEME_ID, editorSyntaxThemeId);
+    }
+
+    public ThemeSelection(String appColorSchemeId, String editorUiThemeId,
+                          String editorSyntaxThemeId) {
         this.appColorSchemeId = requireId(appColorSchemeId, "App color scheme ID");
+        this.editorUiThemeId = requireId(editorUiThemeId, "Editor UI theme ID");
         this.editorSyntaxThemeId = requireId(editorSyntaxThemeId, "Editor syntax theme ID");
     }
 
     public static ThemeSelection defaults() {
-        return new ThemeSelection(DEFAULT_APP_THEME_ID, DEFAULT_EDITOR_THEME_ID);
+        return new ThemeSelection(DEFAULT_APP_THEME_ID, DEFAULT_EDITOR_UI_THEME_ID,
+            DEFAULT_EDITOR_THEME_ID);
     }
 
     private static String requireId(String value, String fieldName) {
@@ -34,16 +44,24 @@ public final class ThemeSelection {
         return appColorSchemeId;
     }
 
+    public String getEditorUiThemeId() {
+        return editorUiThemeId;
+    }
+
     public String getEditorSyntaxThemeId() {
         return editorSyntaxThemeId;
     }
 
     public ThemeSelection withAppColorScheme(String themeId) {
-        return new ThemeSelection(themeId, editorSyntaxThemeId);
+        return new ThemeSelection(themeId, editorUiThemeId, editorSyntaxThemeId);
+    }
+
+    public ThemeSelection withEditorUiTheme(String themeId) {
+        return new ThemeSelection(appColorSchemeId, themeId, editorSyntaxThemeId);
     }
 
     public ThemeSelection withEditorSyntaxTheme(String themeId) {
-        return new ThemeSelection(appColorSchemeId, themeId);
+        return new ThemeSelection(appColorSchemeId, editorUiThemeId, themeId);
     }
 
     @Override
@@ -52,12 +70,14 @@ public final class ThemeSelection {
         if (!(other instanceof ThemeSelection)) return false;
         ThemeSelection that = (ThemeSelection) other;
         return appColorSchemeId.equals(that.appColorSchemeId)
+            && editorUiThemeId.equals(that.editorUiThemeId)
             && editorSyntaxThemeId.equals(that.editorSyntaxThemeId);
     }
 
     @Override
     public int hashCode() {
         int result = appColorSchemeId.hashCode();
+        result = 31 * result + editorUiThemeId.hashCode();
         result = 31 * result + editorSyntaxThemeId.hashCode();
         return result;
     }

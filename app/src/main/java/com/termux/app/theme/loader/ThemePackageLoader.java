@@ -145,9 +145,12 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
             }
             rejectUnknownCapabilityFields(capabilities);
             boolean appUi = requireBoolean(capabilities, "appUi");
+            boolean editorUi = capabilities.has("editorUi")
+                ? requireBoolean(capabilities, "editorUi") : appUi;
             boolean editorSyntax = requireBoolean(capabilities, "editorSyntax");
             EnumSet<ThemeTarget> supportedTargets = EnumSet.noneOf(ThemeTarget.class);
             if (appUi) supportedTargets.add(ThemeTarget.APP_UI);
+            if (editorUi) supportedTargets.add(ThemeTarget.EDITOR_UI);
             if (editorSyntax) supportedTargets.add(ThemeTarget.EDITOR_SYNTAX);
             if (supportedTargets.isEmpty()) {
                 throw new ThemeLoadException("Theme must support at least one target");
@@ -157,8 +160,8 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
             if (defaultFor == null) {
                 throw new ThemeLoadException("Theme metadata 'defaultFor' must be an array");
             }
-            if (defaultFor.length() > 2) {
-                throw new ThemeLoadException("Theme metadata 'defaultFor' may contain at most two targets");
+            if (defaultFor.length() > 3) {
+                throw new ThemeLoadException("Theme metadata 'defaultFor' may contain at most three targets");
             }
             EnumSet<ThemeTarget> defaultTargets = EnumSet.noneOf(ThemeTarget.class);
             for (int i = 0; i < defaultFor.length(); i++) {
@@ -232,7 +235,8 @@ public final class ThemePackageLoader implements ThemePackageSourceLoader {
         Iterator<String> keys = capabilities.keys();
         while (keys.hasNext()) {
             String key = keys.next();
-            if (!"appUi".equals(key) && !"editorSyntax".equals(key)) {
+            if (!"appUi".equals(key) && !"editorUi".equals(key)
+                && !"editorSyntax".equals(key)) {
                 throw new ThemeLoadException("Unknown theme capability: " + key);
             }
         }

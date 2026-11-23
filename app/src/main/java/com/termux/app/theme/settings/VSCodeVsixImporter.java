@@ -851,6 +851,8 @@ public final class VSCodeVsixImporter {
         throws JSONException {
         JSONObject capabilities = new JSONObject();
         capabilities.put("appUi", entry.supportsAppUi());
+        // VS Code workbench colors are also a valid independent Editor UI palette.
+        capabilities.put("editorUi", entry.supportsAppUi());
         capabilities.put("editorSyntax", entry.supportsEditorSyntax());
 
         JSONObject metadata = new JSONObject();

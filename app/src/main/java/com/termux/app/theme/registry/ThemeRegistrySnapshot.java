@@ -67,6 +67,11 @@ public final class ThemeRegistrySnapshot {
         return getThemesFor(ThemeTarget.APP_UI);
     }
 
+    /** Themes that can provide the independent Editor workbench/UI palette. */
+    public List<LoadedTheme> getEditorUiThemes() {
+        return getThemesFor(ThemeTarget.EDITOR_UI);
+    }
+
     /** Themes that can be used for Editor syntax highlighting. */
     public List<LoadedTheme> getEditorSyntaxThemes() {
         return getThemesFor(ThemeTarget.EDITOR_SYNTAX);
