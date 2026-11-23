@@ -65,16 +65,23 @@ public final class EditorUiThemeAdapter {
         addMapping(result, "editor.lineHighlightBackground", "CURRENT_LINE");
         addMapping(result, "editor.selectionBackground", "SELECTED_TEXT_BACKGROUND");
         addMapping(result, "editorCursor.foreground", "SELECTION_INSERT");
+        addMapping(result, "editorCursor.foreground", "SELECTION_HANDLE");
         addMapping(result, "editorIndentGuide.background", "BLOCK_LINE");
         addMapping(result, "editorIndentGuide.activeBackground", "BLOCK_LINE_CURRENT");
-        addMapping(result, "editorBracketMatch.background", "MATCHED_TEXT_BACKGROUND");
-        addMapping(result, "editorBracketMatch.border", "MATCHED_TEXT_BORDER");
+        addMapping(result, "editorRuler.foreground", "HARD_WRAP_MARKER");
+        // Bracket-match colors drive Sora's active matching-delimiter decoration.
+        addMapping(result, "editorBracketMatch.background", "HIGHLIGHTED_DELIMITERS_BACKGROUND");
+        addMapping(result, "editorBracketMatch.border", "HIGHLIGHTED_DELIMITERS_BORDER");
+        addMapping(result, "editorBracketMatch.foreground", "HIGHLIGHTED_DELIMITERS_FOREGROUND");
+        // Sora's MATCHED_TEXT_* fields are used for find/matched text occurrences, not brackets.
+        addMapping(result, "editor.findMatchBackground", "MATCHED_TEXT_BACKGROUND");
 
         // Sora completion and hover widgets.
         addMapping(result, "editorSuggestWidget.background", "COMPLETION_WND_BACKGROUND");
         addMapping(result, "editorSuggestWidget.foreground", "COMPLETION_WND_TEXT_PRIMARY");
         addMapping(result, "editorSuggestWidget.highlightForeground", "COMPLETION_WND_TEXT_MATCHED");
         addMapping(result, "editorSuggestWidget.selectedBackground", "COMPLETION_WND_ITEM_CURRENT");
+        addMapping(result, "editorSuggestWidget.border", "COMPLETION_WND_CORNER");
         addMapping(result, "editorSuggestWidget.descriptionForeground", "COMPLETION_WND_TEXT_SECONDARY");
         addMapping(result, "editorHoverWidget.background", "HOVER_BACKGROUND");
         addMapping(result, "editorHoverWidget.background", "DIAGNOSTIC_TOOLTIP_BACKGROUND");
@@ -108,6 +115,7 @@ public final class EditorUiThemeAdapter {
         // Diagnostic markers and scrollbar states supported by Sora 0.24.4.
         addMapping(result, "editorError.foreground", "PROBLEM_ERROR");
         addMapping(result, "editorWarning.foreground", "PROBLEM_WARNING");
+        addMapping(result, "scrollbar.background", "SCROLL_BAR_TRACK");
         addMapping(result, "scrollbarSlider.background", "SCROLL_BAR_THUMB");
         addMapping(result, "scrollbarSlider.activeBackground", "SCROLL_BAR_THUMB_PRESSED");
         LinkedHashMap<String, List<String>> immutable = new LinkedHashMap<>();

@@ -174,6 +174,68 @@ public class SoraEditorUiThemeLifecycleTest {
     }
 
     @Test
+    public void remainingSoraSurfaceColorsApplyAndRestoreWithoutChangingSyntaxColors()
+        throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CodeEditor editor = new CodeEditor(activity);
+        EditorColorScheme scheme = editor.getColorScheme();
+        assertNotNull("Sora must initialize a color scheme", scheme);
+        scheme.setColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_BACKGROUND, 0xFF010203);
+        scheme.setColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_BORDER, 0xFF111213);
+        scheme.setColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_FOREGROUND, 0xFF212223);
+        scheme.setColor(EditorColorScheme.MATCHED_TEXT_BACKGROUND, 0xFF313233);
+        scheme.setColor(EditorColorScheme.SELECTION_INSERT, 0xFF414243);
+        scheme.setColor(EditorColorScheme.SELECTION_HANDLE, 0xFF515253);
+        scheme.setColor(EditorColorScheme.HARD_WRAP_MARKER, 0xFF616263);
+        scheme.setColor(EditorColorScheme.SCROLL_BAR_TRACK, 0xFF717273);
+        scheme.setColor(EditorColorScheme.COMPLETION_WND_CORNER, 0xFF818283);
+        scheme.setColor(EditorColorScheme.KEYWORD, 0xFF919293);
+
+        SoraEditorUiThemeController controller = new SoraEditorUiThemeController(editor);
+        controller.apply(theme("remaining-sora-surfaces",
+            "{\"name\":\"Remaining Sora Surfaces\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorBracketMatch.background\":\"#AABBCC\","
+                + "\"editorBracketMatch.border\":\"#BBCCDD\","
+                + "\"editorBracketMatch.foreground\":\"#CCDDEE\","
+                + "\"editor.findMatchBackground\":\"#DDEEFF\","
+                + "\"editorCursor.foreground\":\"#112233\","
+                + "\"editorRuler.foreground\":\"#223344\","
+                + "\"scrollbar.background\":\"#334455\","
+                + "\"editorSuggestWidget.border\":\"#445566\"}}"));
+
+        assertEquals(0xFFAABBCC,
+            scheme.getColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_BACKGROUND));
+        assertEquals(0xFFBBCCDD,
+            scheme.getColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_BORDER));
+        assertEquals(0xFFCCDDEE,
+            scheme.getColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_FOREGROUND));
+        assertEquals(0xFFDDEEFF, scheme.getColor(EditorColorScheme.MATCHED_TEXT_BACKGROUND));
+        assertEquals(0xFF112233, scheme.getColor(EditorColorScheme.SELECTION_INSERT));
+        assertEquals(0xFF112233, scheme.getColor(EditorColorScheme.SELECTION_HANDLE));
+        assertEquals(0xFF223344, scheme.getColor(EditorColorScheme.HARD_WRAP_MARKER));
+        assertEquals(0xFF334455, scheme.getColor(EditorColorScheme.SCROLL_BAR_TRACK));
+        assertEquals(0xFF445566, scheme.getColor(EditorColorScheme.COMPLETION_WND_CORNER));
+        assertEquals("TextMate syntax colors must remain untouched", 0xFF919293,
+            scheme.getColor(EditorColorScheme.KEYWORD));
+
+        controller.clear();
+        assertEquals(0xFF010203,
+            scheme.getColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_BACKGROUND));
+        assertEquals(0xFF111213,
+            scheme.getColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_BORDER));
+        assertEquals(0xFF212223,
+            scheme.getColor(EditorColorScheme.HIGHLIGHTED_DELIMITERS_FOREGROUND));
+        assertEquals(0xFF313233, scheme.getColor(EditorColorScheme.MATCHED_TEXT_BACKGROUND));
+        assertEquals(0xFF414243, scheme.getColor(EditorColorScheme.SELECTION_INSERT));
+        assertEquals(0xFF515253, scheme.getColor(EditorColorScheme.SELECTION_HANDLE));
+        assertEquals(0xFF616263, scheme.getColor(EditorColorScheme.HARD_WRAP_MARKER));
+        assertEquals(0xFF717273, scheme.getColor(EditorColorScheme.SCROLL_BAR_TRACK));
+        assertEquals(0xFF818283, scheme.getColor(EditorColorScheme.COMPLETION_WND_CORNER));
+        assertEquals(0xFF919293, scheme.getColor(EditorColorScheme.KEYWORD));
+        activity.finish();
+    }
+
+    @Test
     public void syntaxBaseRemainsIndependentFromAppAndEditorUiOverlays() throws Exception {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         CodeEditor editor = new CodeEditor(activity);

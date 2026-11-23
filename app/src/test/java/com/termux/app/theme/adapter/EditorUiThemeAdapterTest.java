@@ -137,6 +137,43 @@ public class EditorUiThemeAdapterTest {
     }
 
     @Test
+    public void resolvesRemainingSoraSurfaceColorsAndSeparatesBracketFromFindHighlights()
+        throws Exception {
+        LoadedTheme theme = theme(
+            "{\"name\":\"Remaining Sora Surfaces\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorBracketMatch.background\":\"#101112\","
+                + "\"editorBracketMatch.border\":\"#202122\","
+                + "\"editorBracketMatch.foreground\":\"#303132\","
+                + "\"editor.findMatchBackground\":\"#404142\","
+                + "\"editorCursor.foreground\":\"#505152\","
+                + "\"editorRuler.foreground\":\"#606162\","
+                + "\"scrollbar.background\":\"#707172\","
+                + "\"editorSuggestWidget.border\":\"#808182\"}}"
+        );
+
+        ResolvedEditorUiTheme resolved = adapter.resolve(theme);
+        java.util.Map<String, Integer> colors = resolved.getColorsBySoraField();
+        assertEquals(Integer.valueOf(0xFF101112),
+            colors.get("HIGHLIGHTED_DELIMITERS_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFF202122),
+            colors.get("HIGHLIGHTED_DELIMITERS_BORDER"));
+        assertEquals(Integer.valueOf(0xFF303132),
+            colors.get("HIGHLIGHTED_DELIMITERS_FOREGROUND"));
+        assertEquals(Integer.valueOf(0xFF404142), colors.get("MATCHED_TEXT_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFF505152), colors.get("SELECTION_INSERT"));
+        assertEquals(Integer.valueOf(0xFF505152), colors.get("SELECTION_HANDLE"));
+        assertEquals(Integer.valueOf(0xFF606162), colors.get("HARD_WRAP_MARKER"));
+        assertEquals(Integer.valueOf(0xFF707172), colors.get("SCROLL_BAR_TRACK"));
+        assertEquals(Integer.valueOf(0xFF808182), colors.get("COMPLETION_WND_CORNER"));
+
+        assertEquals("editor.findMatchBackground",
+            resolved.getSourceIdentifiers().get("MATCHED_TEXT_BACKGROUND"));
+        assertFalse("Bracket colors must not target find-match fields",
+            adapter.getIdentifierMappings().get("editorBracketMatch.background")
+                .contains("MATCHED_TEXT_BACKGROUND"));
+    }
+
+    @Test
     public void missingAndDefaultColorsAreOmittedSoRuntimeCanRestoreBasePalette()
         throws Exception {
         LoadedTheme theme = theme(
