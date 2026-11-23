@@ -210,6 +210,22 @@ public class EditorUiThemeAdapterTest {
     }
 
     @Test
+    public void resolvesHintDiagnosticColorToSoraTypoMarker() throws Exception {
+        LoadedTheme theme = theme(
+            "{\"name\":\"Hint Diagnostics\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorHint.foreground\":\"#A1B2C3\"}}"
+        );
+
+        ResolvedEditorUiTheme resolved = adapter.resolve(theme);
+
+        assertEquals(Integer.valueOf(0xFFA1B2C3),
+            resolved.getColorsBySoraField().get("PROBLEM_TYPO"));
+        assertEquals("editorHint.foreground",
+            resolved.getSourceIdentifiers().get("PROBLEM_TYPO"));
+        assertFalse(resolved.getColorsBySoraField().containsKey("KEYWORD"));
+    }
+
+    @Test
     public void missingAndDefaultColorsAreOmittedSoRuntimeCanRestoreBasePalette()
         throws Exception {
         LoadedTheme theme = theme(

@@ -119,6 +119,9 @@ public final class EditorUiThemeAdapter {
         // Diagnostic markers and scrollbar states supported by Sora 0.24.4.
         addMapping(result, "editorError.foreground", "PROBLEM_ERROR");
         addMapping(result, "editorWarning.foreground", "PROBLEM_WARNING");
+        // Sora exposes a dedicated typo/hint marker color; VS Code's hint foreground is
+        // the closest workbench diagnostic color with the same non-error severity.
+        addMapping(result, "editorHint.foreground", "PROBLEM_TYPO");
         addMapping(result, "scrollbar.background", "SCROLL_BAR_TRACK");
         addMapping(result, "scrollbarSlider.background", "SCROLL_BAR_THUMB");
         addMapping(result, "scrollbarSlider.activeBackground", "SCROLL_BAR_THUMB_PRESSED");
