@@ -49,6 +49,66 @@ public class EditorUiThemeAdapterTest {
     }
 
     @Test
+    public void resolvesCompletionHoverDiagnosticAndInlineEditorWidgetColors() throws Exception {
+        LoadedTheme theme = theme(
+            "{\"name\":\"Editor Widgets\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorSuggestWidget.background\":\"#101112\","
+                + "\"editorSuggestWidget.foreground\":\"#202122\","
+                + "\"editorSuggestWidget.highlightForeground\":\"#303132\","
+                + "\"editorSuggestWidget.selectedBackground\":\"#404142\","
+                + "\"editorHoverWidget.background\":\"#505152\","
+                + "\"editorHoverWidget.foreground\":\"#606162\","
+                + "\"editorHoverWidget.highlightForeground\":\"#707172\","
+                + "\"editorHoverWidget.border\":\"#808182\","
+                + "\"editorError.foreground\":\"#909192\","
+                + "\"editorWarning.foreground\":\"#A0A1A2\","
+                + "\"editorInlayHint.background\":\"#B0B1B2\","
+                + "\"editorInlayHint.foreground\":\"#C0C1C2\","
+                + "\"editorStickyScroll.border\":\"#D0D1D2\","
+                + "\"editorWhitespace.foreground\":\"#D1D2D3\","
+                + "\"editor.lineHighlightBorder\":\"#D2D3D4\","
+                + "\"editor.selectionForeground\":\"#D3D4D5\","
+                + "\"editor.wordHighlightBackground\":\"#D4D5D6\","
+                + "\"editor.wordHighlightStrongBackground\":\"#D5D6D7\","
+                + "\"editor.wordHighlightBorder\":\"#D6D7D8\","
+                + "\"editor.wordHighlightStrongBorder\":\"#D7D8D9\","
+                + "\"editor.snippetTabstopHighlightBackground\":\"#D8D9DA\","
+                + "\"editor.snippetFinalTabstopHighlightBackground\":\"#D9DADB\","
+                + "\"scrollbarSlider.background\":\"#E0E1E2\","
+                + "\"scrollbarSlider.activeBackground\":\"#F0F1F2\"}}"
+        );
+
+        ResolvedEditorUiTheme resolved = adapter.resolve(theme);
+        java.util.Map<String, Integer> colors = resolved.getColorsBySoraField();
+        assertEquals(Integer.valueOf(0xFF101112), colors.get("COMPLETION_WND_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFF202122), colors.get("COMPLETION_WND_TEXT_PRIMARY"));
+        assertEquals(Integer.valueOf(0xFF303132), colors.get("COMPLETION_WND_TEXT_MATCHED"));
+        assertEquals(Integer.valueOf(0xFF404142), colors.get("COMPLETION_WND_ITEM_CURRENT"));
+        assertEquals(Integer.valueOf(0xFF505152), colors.get("HOVER_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFF606162), colors.get("HOVER_TEXT_NORMAL"));
+        assertEquals(Integer.valueOf(0xFF707172), colors.get("HOVER_TEXT_HIGHLIGHTED"));
+        assertEquals(Integer.valueOf(0xFF808182), colors.get("HOVER_BORDER"));
+        assertEquals(Integer.valueOf(0xFF909192), colors.get("PROBLEM_ERROR"));
+        assertEquals(Integer.valueOf(0xFFA0A1A2), colors.get("PROBLEM_WARNING"));
+        assertEquals(Integer.valueOf(0xFFB0B1B2), colors.get("TEXT_INLAY_HINT_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFFC0C1C2), colors.get("TEXT_INLAY_HINT_FOREGROUND"));
+        assertEquals(Integer.valueOf(0xFFD0D1D2), colors.get("STICKY_SCROLL_DIVIDER"));
+        assertEquals(Integer.valueOf(0xFFD1D2D3), colors.get("NON_PRINTABLE_CHAR"));
+        assertEquals(Integer.valueOf(0xFFD2D3D4), colors.get("CURRENT_ROW_BORDER"));
+        assertEquals(Integer.valueOf(0xFFD3D4D5), colors.get("TEXT_SELECTED"));
+        assertEquals(Integer.valueOf(0xFFD4D5D6), colors.get("TEXT_HIGHLIGHT_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFFD5D6D7), colors.get("TEXT_HIGHLIGHT_STRONG_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xFFD6D7D8), colors.get("TEXT_HIGHLIGHT_BORDER"));
+        assertEquals(Integer.valueOf(0xFFD7D8D9), colors.get("TEXT_HIGHLIGHT_STRONG_BORDER"));
+        assertEquals(Integer.valueOf(0xFFD8D9DA), colors.get("SNIPPET_BACKGROUND_EDITING"));
+        assertEquals(Integer.valueOf(0xFFD9DADB), colors.get("SNIPPET_BACKGROUND_RELATED"));
+        assertEquals(Integer.valueOf(0xFFE0E1E2), colors.get("SCROLL_BAR_THUMB"));
+        assertEquals(Integer.valueOf(0xFFF0F1F2), colors.get("SCROLL_BAR_THUMB_PRESSED"));
+        assertEquals("editorSuggestWidget.background",
+            resolved.getSourceIdentifiers().get("COMPLETION_WND_BACKGROUND"));
+    }
+
+    @Test
     public void missingAndDefaultColorsAreOmittedSoRuntimeCanRestoreBasePalette()
         throws Exception {
         LoadedTheme theme = theme(

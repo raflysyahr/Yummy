@@ -2,6 +2,7 @@ package com.termux.app.theme.sora;
 
 import android.app.Activity;
 
+import com.termux.app.theme.adapter.EditorUiThemeAdapter;
 import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.ThemeAppearance;
 import com.termux.app.theme.model.ThemeMetadata;
@@ -17,6 +18,8 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.EnumSet;
 
@@ -61,6 +64,52 @@ public class SoraEditorUiThemeLifecycleTest {
         controller.clear();
         assertEquals(0xFF223344, scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
         assertEquals(0xFF334455, scheme.getColor(EditorColorScheme.TEXT_NORMAL));
+        activity.finish();
+    }
+
+    @Test
+    public void everyEditorUiMappingTargetsAFieldInPinnedSoraVersion() throws Exception {
+        for (String fieldName : new EditorUiThemeAdapter().getIdentifierMappings().values()) {
+            Field field = EditorColorScheme.class.getField(fieldName);
+            assertEquals("Sora color field must be an int: " + fieldName,
+                int.class, field.getType());
+            assertEquals("Sora color field must be static: " + fieldName,
+                true, Modifier.isStatic(field.getModifiers()));
+        }
+    }
+
+    @Test
+    public void editorWidgetColorsApplyAndRestoreWithoutChangingSyntaxColors() throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CodeEditor editor = new CodeEditor(activity);
+        EditorColorScheme scheme = editor.getColorScheme();
+        assertNotNull("Sora must initialize a color scheme", scheme);
+        scheme.setColor(EditorColorScheme.KEYWORD, 0xFF010203);
+        scheme.setColor(EditorColorScheme.COMPLETION_WND_BACKGROUND, 0xFF111213);
+        scheme.setColor(EditorColorScheme.HOVER_BACKGROUND, 0xFF212223);
+        scheme.setColor(EditorColorScheme.PROBLEM_ERROR, 0xFF313233);
+        scheme.setColor(EditorColorScheme.TEXT_INLAY_HINT_FOREGROUND, 0xFF414243);
+
+        SoraEditorUiThemeController controller = new SoraEditorUiThemeController(editor);
+        controller.apply(theme("editor-widgets",
+            "{\"name\":\"Editor Widgets\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorSuggestWidget.background\":\"#AABBCC\","
+                + "\"editorHoverWidget.background\":\"#DDEEFF\","
+                + "\"editorError.foreground\":\"#112233\","
+                + "\"editorInlayHint.foreground\":\"#445566\"}}"));
+
+        assertEquals(0xFFAABBCC, scheme.getColor(EditorColorScheme.COMPLETION_WND_BACKGROUND));
+        assertEquals(0xFFDDEEFF, scheme.getColor(EditorColorScheme.HOVER_BACKGROUND));
+        assertEquals(0xFF112233, scheme.getColor(EditorColorScheme.PROBLEM_ERROR));
+        assertEquals(0xFF445566, scheme.getColor(EditorColorScheme.TEXT_INLAY_HINT_FOREGROUND));
+        assertEquals(0xFF010203, scheme.getColor(EditorColorScheme.KEYWORD));
+
+        controller.clear();
+        assertEquals(0xFF111213, scheme.getColor(EditorColorScheme.COMPLETION_WND_BACKGROUND));
+        assertEquals(0xFF212223, scheme.getColor(EditorColorScheme.HOVER_BACKGROUND));
+        assertEquals(0xFF313233, scheme.getColor(EditorColorScheme.PROBLEM_ERROR));
+        assertEquals(0xFF414243, scheme.getColor(EditorColorScheme.TEXT_INLAY_HINT_FOREGROUND));
+        assertEquals(0xFF010203, scheme.getColor(EditorColorScheme.KEYWORD));
         activity.finish();
     }
 
