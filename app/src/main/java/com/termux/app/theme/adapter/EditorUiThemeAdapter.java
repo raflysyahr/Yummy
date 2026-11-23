@@ -1,6 +1,7 @@
 package com.termux.app.theme.adapter;
 
 import com.termux.app.theme.model.LoadedTheme;
+import com.termux.app.theme.model.ResolvedEditorUiTheme;
 import com.termux.app.theme.model.ThemeTarget;
 import com.termux.app.theme.model.VSCodeColorTheme;
 
