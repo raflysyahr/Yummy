@@ -123,6 +123,8 @@ public class EditorController {
     private AppThemeController mAppThemeController;
     private YummyUiSchemaRuntime mUiSchemaRuntime;
     private YummyUiSchemaViewBinder mUiSchemaBinder;
+    private Runnable mEditorUiThemeRefresh;
+    private java.util.function.Consumer<View> mEditorUiPopupThemeApplier;
 
     private final List<EditorDocument> mDocuments = new ArrayList<>();
     private EditorDocument mActiveDocument;
@@ -500,6 +502,16 @@ public class EditorController {
         updateAppFileIcon();
         updateStatus();
         renderTabs();
+    }
+
+    /** Connects dynamic Editor UI theme refreshes without coupling the editor to theme storage. */
+    public void setEditorUiThemeCallbacks(
+        @Nullable Runnable refreshTabs,
+        @Nullable java.util.function.Consumer<View> popupApplier
+    ) {
+        mEditorUiThemeRefresh = refreshTabs;
+        mEditorUiPopupThemeApplier = popupApplier;
+        if (mEditorUiThemeRefresh != null) mEditorUiThemeRefresh.run();
     }
 
     /** Supplies the shared UI Schema runtime for Editor-owned app UI components. */
@@ -1125,6 +1137,7 @@ public class EditorController {
             tab.setBackgroundResource(active ? R.drawable.yummy_bg_tab_active : android.R.color.transparent);
             tab.setClickable(true);
             tab.setFocusable(true);
+            tab.setTag(active ? "yummy-editor-tab-active" : "yummy-editor-tab-inactive");
 
             ImageView icon = new ImageView(mActivity);
             // Keep Material Icon Theme as the fallback. A VS Code Icon Theme may replace it
@@ -1218,6 +1231,7 @@ public class EditorController {
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT);
             mTabsContainer.addView(tab, tabParams);
         }
+        if (mEditorUiThemeRefresh != null) mEditorUiThemeRefresh.run();
     }
 
     private int dpInt(float value) {
@@ -1464,6 +1478,9 @@ public class EditorController {
             item.setTextSize(13f);
             item.setTypeface(nunitoTypeface(true));
             item.setTextColor(encoding.equalsIgnoreCase(mActiveDocument.encoding) ? 0xFF80B7FF : 0xFFE5E7EB);
+            if (encoding.equalsIgnoreCase(mActiveDocument.encoding)) {
+                item.setTag("yummy-editor-popup-selected");
+            }
             if (mUiSchemaBinder != null) {
                 mUiSchemaBinder.bindTextColor(
                     encoding.equalsIgnoreCase(mActiveDocument.encoding)
@@ -1486,6 +1503,7 @@ public class EditorController {
         if (mUiSchemaBinder != null) {
             mUiSchemaBinder.bindBackgroundTint("editor.popup.background", scroll);
         }
+        if (mEditorUiPopupThemeApplier != null) mEditorUiPopupThemeApplier.accept(scroll);
         int popupWidth = dpInt(178);
         int maxPopupHeight = dpInt(280);
         scroll.measure(View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),

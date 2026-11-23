@@ -71,9 +71,8 @@ import java.util.concurrent.Executors;
  * Yummy theme settings and preview UI.
  *
  * <p>App UI, Editor UI, and Editor Syntax Theme selections are independent. App UI and
- * Editor Syntax have runtime appliers; Editor UI selection is persisted independently while
- * its editor-view application is delivered by the subsequent Editor UI integration stage.
- * Previewing any target is read-only and never changes the active editor or terminal.</p>
+ * App UI, Editor UI, and Editor Syntax have independent runtime appliers. Previewing any
+ * target is read-only and never changes the active editor or terminal.</p>
  *
  * <p>The host must pass its existing Nunito typeface. This controller does not change fonts,
  * grammar configuration, document content, tabs, undo history, or terminal settings.</p>

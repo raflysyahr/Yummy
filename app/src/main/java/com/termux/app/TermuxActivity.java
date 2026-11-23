@@ -61,6 +61,7 @@ import com.termux.app.theme.model.ResolvedEditorTheme;
 import com.termux.app.theme.registry.YummyThemeRegistry;
 import com.termux.app.theme.sora.SoraEditorThemeApplier;
 import com.termux.app.theme.sora.SoraEditorUiThemeController;
+import com.termux.app.theme.ui.EditorUiComponentThemeController;
 import com.termux.app.theme.storage.ThemePackageStorage;
 import com.termux.app.theme.storage.ThemeStorageException;
 import com.termux.app.theme.ui.AppThemeController;
@@ -722,6 +723,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private FileManagerController mFileManagerController;
     private AppThemeController mAppThemeController;
     private SoraEditorUiThemeController mEditorUiThemeController;
+    private EditorUiComponentThemeController mEditorUiComponentThemeController;
     private YummyUiSchemaRuntime mUiSchemaRuntime;
     private YummyUiSchemaThemeManager mUiSchemaThemeManager;
     private ThemePackageStorage mThemePackageStorage;
@@ -773,6 +775,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (editor != null) {
             mEditorUiThemeController = new SoraEditorUiThemeController(editor);
         }
+        mEditorUiComponentThemeController = new EditorUiComponentThemeController(this);
+        if (mEditorController != null) {
+            mEditorController.setEditorUiThemeCallbacks(
+                () -> mEditorUiComponentThemeController.refreshDynamicViews(),
+                popup -> mEditorUiComponentThemeController.applyPopup(popup)
+            );
+        }
         mUiSchemaRuntime = new YummyUiSchemaRuntime();
         mThemePackageStorage = new ThemePackageStorage(getApplicationContext());
         mUiSchemaThemeManager = new YummyUiSchemaThemeManager(
@@ -782,6 +791,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyEditorAppTheme(theme);
             if (mEditorUiThemeController != null) {
                 mEditorUiThemeController.refreshBaseAndReapply();
+            }
+            if (mEditorUiComponentThemeController != null) {
+                mEditorUiComponentThemeController.refreshBaseAndReapply();
             }
             if (mFileManagerController != null) {
                 mFileManagerController.refreshUiSchemaBindings();
@@ -823,6 +835,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 throw new IllegalStateException("Sora Editor UI controller is unavailable");
             }
             mEditorUiThemeController.apply(theme);
+            mEditorUiComponentThemeController.apply(theme);
         });
 
         // TextMate support is initialized synchronously by EditorController.setup(), so both
