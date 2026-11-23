@@ -44,6 +44,7 @@ public final class EditorUiComponentThemeController {
 
     private static final class ViewState {
         final Drawable background;
+        final Integer colorDrawableBackground;
         final ColorStateList backgroundTint;
         final ColorStateList text;
         final ColorStateList hintText;
@@ -51,8 +52,16 @@ public final class EditorUiComponentThemeController {
 
         ViewState(View view) {
             Drawable drawable = view.getBackground();
-            background = drawable == null ? null : drawable.getConstantState() == null
-                ? drawable : drawable.getConstantState().newDrawable(view.getResources()).mutate();
+            // ColorDrawable can be mutated in-place by View.setBackgroundColor(). Keep its
+            // value, not a potentially shared Drawable instance, as the immutable snapshot.
+            if (drawable instanceof ColorDrawable) {
+                colorDrawableBackground = ((ColorDrawable) drawable).getColor();
+                background = null;
+            } else {
+                colorDrawableBackground = null;
+                background = drawable == null ? null : drawable.getConstantState() == null
+                    ? drawable : drawable.getConstantState().newDrawable(view.getResources()).mutate();
+            }
             backgroundTint = view.getBackgroundTintList();
             text = view instanceof TextView ? ((TextView) view).getTextColors() : null;
             hintText = view instanceof TextView ? ((TextView) view).getHintTextColors() : null;
@@ -60,7 +69,8 @@ public final class EditorUiComponentThemeController {
         }
 
         void restore(View view) {
-            view.setBackground(background);
+            view.setBackground(colorDrawableBackground != null
+                ? new ColorDrawable(colorDrawableBackground) : background);
             view.setBackgroundTintList(backgroundTint);
             if (text != null && view instanceof TextView) {
                 ((TextView) view).setTextColor(text);
