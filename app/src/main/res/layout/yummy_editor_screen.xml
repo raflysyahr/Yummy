@@ -103,6 +103,7 @@
     </LinearLayout>
 
     <View
+        android:id="@+id/yummy_app_bar_divider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/yummy_divider" />
@@ -216,7 +217,11 @@
                 android:textSize="10sp" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
+        <View
+            android:id="@+id/yummy_status_ln_divider"
+            android:layout_width="1dp"
+            android:layout_height="26dp"
+            android:background="@color/yummy_divider" />
 
         <LinearLayout
             android:layout_width="34dp"
@@ -243,7 +248,11 @@
                 android:textSize="10sp" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
+        <View
+            android:id="@+id/yummy_status_col_divider"
+            android:layout_width="1dp"
+            android:layout_height="26dp"
+            android:background="@color/yummy_divider" />
 
         <LinearLayout
             android:layout_width="54dp"
@@ -270,7 +279,11 @@
                 android:textSize="10sp" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
+        <View
+            android:id="@+id/yummy_status_spaces_divider"
+            android:layout_width="1dp"
+            android:layout_height="26dp"
+            android:background="@color/yummy_divider" />
 
         <LinearLayout
             android:id="@+id/yummy_status_language_group"
@@ -301,7 +314,11 @@
                 android:textSize="10sp" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
+        <View
+            android:id="@+id/yummy_status_language_divider"
+            android:layout_width="1dp"
+            android:layout_height="26dp"
+            android:background="@color/yummy_divider" />
 
         <LinearLayout
             android:id="@+id/yummy_status_encoding_button"
@@ -331,7 +348,11 @@
                 android:contentDescription="Buka daftar encoding" />
         </LinearLayout>
 
-        <View android:layout_width="1dp" android:layout_height="26dp" android:background="@color/yummy_divider" />
+        <View
+            android:id="@+id/yummy_status_encoding_divider"
+            android:layout_width="1dp"
+            android:layout_height="26dp"
+            android:background="@color/yummy_divider" />
 
         <FrameLayout
             android:id="@+id/yummy_session_save_pill"

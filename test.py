@@ -25,6 +25,8 @@ Tab WORKFLOW:
     Log step        : ↑/↓ PgUp PgDn Home End / geser jari = scroll, e atau tombol [Copy Error] = salin baris error,
                       c atau tombol [Copy Semua] = salin seluruh log step, r = muat ulang, Backspace = balik
                       (butuh: pkg install termux-api + aplikasi Termux:API untuk clipboard)
+                      Step yang masih berjalan tampil LIVE (auto-refresh ~3 dtk, layar mengikuti baris terbaru);
+                      scroll ke atas = berhenti mengikuti, End / f / tombol ▼ = ikuti lagi
 
 Ctrl+Q / Ctrl+C : keluar.
 Patch TIDAK pernah ditulis ke file: dikirim lewat stdin (git apply -), jadi tidak ada file sementara.
@@ -208,6 +210,15 @@ def parse_job_log(text, step_name):
             parts = ln.split("\t", 2)
             raw.append(clean_log_line(parts[2] if len(parts) == 3 else ln))
         note = "(nama step tidak cocok, menampilkan seluruh job)"
+    lines, kinds = build_kinds(raw)
+    return lines, kinds, note
+
+
+TS_CAP_RE = re.compile(r"^\ufeff?(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?Z ?")
+
+
+def build_kinds(raw):
+    """Beri label tiap baris; isi blok '##[group]Run ...' = 'script' (bukan error)."""
     lines, kinds, in_script = [], [], False
     for l in raw:
         if l.strip() == "##[endgroup]":
@@ -220,7 +231,29 @@ def parse_job_log(text, step_name):
             continue
         lines.append(l)
         kinds.append("script" if in_script else classify_log_line(l))
-    return lines, kinds, note
+    return lines, kinds
+
+
+def parse_api_log(text, step):
+    """Log job mentah dari API (bisa dibaca saat job masih berjalan) tidak berlabel step,
+    jadi dipotong memakai jendela waktu step (ketelitian sekitar 1 detik)."""
+    start = end = None
+    if step is not None:
+        start = parse_iso(step.get("startedAt") or "")
+        if start is None:
+            return [], [], "(step belum mulai)"
+        if step.get("status") == "completed":
+            end = parse_iso(step.get("completedAt") or "")
+    raw, keep = [], step is None
+    for ln in text.splitlines():
+        m = TS_CAP_RE.match(ln)
+        if m and step is not None:
+            ts = parse_iso(m.group(1) + "Z")
+            keep = ts is not None and ts >= start and (end is None or ts <= end)
+        if keep:   # baris tanpa timestamp = lanjutan baris sebelumnya
+            raw.append(clean_log_line(ln))
+    lines, kinds = build_kinds(raw)
+    return lines, kinds, ""
 
 
 def extract_errors(lines, kinds):
@@ -520,6 +553,16 @@ class WorkflowPoller(threading.Thread):
             return False, self._first_line(p)
         return True, p.stdout or ""
 
+    def fetch_job_log_live(self, job_id):
+        """Log job lewat REST API: bisa dipakai saat job masih berjalan."""
+        try:
+            p = self._gh(["api", f"repos/{self.slug}/actions/jobs/{job_id}/logs"], timeout=60)
+        except Exception as e:
+            return False, str(e)[:120]
+        if p.returncode != 0:
+            return False, self._first_line(p)
+        return True, p.stdout or ""
+
     def run(self):
         if not self.slug:
             return
@@ -600,6 +643,7 @@ class App:
         self.log_gen = 0
         self.log_rev = 0
         self.log_fetched = 0.0
+        self.log_updated = 0.0
         self.log_was_running = False
         self.log_buttons = []
         self.log_lock = threading.Lock()
@@ -909,18 +953,28 @@ class App:
         # tombol
         x = 0
         for name, label in (("back", " ◀ Kembali "), ("err", " Copy Error "),
-                            ("all", " Copy Semua "), ("reload", " Reload ")):
+                            ("all", " Copy Semua "), ("reload", " ⟳ "), ("follow", " ▼ ")):
             self.put(2, x, label, curses.color_pair(6) | curses.A_BOLD)
             self.log_buttons.append((x, x + len(label), name))
             x += len(label) + 1
         with self.log_lock:
             lines, kinds, note, err = self.log_lines, self.log_kinds, self.log_note, self.log_err
             loading, rev = self.log_loading, self.log_rev
-        job, step = self.log_job or {}, self.log_step
+        job, step = self.fresh_job_step()
+        job = job or {}
         target = step or job
         sym, col = status_sym(target.get("status"), target.get("conclusion"), frame)
         what = step.get("name", "") if step else "Seluruh job"
-        info = " · memuat..." if loading else ""
+        live = target.get("status") != "completed"
+        parts = []
+        if live:
+            age = f" {int(time.time() - self.log_updated)}d" if self.log_updated else ""
+            parts.append(f"{frame} LIVE{age}")
+            if self.log_tail:
+                parts.append("ikuti")
+        if loading and not live:
+            parts.append("memuat...")
+        info = ("  " + " · ".join(parts)) if parts else ""
         self.put(3, 0, f" {sym} {what} · {job.get('name', '')}  ({len(lines)} baris){info} {note}"[: W - 1],
                  curses.color_pair(col) | curses.A_BOLD)
         if err:
@@ -978,7 +1032,7 @@ class App:
             help_ = "↑/↓ pilih  Enter/tap buka log  l log gagal  Backspace kembali  r refresh"
         else:
             title = f" WORKFLOW › log step   {slug}"
-            help_ = "↑/↓ scroll  e copy error  c copy semua  r reload  Backspace kembali"
+            help_ = "↑/↓ scroll  End ikuti  e copy error  c copy semua  r reload  Backspace"
         self.put(1, 0, title.ljust(W - 1), curses.color_pair(6) | curses.A_BOLD)
         if H < 8:
             self.put(2, 0, "Layar terlalu kecil")
@@ -1248,6 +1302,7 @@ class App:
             self.log_lines, self.log_kinds, self.log_note, self.log_err = [], [], "", ""
             self.log_rev += 1
         self.log_scroll = 0
+        self.log_updated = 0.0
         target = step or job
         self.log_tail = target.get("status") != "completed"
         self.log_was_running = self.log_tail
@@ -1258,8 +1313,25 @@ class App:
         self.log_gen += 1
         self.log_loading = False
 
+    def fresh_job_step(self):
+        """Job/step versi terbaru dari polling (status berubah saat run berjalan)."""
+        job, step = self.log_job, self.log_step
+        det, _, _ = self.poller.detail_snapshot()
+        if det and job:
+            for j in det.get("jobs") or []:
+                if j.get("databaseId") == job.get("databaseId"):
+                    job = j
+                    if step:
+                        for st in j.get("steps") or []:
+                            if st.get("number") == step.get("number"):
+                                step = st
+                                break
+                    break
+        return job, step
+
     def start_log_fetch(self):
-        job, step, rid = self.log_job, self.log_step, self.view_id
+        job, step = self.fresh_job_step()
+        rid = self.view_id
         if not job or job.get("databaseId") is None:
             self.log_err = "Job tidak punya id"
             return
@@ -1269,42 +1341,49 @@ class App:
         self.log_fetched = time.time()
         sname = step.get("name") if step else None
         jid = job["databaseId"]
+        live = job.get("status") != "completed"
 
         def work():
-            ok, text = self.poller.fetch_job_log(rid, jid)
-            lines, kinds, note = [], [], ""
-            if ok:
-                lines, kinds, note = parse_job_log(text, sname)
+            ok, lines, kinds, note, err = False, [], [], "", ""
+            if not live:   # job selesai: log per step akurat dari gh run view --log
+                ok, text = self.poller.fetch_job_log(rid, jid)
+                if ok:
+                    lines, kinds, note = parse_job_log(text, sname)
+                else:
+                    err = text
+            if not ok:     # job masih berjalan (atau gh menolak): API log + potong per jendela waktu step
+                ok, text = self.poller.fetch_job_log_live(jid)
+                if ok:
+                    lines, kinds, note = parse_api_log(text, step)
+                    err = ""
+                else:
+                    err = text + (" (dicoba lagi otomatis)" if live else "")
             with self.log_lock:
                 if gen != self.log_gen:
                     return
                 if ok:
                     self.log_lines, self.log_kinds, self.log_note, self.log_err = lines, kinds, note, ""
+                    self.log_updated = time.time()
                 else:
-                    self.log_err = text
+                    self.log_err = err
                 self.log_rev += 1
                 self.log_loading = False
 
         threading.Thread(target=work, daemon=True).start()
 
     def log_running(self):
-        det, _, _ = self.poller.detail_snapshot()
-        if not det or not self.log_job:
+        job, step = self.fresh_job_step()
+        if not job:
             return False
-        for job in det.get("jobs") or []:
-            if job.get("databaseId") == self.log_job.get("databaseId"):
-                if self.log_step:
-                    for s in job.get("steps") or []:
-                        if s.get("number") == self.log_step.get("number"):
-                            return s.get("status") != "completed"
-                return job.get("status") != "completed"
-        return False
+        return (step or job).get("status") != "completed"
 
     def log_action(self, name):
         if name == "back":
             self.close_log()
         elif name == "reload":
             self.start_log_fetch()
+        elif name == "follow":
+            self.log_tail = True
         else:
             self.do_copy(name)
 
@@ -1336,6 +1415,8 @@ class App:
                 self.do_copy("err")
             elif k == "c":
                 self.do_copy("all")
+            elif k in ("f", "F"):
+                self.log_tail = True
             elif k == "r":
                 self.start_log_fetch()
             elif k in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_PPAGE, curses.KEY_NPAGE,
@@ -1346,6 +1427,7 @@ class App:
                     self.log_scroll = 0
                 elif k == curses.KEY_END:
                     self.log_scroll = 10 ** 9
+                    self.log_tail = True
                 else:
                     self.log_scroll = max(0, self.log_scroll + d[k])
             return
@@ -1415,7 +1497,7 @@ class App:
         while True:
             if self.tab == 1 and self.wf_view == "log" and not self.log_loading:
                 running = self.log_running()
-                if (running or self.log_was_running) and time.time() - self.log_fetched >= 4:
+                if (running or self.log_was_running) and time.time() - self.log_fetched >= 3:
                     self.start_log_fetch()
                 self.log_was_running = running
             self.draw()

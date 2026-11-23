@@ -3,6 +3,8 @@ package com.termux.app.theme.ui;
 import com.termux.app.theme.model.ThemeAppearance;
 import com.termux.app.theme.model.VSCodeColorTheme;
 
+import android.content.res.ColorStateList;
+
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -81,6 +83,73 @@ public class EditorUiComponentThemeControllerTest {
 
         assertNull(palette.buttonForeground);
         assertEquals(Integer.valueOf(0xFFABCDEF), palette.popupForeground);
+    }
+
+    @Test
+    public void resolvesEditorBordersAndInteractiveWorkbenchColors() throws Exception {
+        VSCodeColorTheme theme = theme(
+            "{\"name\":\"Interactive\",\"type\":\"dark\",\"colors\":{"
+                + "\"titleBar.border\":\"#101010\","
+                + "\"editorGroupHeader.border\":\"#202020\","
+                + "\"tab.border\":\"#252525\","
+                + "\"tab.activeBorder\":\"#303030\","
+                + "\"statusBar.border\":\"#404040\","
+                + "\"editorWidget.border\":\"#505050\","
+                + "\"tab.hoverBackground\":\"#606060\","
+                + "\"tab.hoverForeground\":\"#707070\","
+                + "\"list.hoverBackground\":\"#808080\","
+                + "\"list.hoverForeground\":\"#909090\","
+                + "\"button.background\":\"#A0A0A0\","
+                + "\"button.hoverBackground\":\"#B0B0B0\","
+                + "\"button.border\":\"#C0C0C0\"}}"
+        );
+
+        EditorUiComponentThemeController.Palette palette =
+            EditorUiComponentThemeController.resolve(theme);
+
+        assertEquals(Integer.valueOf(0xFF101010), palette.toolbarBorder);
+        assertEquals(Integer.valueOf(0xFF202020), palette.headerBorder);
+        assertEquals(Integer.valueOf(0xFF252525), palette.tabBorder);
+        assertEquals(Integer.valueOf(0xFF303030), palette.activeTabBorder);
+        assertEquals(Integer.valueOf(0xFF404040), palette.statusBorder);
+        assertEquals(Integer.valueOf(0xFF505050), palette.popupBorder);
+        assertEquals(Integer.valueOf(0xFF606060), palette.tabHoverBackground);
+        assertEquals(Integer.valueOf(0xFF707070), palette.tabHoverForeground);
+        assertEquals(Integer.valueOf(0xFF808080), palette.listHoverBackground);
+        assertEquals(Integer.valueOf(0xFF909090), palette.listHoverForeground);
+        assertEquals(Integer.valueOf(0xFFA0A0A0), palette.buttonBackground);
+        assertEquals(Integer.valueOf(0xFFB0B0B0), palette.buttonHoverBackground);
+        assertEquals(Integer.valueOf(0xFFC0C0C0), palette.buttonBorder);
+    }
+
+    @Test
+    public void borderIdentifiersUseDocumentedFallbacks() throws Exception {
+        VSCodeColorTheme theme = theme(
+            "{\"name\":\"Fallback Borders\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorGroup.border\":\"#111111\","
+                + "\"tab.unfocusedActiveBorder\":\"#222222\","
+                + "\"menu.border\":\"#333333\"}}"
+        );
+
+        EditorUiComponentThemeController.Palette palette =
+            EditorUiComponentThemeController.resolve(theme);
+
+        assertEquals(Integer.valueOf(0xFF111111), palette.headerBorder);
+        assertEquals(Integer.valueOf(0xFF222222), palette.activeTabBorder);
+        assertEquals(Integer.valueOf(0xFF333333), palette.popupBorder);
+    }
+
+    @Test
+    public void hoverForegroundIsOnlyUsedForInteractiveStates() {
+        ColorStateList colors = EditorUiComponentThemeController.createForegroundColorStateList(
+            0xFF112233, 0xFFAABBCC);
+
+        assertEquals(0xFF112233, colors.getDefaultColor());
+        assertEquals(0xFFAABBCC, colors.getColorForState(
+            new int[] { android.R.attr.state_pressed }, 0));
+        assertEquals(0xFFAABBCC, colors.getColorForState(
+            new int[] { android.R.attr.state_hovered }, 0));
+        assertEquals(0xFF112233, colors.getColorForState(new int[0], 0));
     }
 
     @Test

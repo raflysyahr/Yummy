@@ -1378,7 +1378,7 @@ public final class ThemeSettingsController {
         if (target == ThemeTarget.APP_UI) {
             helper = "Controls Yummy application surfaces. Editor UI and terminal settings remain independent.";
         } else if (target == ThemeTarget.EDITOR_UI) {
-            helper = "Stores the independent editor workbench palette. Visual application to editor Views is the next integration stage.";
+            helper = "Controls the editor workbench, tabs, status bar, and editor dialogs/popups. Syntax highlighting and terminal settings remain independent.";
         } else {
             helper = "Controls syntax highlighting in the Sora code editor only.";
         }

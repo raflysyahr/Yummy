@@ -3,8 +3,12 @@ package com.termux.app.theme.ui;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -65,9 +69,12 @@ public final class EditorUiComponentThemeController {
         Integer inactiveTabBackground, inactiveTabForeground;
         Integer statusBackground, statusForeground;
         Integer panelBackground, panelForeground;
-        Integer divider, popupBackground, popupForeground;
+        Integer divider, toolbarBorder, headerBorder, tabBorder, activeTabBorder, statusBorder;
+        Integer popupBackground, popupForeground, popupBorder;
         Integer popupSelectedBackground, popupSelectedForeground;
-        Integer buttonForeground;
+        Integer tabHoverBackground, tabHoverForeground;
+        Integer listHoverBackground, listHoverForeground;
+        Integer buttonBackground, buttonHoverBackground, buttonBorder, buttonForeground;
     }
 
     public EditorUiComponentThemeController(Activity activity) {
@@ -111,8 +118,11 @@ public final class EditorUiComponentThemeController {
     /** Styles the dynamically-created encoding popup using workbench widget/menu colors. */
     public void applyPopup(View popupRoot) {
         if (popupRoot == null || currentTheme == null || palette == null) return;
-        if (palette.popupBackground != null) popupRoot.setBackgroundColor(palette.popupBackground);
-        applyPopupChildren(popupRoot);
+        if (palette.popupBackground != null || palette.popupBorder != null) {
+            popupRoot.setBackground(createSurfaceDrawable(
+                popupRoot, palette.popupBackground, palette.popupBorder));
+        }
+        applyPopupChildren(popupRoot, true);
     }
 
     public Integer getPopupBackgroundColor() {
@@ -124,8 +134,9 @@ public final class EditorUiComponentThemeController {
         if (dialog == null || currentTheme == null || palette == null) return;
 
         Window window = dialog.getWindow();
-        if (window != null && palette.popupBackground != null) {
-            window.setBackgroundDrawable(new ColorDrawable(palette.popupBackground));
+        if (window != null && (palette.popupBackground != null || palette.popupBorder != null)) {
+            window.setBackgroundDrawable(createSurfaceDrawable(
+                window.getDecorView(), palette.popupBackground, palette.popupBorder));
         }
 
         int titleId = activity.getResources().getIdentifier("alertTitle", "id", "android");
@@ -139,6 +150,7 @@ public final class EditorUiComponentThemeController {
                 AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL }) {
             Button button = dialog.getButton(which);
             setTextColor(button, actionForeground);
+            applyDialogButtonSurface(button);
         }
     }
 
@@ -169,12 +181,25 @@ public final class EditorUiComponentThemeController {
         p.panelBackground = color(document, "panel.background");
         p.panelForeground = color(document, "panel.foreground");
         p.divider = color(document, "editorGroup.border");
+        p.toolbarBorder = color(document, "titleBar.border");
+        p.headerBorder = firstColor(document, "editorGroupHeader.border", "editorGroup.border");
+        p.tabBorder = color(document, "tab.border");
+        p.activeTabBorder = firstColor(document, "tab.activeBorder", "tab.unfocusedActiveBorder");
+        p.statusBorder = color(document, "statusBar.border");
         p.popupBackground = firstColor(document, "editorWidget.background", "menu.background");
         p.popupForeground = firstColor(document, "editorWidget.foreground", "menu.foreground");
+        p.popupBorder = firstColor(document, "editorWidget.border", "menu.border");
         p.popupSelectedBackground = firstColor(document,
             "list.activeSelectionBackground", "menu.selectionBackground");
         p.popupSelectedForeground = firstColor(document,
             "list.activeSelectionForeground", "menu.selectionForeground");
+        p.tabHoverBackground = color(document, "tab.hoverBackground");
+        p.tabHoverForeground = color(document, "tab.hoverForeground");
+        p.listHoverBackground = color(document, "list.hoverBackground");
+        p.listHoverForeground = color(document, "list.hoverForeground");
+        p.buttonBackground = color(document, "button.background");
+        p.buttonHoverBackground = color(document, "button.hoverBackground");
+        p.buttonBorder = color(document, "button.border");
         p.buttonForeground = color(document, "button.foreground");
         return p;
     }
@@ -200,12 +225,18 @@ public final class EditorUiComponentThemeController {
         baseStates.clear();
         dynamicTabStates.clear();
         capture(baseStates, activity.findViewById(R.id.yummy_app_bar));
+        capture(baseStates, activity.findViewById(R.id.yummy_app_bar_divider));
         capture(baseStates, activity.findViewById(R.id.yummy_tab_bar));
         capture(baseStates, activity.findViewById(R.id.yummy_editor_status_bar));
         capture(baseStates, activity.findViewById(R.id.yummy_keys_row));
         capture(baseStates, activity.findViewById(R.id.yummy_editor_top_divider));
         capture(baseStates, activity.findViewById(R.id.yummy_editor_bottom_divider));
         capture(baseStates, activity.findViewById(R.id.yummy_editor_status_divider));
+        capture(baseStates, activity.findViewById(R.id.yummy_status_ln_divider));
+        capture(baseStates, activity.findViewById(R.id.yummy_status_col_divider));
+        capture(baseStates, activity.findViewById(R.id.yummy_status_spaces_divider));
+        capture(baseStates, activity.findViewById(R.id.yummy_status_language_divider));
+        capture(baseStates, activity.findViewById(R.id.yummy_status_encoding_divider));
         capture(baseStates, activity.findViewById(R.id.yummy_btn_new_tab));
         capture(baseStates, activity.findViewById(R.id.yummy_btn_tabs_menu));
         captureForegroundTree(baseStates, activity.findViewById(R.id.yummy_app_bar));
@@ -269,12 +300,20 @@ public final class EditorUiComponentThemeController {
 
     private void applyStaticViews() {
         setBackground(R.id.yummy_app_bar, palette.toolbarBackground);
+        setBackground(R.id.yummy_app_bar_divider, palette.toolbarBorder);
         setBackground(R.id.yummy_tab_bar, palette.tabsBackground);
         setBackground(R.id.yummy_editor_status_bar, palette.statusBackground);
         setBackground(R.id.yummy_keys_row, palette.panelBackground);
-        setBackground(R.id.yummy_editor_top_divider, palette.divider);
+        Integer headerBorder = palette.headerBorder != null ? palette.headerBorder : palette.divider;
+        Integer statusBorder = palette.statusBorder != null ? palette.statusBorder : palette.divider;
+        setBackground(R.id.yummy_editor_top_divider, headerBorder);
         setBackground(R.id.yummy_editor_bottom_divider, palette.divider);
-        setBackground(R.id.yummy_editor_status_divider, palette.divider);
+        setBackground(R.id.yummy_editor_status_divider, statusBorder);
+        setBackground(R.id.yummy_status_ln_divider, statusBorder);
+        setBackground(R.id.yummy_status_col_divider, statusBorder);
+        setBackground(R.id.yummy_status_spaces_divider, statusBorder);
+        setBackground(R.id.yummy_status_language_divider, statusBorder);
+        setBackground(R.id.yummy_status_encoding_divider, statusBorder);
 
         applyForegroundTree(activity.findViewById(R.id.yummy_app_bar), palette.toolbarForeground);
         applyForegroundTree(activity.findViewById(R.id.yummy_editor_status_bar), palette.statusForeground);
@@ -309,18 +348,26 @@ public final class EditorUiComponentThemeController {
             boolean active = TAG_ACTIVE_TAB.equals(tab.getTag());
             Integer background = active ? palette.activeTabBackground : palette.inactiveTabBackground;
             Integer foreground = active ? palette.activeTabForeground : palette.inactiveTabForeground;
-            if (background != null) tab.setBackground(new ColorDrawable(background));
-            applyTabForeground(tab, foreground);
+            Integer border = active && palette.activeTabBorder != null
+                ? palette.activeTabBorder : palette.tabBorder;
+            ViewState baseState = dynamicTabStates.get(tab);
+            Drawable baseBackground = baseState == null ? tab.getBackground() : baseState.background;
+            Drawable interactiveBackground = createInteractiveBackground(
+                tab, background, palette.tabHoverBackground, border, baseBackground);
+            if (interactiveBackground != null) tab.setBackground(interactiveBackground);
+            applyTabForeground(tab, foreground, palette.tabHoverForeground);
         }
     }
 
-    private void applyTabForeground(View view, Integer foreground) {
-        if (foreground == null || isProtectedArtwork(view)) return;
-        if (view instanceof TextView) ((TextView) view).setTextColor(foreground);
+    private void applyTabForeground(View view, Integer foreground, Integer hoverForeground) {
+        if (isProtectedArtwork(view)) return;
+        if (view instanceof TextView) {
+            applyStatefulTextForeground((TextView) view, foreground, hoverForeground);
+        }
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) {
-                applyTabForeground(group.getChildAt(i), foreground);
+                applyTabForeground(group.getChildAt(i), foreground, hoverForeground);
             }
         }
     }
@@ -337,22 +384,116 @@ public final class EditorUiComponentThemeController {
         }
     }
 
-    private void applyPopupChildren(View view) {
-        if (view instanceof ViewGroup && palette.popupBackground != null) {
+    private void applyPopupChildren(View view, boolean root) {
+        if (!root && view instanceof ViewGroup && palette.popupBackground != null) {
             view.setBackgroundColor(palette.popupBackground);
         }
         if (view instanceof TextView) {
             boolean selected = TAG_SELECTED_POPUP.equals(view.getTag());
             Integer foreground = selected && palette.popupSelectedForeground != null
                 ? palette.popupSelectedForeground : palette.popupForeground;
-            if (foreground != null) ((TextView) view).setTextColor(foreground);
-            if (selected && palette.popupSelectedBackground != null) {
-                view.setBackground(new ColorDrawable(palette.popupSelectedBackground));
-            }
+            Integer hoverForeground = selected && palette.popupSelectedForeground != null
+                ? palette.popupSelectedForeground : palette.listHoverForeground;
+            applyStatefulTextForeground((TextView) view, foreground, hoverForeground);
+            Integer normalBackground = selected ? palette.popupSelectedBackground : null;
+            Integer hoverBackground = selected && normalBackground != null
+                ? normalBackground : palette.listHoverBackground;
+            Drawable itemBackground = createInteractiveBackground(
+                view, normalBackground, hoverBackground, null);
+            if (itemBackground != null) view.setBackground(itemBackground);
         }
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) applyPopupChildren(group.getChildAt(i));
+            for (int i = 0; i < group.getChildCount(); i++) {
+                applyPopupChildren(group.getChildAt(i), false);
+            }
         }
+    }
+
+    private void applyDialogButtonSurface(Button button) {
+        if (button == null) return;
+        Drawable background = createInteractiveBackground(
+            button, palette.buttonBackground, palette.buttonHoverBackground, palette.buttonBorder);
+        if (background != null) button.setBackground(background);
+    }
+
+    /** Builds a surface fill and optional one-dp outline while retaining an existing base drawable. */
+    private Drawable createSurfaceDrawable(View target, Integer fillColor, Integer borderColor) {
+        return createSurfaceDrawable(target, target.getBackground(), fillColor, borderColor);
+    }
+
+    private Drawable createSurfaceDrawable(
+        View target, Drawable baseBackground, Integer fillColor, Integer borderColor
+    ) {
+        Drawable base = fillColor == null ? copyDrawable(baseBackground, target)
+            : new ColorDrawable(fillColor);
+        if (borderColor == null) return base;
+
+        GradientDrawable outline = new GradientDrawable();
+        outline.setColor(Color.TRANSPARENT);
+        outline.setStroke(dp(target, 1), borderColor);
+        if (base == null) return outline;
+        return new LayerDrawable(new Drawable[] { base, outline });
+    }
+
+    /** Adds pressed/focused/hovered colors without tinting icons or replacing the text state. */
+    private Drawable createInteractiveBackground(
+        View target, Integer normalColor, Integer hoverColor, Integer borderColor
+    ) {
+        return createInteractiveBackground(
+            target, normalColor, hoverColor, borderColor, target.getBackground());
+    }
+
+    private Drawable createInteractiveBackground(
+        View target, Integer normalColor, Integer hoverColor, Integer borderColor,
+        Drawable baseBackground
+    ) {
+        if (normalColor == null && hoverColor == null && borderColor == null) return null;
+        Drawable normal = createSurfaceDrawable(
+            target, baseBackground, normalColor, borderColor);
+        if (normal == null) normal = copyDrawable(baseBackground, target);
+        if (normal == null) normal = new ColorDrawable(Color.TRANSPARENT);
+        if (hoverColor == null) return normal;
+
+        Drawable hovered = createSurfaceDrawable(
+            target, baseBackground, hoverColor, borderColor);
+        StateListDrawable states = new StateListDrawable();
+        states.addState(new int[] { android.R.attr.state_pressed }, hovered);
+        states.addState(new int[] { android.R.attr.state_focused }, copyDrawable(hovered, target));
+        states.addState(new int[] { android.R.attr.state_hovered }, copyDrawable(hovered, target));
+        states.addState(new int[0], normal);
+        return states;
+    }
+
+    private Drawable copyDrawable(Drawable drawable, View target) {
+        if (drawable == null) return null;
+        Drawable.ConstantState state = drawable.getConstantState();
+        return state == null ? drawable.mutate()
+            : state.newDrawable(target.getResources()).mutate();
+    }
+
+    private static int dp(View target, int value) {
+        return Math.max(1, Math.round(value * target.getResources().getDisplayMetrics().density));
+    }
+
+    private static void applyStatefulTextForeground(
+        TextView view, Integer normal, Integer hover
+    ) {
+        if (view == null || (normal == null && hover == null)) return;
+        int base = normal == null ? view.getCurrentTextColor() : normal;
+        view.setTextColor(createForegroundColorStateList(base, hover));
+    }
+
+    static ColorStateList createForegroundColorStateList(Integer normal, Integer hover) {
+        if (normal == null) return null;
+        if (hover == null) return ColorStateList.valueOf(normal);
+        int[][] states = new int[][] {
+            new int[] { android.R.attr.state_pressed },
+            new int[] { android.R.attr.state_focused },
+            new int[] { android.R.attr.state_hovered },
+            new int[0]
+        };
+        int[] colors = new int[] { hover, hover, hover, normal };
+        return new ColorStateList(states, colors);
     }
 }
