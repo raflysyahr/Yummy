@@ -3,6 +3,8 @@ package com.termux.app.theme.adapter;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -22,6 +24,7 @@ import static org.junit.Assert.assertTrue;
  * Every public Sora color field must be mapped or explicitly classified as syntax-owned
  * or lacking a semantically safe VS Code workbench equivalent.
  */
+@RunWith(RobolectricTestRunner.class)
 public class SoraEditorColorFieldCoverageTest {
 
     @Test
