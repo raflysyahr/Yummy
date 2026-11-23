@@ -125,6 +125,7 @@ public class EditorController {
     private YummyUiSchemaViewBinder mUiSchemaBinder;
     private Runnable mEditorUiThemeRefresh;
     private java.util.function.Consumer<View> mEditorUiPopupThemeApplier;
+    private java.util.function.Consumer<View> mEditorUiPopupThemeReleaser;
     private java.util.function.Consumer<AlertDialog> mEditorUiDialogThemeApplier;
     private java.util.function.Supplier<Integer> mEditorUiPopupBackgroundColorProvider;
 
@@ -509,10 +510,12 @@ public class EditorController {
     /** Connects dynamic Editor UI theme refreshes without coupling the editor to theme storage. */
     public void setEditorUiThemeCallbacks(
         @Nullable Runnable refreshTabs,
-        @Nullable java.util.function.Consumer<View> popupApplier
+        @Nullable java.util.function.Consumer<View> popupApplier,
+        @Nullable java.util.function.Consumer<View> popupReleaser
     ) {
         mEditorUiThemeRefresh = refreshTabs;
         mEditorUiPopupThemeApplier = popupApplier;
+        mEditorUiPopupThemeReleaser = popupReleaser;
         if (mEditorUiThemeRefresh != null) mEditorUiThemeRefresh.run();
     }
 
@@ -1532,6 +1535,9 @@ public class EditorController {
         mEncodingPopup.setElevation(dpInt(10));
         mEncodingPopup.setOnDismissListener(() -> {
             if (mUiSchemaBinder != null) mUiSchemaBinder.unregisterTree(scroll);
+            if (mEditorUiPopupThemeReleaser != null) {
+                mEditorUiPopupThemeReleaser.accept(scroll);
+            }
         });
         int[] location = new int[2];
         mStatusEncodingGroup.getLocationOnScreen(location);

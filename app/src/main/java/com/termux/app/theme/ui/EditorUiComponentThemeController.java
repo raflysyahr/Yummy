@@ -21,7 +21,9 @@ import com.termux.app.theme.adapter.AppThemeColorValueParser;
 import com.termux.app.theme.model.LoadedTheme;
 import com.termux.app.theme.model.VSCodeColorTheme;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,26 +38,35 @@ public final class EditorUiComponentThemeController {
     private final Activity activity;
     private final Map<View, ViewState> baseStates = new IdentityHashMap<>();
     private final Map<View, ViewState> dynamicTabStates = new IdentityHashMap<>();
+    private final Map<View, Map<View, ViewState>> dynamicPopupStates = new IdentityHashMap<>();
     private LoadedTheme currentTheme;
     private Palette palette;
 
     private static final class ViewState {
         final Drawable background;
+        final ColorStateList backgroundTint;
         final ColorStateList text;
+        final ColorStateList hintText;
         final ColorStateList tint;
 
         ViewState(View view) {
             Drawable drawable = view.getBackground();
             background = drawable == null ? null : drawable.getConstantState() == null
                 ? drawable : drawable.getConstantState().newDrawable(view.getResources()).mutate();
+            backgroundTint = view.getBackgroundTintList();
             text = view instanceof TextView ? ((TextView) view).getTextColors() : null;
+            hintText = view instanceof TextView ? ((TextView) view).getHintTextColors() : null;
             tint = view instanceof ImageView ? ((ImageView) view).getImageTintList() : null;
         }
 
         void restore(View view) {
             view.setBackground(background);
+            view.setBackgroundTintList(backgroundTint);
             if (text != null && view instanceof TextView) {
                 ((TextView) view).setTextColor(text);
+            }
+            if (hintText != null && view instanceof TextView) {
+                ((TextView) view).setHintTextColor(hintText);
             }
             if (view instanceof ImageView) {
                 ((ImageView) view).setImageTintList(tint);
@@ -88,23 +99,35 @@ public final class EditorUiComponentThemeController {
         if (theme == null) throw new IllegalArgumentException("Editor UI theme is required");
         restoreBaseStates();
         restoreDynamicTabStates();
+        restorePopupStates();
         currentTheme = theme;
         palette = resolve(theme.getColorTheme());
         applyStaticViews();
         applyDynamicTabs();
+        reapplyTrackedPopups();
     }
 
-    /** Reapplies Editor UI after an independent App UI palette update. */
+    /** Restores the non-Editor-UI appearance before AppThemeController updates bound Views. */
+    public void prepareForAppThemeChange() {
+        restoreBaseStates();
+        restoreDynamicTabStates();
+        restorePopupStates();
+    }
+
+    /** Re-snapshots the latest App UI appearance and reapplies the selected Editor UI overlay. */
     public void refreshBaseAndReapply() {
+        // AppThemeController calls prepareForAppThemeChange() before changing any bound View.
+        // Re-capture here so an Editor UI theme with missing identifiers falls back to the
+        // newly selected App UI rather than the colors from Activity creation or an old theme.
+        captureBaseStates();
         if (currentTheme == null) {
-            captureBaseStates();
+            restorePopupStates();
             return;
         }
-        // The selected Editor UI target has precedence on editor chrome. Do not snapshot
-        // our own current overrides as a new base when the App UI palette changes.
         palette = resolve(currentTheme.getColorTheme());
         applyStaticViews();
         applyDynamicTabs();
+        reapplyTrackedPopups();
     }
 
     /** Called after EditorController recreates the tab strip. */
@@ -117,12 +140,29 @@ public final class EditorUiComponentThemeController {
 
     /** Styles the dynamically-created encoding popup using workbench widget/menu colors. */
     public void applyPopup(View popupRoot) {
-        if (popupRoot == null || currentTheme == null || palette == null) return;
+        if (popupRoot == null) return;
+        Map<View, ViewState> states = dynamicPopupStates.get(popupRoot);
+        if (states == null) {
+            states = new IdentityHashMap<>();
+            captureTree(states, popupRoot);
+            dynamicPopupStates.put(popupRoot, states);
+        } else {
+            restoreStates(states);
+        }
+        if (currentTheme == null || palette == null) return;
         if (palette.popupBackground != null || palette.popupBorder != null) {
             popupRoot.setBackground(createSurfaceDrawable(
                 popupRoot, palette.popupBackground, palette.popupBorder));
+            popupRoot.setBackgroundTintList(null);
         }
         applyPopupChildren(popupRoot, true);
+    }
+
+    /** Restores and forgets a popup when its owning PopupWindow is dismissed. */
+    public void releasePopup(View popupRoot) {
+        if (popupRoot == null) return;
+        Map<View, ViewState> states = dynamicPopupStates.remove(popupRoot);
+        if (states != null) restoreStates(states);
     }
 
     public Integer getPopupBackgroundColor() {
@@ -162,6 +202,7 @@ public final class EditorUiComponentThemeController {
     public void clear() {
         restoreBaseStates();
         restoreDynamicTabStates();
+        restorePopupStates();
         currentTheme = null;
         palette = null;
     }
@@ -287,15 +328,28 @@ public final class EditorUiComponentThemeController {
     }
 
     private void restoreBaseStates() {
-        for (Map.Entry<View, ViewState> entry : baseStates.entrySet()) {
+        restoreStates(baseStates);
+    }
+
+    private void restoreDynamicTabStates() {
+        restoreStates(dynamicTabStates);
+    }
+
+    private void restorePopupStates() {
+        for (Map<View, ViewState> states : dynamicPopupStates.values()) {
+            restoreStates(states);
+        }
+    }
+
+    private static void restoreStates(Map<View, ViewState> states) {
+        for (Map.Entry<View, ViewState> entry : states.entrySet()) {
             entry.getValue().restore(entry.getKey());
         }
     }
 
-    private void restoreDynamicTabStates() {
-        for (Map.Entry<View, ViewState> entry : dynamicTabStates.entrySet()) {
-            entry.getValue().restore(entry.getKey());
-        }
+    private void reapplyTrackedPopups() {
+        List<View> roots = new ArrayList<>(dynamicPopupStates.keySet());
+        for (View root : roots) applyPopup(root);
     }
 
     private void applyStaticViews() {
@@ -328,7 +382,11 @@ public final class EditorUiComponentThemeController {
     private void setBackground(int viewId, Integer color) {
         if (color == null) return;
         View view = activity.findViewById(viewId);
-        if (view != null) view.setBackgroundColor(color);
+        if (view != null) {
+            // Editor UI is a higher-priority overlay for explicitly mapped chrome colors.
+            view.setBackgroundTintList(null);
+            view.setBackgroundColor(color);
+        }
     }
 
     private void applyImageTint(int viewId, Integer color) {
@@ -354,7 +412,10 @@ public final class EditorUiComponentThemeController {
             Drawable baseBackground = baseState == null ? tab.getBackground() : baseState.background;
             Drawable interactiveBackground = createInteractiveBackground(
                 tab, background, palette.tabHoverBackground, border, baseBackground);
-            if (interactiveBackground != null) tab.setBackground(interactiveBackground);
+            if (interactiveBackground != null) {
+                tab.setBackgroundTintList(null);
+                tab.setBackground(interactiveBackground);
+            }
             applyTabForeground(tab, foreground, palette.tabHoverForeground);
         }
     }
@@ -386,6 +447,7 @@ public final class EditorUiComponentThemeController {
 
     private void applyPopupChildren(View view, boolean root) {
         if (!root && view instanceof ViewGroup && palette.popupBackground != null) {
+            view.setBackgroundTintList(null);
             view.setBackgroundColor(palette.popupBackground);
         }
         if (view instanceof TextView) {
@@ -400,7 +462,10 @@ public final class EditorUiComponentThemeController {
                 ? normalBackground : palette.listHoverBackground;
             Drawable itemBackground = createInteractiveBackground(
                 view, normalBackground, hoverBackground, null);
-            if (itemBackground != null) view.setBackground(itemBackground);
+            if (itemBackground != null) {
+                view.setBackgroundTintList(null);
+                view.setBackground(itemBackground);
+            }
         }
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
@@ -414,7 +479,10 @@ public final class EditorUiComponentThemeController {
         if (button == null) return;
         Drawable background = createInteractiveBackground(
             button, palette.buttonBackground, palette.buttonHoverBackground, palette.buttonBorder);
-        if (background != null) button.setBackground(background);
+        if (background != null) {
+            button.setBackgroundTintList(null);
+            button.setBackground(background);
+        }
     }
 
     /** Builds a surface fill and optional one-dp outline while retaining an existing base drawable. */

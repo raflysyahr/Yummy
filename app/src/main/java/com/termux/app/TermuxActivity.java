@@ -423,6 +423,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mEditorUiThemeController.clear();
             mEditorUiThemeController = null;
         }
+        if (mEditorUiComponentThemeController != null) {
+            mEditorUiComponentThemeController.clear();
+            mEditorUiComponentThemeController = null;
+        }
         if (mAppThemeController != null) {
             mAppThemeController.release();
             mAppThemeController = null;
@@ -779,7 +783,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mEditorController != null) {
             mEditorController.setEditorUiThemeCallbacks(
                 () -> mEditorUiComponentThemeController.refreshDynamicViews(),
-                popup -> mEditorUiComponentThemeController.applyPopup(popup)
+                popup -> mEditorUiComponentThemeController.applyPopup(popup),
+                popup -> mEditorUiComponentThemeController.releasePopup(popup)
             );
             mEditorController.setEditorUiDialogThemeCallbacks(
                 dialog -> mEditorUiComponentThemeController.applyDialog(dialog),
@@ -791,19 +796,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mUiSchemaThemeManager = new YummyUiSchemaThemeManager(
             mUiSchemaRuntime, mThemePackageStorage);
         bindApplicationThemeViews();
-        mAppThemeController.setPaletteListener(theme -> {
-            applyEditorAppTheme(theme);
-            if (mEditorUiThemeController != null) {
-                mEditorUiThemeController.refreshBaseAndReapply();
+        mAppThemeController.setPaletteListener(new AppThemeController.PaletteListener() {
+            @Override
+            public void onPaletteWillChange() {
+                // Remove Editor UI overlays before AppThemeController restores/recolors the
+                // shared editor chrome and before the Sora App UI surface is updated.
+                if (mEditorUiThemeController != null) {
+                    mEditorUiThemeController.prepareForAppThemeChange();
+                }
+                if (mEditorUiComponentThemeController != null) {
+                    mEditorUiComponentThemeController.prepareForAppThemeChange();
+                }
             }
-            if (mEditorUiComponentThemeController != null) {
-                mEditorUiComponentThemeController.refreshBaseAndReapply();
-            }
-            if (mFileManagerController != null) {
-                mFileManagerController.refreshUiSchemaBindings();
-            }
-            if (mEditorController != null) {
-                mEditorController.refreshUiSchemaBindings();
+
+            @Override
+            public void onPaletteChanged(ResolvedAppTheme theme) {
+                applyEditorAppTheme(theme);
+                if (mEditorUiThemeController != null) {
+                    mEditorUiThemeController.refreshBaseAndReapply();
+                }
+                if (mFileManagerController != null) {
+                    mFileManagerController.refreshUiSchemaBindings();
+                }
+                if (mEditorController != null) {
+                    // App UI Schema bindings are another base layer for editor chrome. Resolve
+                    // them first; the independent Editor UI target is the final overlay.
+                    mEditorController.refreshUiSchemaBindings();
+                }
+                if (mEditorUiComponentThemeController != null) {
+                    mEditorUiComponentThemeController.refreshBaseAndReapply();
+                }
             }
         });
         if (mEditorController != null) {
@@ -854,15 +876,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ResolvedEditorTheme resolved = new EditorThemeAdapter().resolve(theme);
         String baseThemeJson = new AssetThemeResourceReader(getAssets())
             .readUtf8("textmate/yummy-dark.json");
-        new SoraEditorThemeApplier().apply(
-            editor, resolved, theme.getResourceReader(), baseThemeJson);
-
-        // Sora's TextMate activation restores colors from the base TextMate document. Reapply
-        // the separately selected App UI editor surface after syntax activation.
-        applyEditorAppTheme(mAppThemeController == null
-            ? null : mAppThemeController.getCurrentTheme());
+        boolean syntaxBaseUpdated = false;
         if (mEditorUiThemeController != null) {
-            mEditorUiThemeController.refreshBaseAndReapply();
+            mEditorUiThemeController.prepareForSyntaxThemeChange();
+        }
+        try {
+            new SoraEditorThemeApplier().apply(
+                editor, resolved, theme.getResourceReader(), baseThemeJson);
+            if (mEditorUiThemeController != null) {
+                // Capture TextMate's new surface before layering App UI and Editor UI colors.
+                mEditorUiThemeController.captureSyntaxBaseColors();
+                syntaxBaseUpdated = true;
+            }
+        } finally {
+            if (mEditorUiThemeController != null && !syntaxBaseUpdated) {
+                mEditorUiThemeController.restoreSyntaxBaseColors();
+            }
+            // A failed or successful syntax activation must leave the independent App UI and
+            // Editor UI targets applied over the latest accepted TextMate base.
+            applyEditorAppTheme(mAppThemeController == null
+                ? null : mAppThemeController.getCurrentTheme());
+            if (mEditorUiThemeController != null) {
+                mEditorUiThemeController.refreshBaseAndReapply();
+            }
         }
     }
 

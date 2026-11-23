@@ -25,8 +25,9 @@ Tab WORKFLOW:
     Log step        : ↑/↓ PgUp PgDn Home End / geser jari = scroll, e atau tombol [Copy Error] = salin baris error,
                       c atau tombol [Copy Semua] = salin seluruh log step, r = muat ulang, Backspace = balik
                       (butuh: pkg install termux-api + aplikasi Termux:API untuk clipboard)
-                      Step yang masih berjalan tampil LIVE (auto-refresh ~3 dtk, layar mengikuti baris terbaru);
-                      scroll ke atas = berhenti mengikuti, End / f / tombol ▼ = ikuti lagi
+                      Job yang masih berjalan: GitHub tidak menyediakan log lewat API (404) sampai JOB selesai,
+                      jadi yang tampil progres step (durasi jalan terus) dan log muncul otomatis saat job selesai.
+                      o / tombol [Web] = buka log live di browser (termux-open-url)
 
 Ctrl+Q / Ctrl+C : keluar.
 Patch TIDAK pernah ditulis ke file: dikirim lewat stdin (git apply -), jadi tidak ada file sementara.
@@ -644,6 +645,7 @@ class App:
         self.log_rev = 0
         self.log_fetched = 0.0
         self.log_updated = 0.0
+        self.log_retries = 0
         self.log_was_running = False
         self.log_buttons = []
         self.log_lock = threading.Lock()
@@ -953,7 +955,8 @@ class App:
         # tombol
         x = 0
         for name, label in (("back", " ◀ Kembali "), ("err", " Copy Error "),
-                            ("all", " Copy Semua "), ("reload", " ⟳ "), ("follow", " ▼ ")):
+                            ("all", " Copy Semua "), ("reload", " ⟳ "), ("follow", " ▼ "),
+                            ("web", " Web ")):
             self.put(2, x, label, curses.color_pair(6) | curses.A_BOLD)
             self.log_buttons.append((x, x + len(label), name))
             x += len(label) + 1
@@ -966,12 +969,16 @@ class App:
         sym, col = status_sym(target.get("status"), target.get("conclusion"), frame)
         what = step.get("name", "") if step else "Seluruh job"
         live = target.get("status") != "completed"
+        job_live = job.get("status") != "completed"
         parts = []
         if live:
-            age = f" {int(time.time() - self.log_updated)}d" if self.log_updated else ""
-            parts.append(f"{frame} LIVE{age}")
-            if self.log_tail:
-                parts.append("ikuti")
+            parts.append(f"{frame} berjalan {dur_str(target.get('startedAt'), '')}".rstrip())
+            if lines and self.log_updated:
+                parts.append(f"LIVE {int(time.time() - self.log_updated)}d")
+                if self.log_tail:
+                    parts.append("ikuti")
+        elif job_live and not lines:
+            parts.append("menunggu job selesai")
         if loading and not live:
             parts.append("memuat...")
         info = ("  " + " · ".join(parts)) if parts else ""
@@ -1002,6 +1009,25 @@ class App:
         if not lines:
             if err:
                 self.put(y0 + 1, 2, err[: W - 4], curses.color_pair(2))
+            elif job_live:
+                msg = ("GitHub tidak menyediakan log lewat API selama job masih berjalan (404 itu normal). "
+                       "Log tampil otomatis begitu JOB selesai. Mau lihat langsung sekarang? "
+                       "Tekan o atau tombol Web.")
+                yy = y0 + 1
+                for ln in textwrap.wrap(msg, max(10, iw - 2)):
+                    self.put(yy, 2, ln, curses.color_pair(3))
+                    yy += 1
+                yy += 1
+                self.put(yy, 2, "Progres job:", curses.A_BOLD)
+                yy += 1
+                for st in job.get("steps") or []:
+                    if yy >= y0 + h - 1:
+                        break
+                    ss, sc = status_sym(st.get("status"), st.get("conclusion"), frame)
+                    send = st.get("completedAt") if st.get("status") == "completed" else ""
+                    self.put(yy, 2, fit(f"{ss} {st.get('name', '')}", dur_str(st.get("startedAt"), send) + " ", iw - 2),
+                             curses.color_pair(sc) | (curses.A_BOLD if st.get("status") == "in_progress" else 0))
+                    yy += 1
             elif loading:
                 self.put(y0 + 1, 2, "memuat log...", curses.A_DIM)
             else:
@@ -1029,10 +1055,10 @@ class App:
             help_ = "↑/↓ pilih  Enter/tap buka  r refresh  ^T tab  ^Q keluar"
         elif self.wf_view == "detail":
             title = f" WORKFLOW › detail run   {slug}"
-            help_ = "↑/↓ pilih  Enter/tap buka log  l log gagal  Backspace kembali  r refresh"
+            help_ = "↑/↓ pilih  Enter log  o web  l log gagal  Backspace  r refresh"
         else:
             title = f" WORKFLOW › log step   {slug}"
-            help_ = "↑/↓ scroll  End ikuti  e copy error  c copy semua  r reload  Backspace"
+            help_ = "↑/↓ scroll  End ikuti  e/c copy  o web  r reload  Backspace"
         self.put(1, 0, title.ljust(W - 1), curses.color_pair(6) | curses.A_BOLD)
         if H < 8:
             self.put(2, 0, "Layar terlalu kecil")
@@ -1303,6 +1329,7 @@ class App:
             self.log_rev += 1
         self.log_scroll = 0
         self.log_updated = 0.0
+        self.log_retries = 0
         target = step or job
         self.log_tail = target.get("status") != "completed"
         self.log_was_running = self.log_tail
@@ -1357,7 +1384,8 @@ class App:
                     lines, kinds, note = parse_api_log(text, step)
                     err = ""
                 else:
-                    err = text + (" (dicoba lagi otomatis)" if live else "")
+                    waiting = live and ("404" in text or "Not Found" in text)
+                    err = "" if waiting else text + (" (dicoba lagi otomatis)" if live else "")
             with self.log_lock:
                 if gen != self.log_gen:
                     return
@@ -1377,6 +1405,32 @@ class App:
             return False
         return (step or job).get("status") != "completed"
 
+    def log_job_live(self):
+        job, _ = self.fresh_job_step()
+        return bool(job) and job.get("status") != "completed"
+
+    def open_web(self, job):
+        jid = (job or {}).get("databaseId")
+        url = (job or {}).get("url") or (
+            f"https://github.com/{self.poller.slug}/actions/runs/{self.view_id}/job/{jid}"
+            if self.poller.slug and jid else "")
+        if not url:
+            self.set_flash("URL job tidak diketahui")
+            return
+        for name in ("termux-open-url", "termux-open", "xdg-open"):
+            exe = shutil.which(name)
+            if not exe:
+                continue
+            try:
+                r = subprocess.run([exe, url], capture_output=True, text=True, timeout=10)
+                if r.returncode == 0:
+                    self.set_flash(f"Dibuka di browser: {url}", 6)
+                    return
+            except Exception:
+                continue
+        ok, _ = copy_text(url + "\n")
+        self.set_flash(("URL disalin ke clipboard (tidak ada pembuka URL): " if ok else "Buka manual: ") + url, 8)
+
     def log_action(self, name):
         if name == "back":
             self.close_log()
@@ -1384,6 +1438,8 @@ class App:
             self.start_log_fetch()
         elif name == "follow":
             self.log_tail = True
+        elif name == "web":
+            self.open_web(self.fresh_job_step()[0])
         else:
             self.do_copy(name)
 
@@ -1417,6 +1473,8 @@ class App:
                 self.do_copy("all")
             elif k in ("f", "F"):
                 self.log_tail = True
+            elif k in ("o", "O"):
+                self.open_web(self.fresh_job_step()[0])
             elif k == "r":
                 self.start_log_fetch()
             elif k in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_PPAGE, curses.KEY_NPAGE,
@@ -1454,6 +1512,9 @@ class App:
                 self.close_detail()
             elif k == "l":
                 self.show_failed_log()
+            elif k in ("o", "O"):
+                if 0 <= self.det_sel < len(self.det_items):
+                    self.open_web(self.det_items[self.det_sel][0])
             elif k in ("\n", "\r"):
                 if 0 <= self.det_sel < len(self.det_items):
                     job, step = self.det_items[self.det_sel]
@@ -1496,10 +1557,17 @@ class App:
     def loop(self):
         while True:
             if self.tab == 1 and self.wf_view == "log" and not self.log_loading:
-                running = self.log_running()
-                if (running or self.log_was_running) and time.time() - self.log_fetched >= 3:
+                jl = self.log_job_live()
+                gap = time.time() - self.log_fetched
+                if self.log_was_running and not jl:          # job baru selesai -> ambil log final
                     self.start_log_fetch()
-                self.log_was_running = running
+                elif jl:
+                    if gap >= (3 if self.log_lines else 6):
+                        self.start_log_fetch()
+                elif not self.log_lines and self.log_retries < 5 and gap >= 3:
+                    self.log_retries += 1                    # log kadang telat diproses GitHub
+                    self.start_log_fetch()
+                self.log_was_running = jl
             self.draw()
             try:
                 keys = self.read_keys()

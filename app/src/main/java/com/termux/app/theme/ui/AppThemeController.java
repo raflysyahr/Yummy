@@ -32,6 +32,10 @@ import com.termux.app.theme.model.VSCodeIconTheme;
 public final class AppThemeController {
     /** Receives the active App UI palette so non-View surfaces can follow the same theme. */
     public interface PaletteListener {
+        /** Called before App UI-bound Views are restored or recolored. */
+        default void onPaletteWillChange() { }
+
+        /** Called after the new App UI palette has been applied to registered Views. */
         void onPaletteChanged(ResolvedAppTheme theme);
     }
 
@@ -56,6 +60,7 @@ public final class AppThemeController {
     /** Resolves and applies a theme package that declares App UI support. */
     public ResolvedAppTheme applyTheme(LoadedTheme loadedTheme) {
         ResolvedAppTheme resolved = adapter.resolve(loadedTheme, fallbacks);
+        notifyPaletteWillChange();
         viewRegistry.apply(resolved);
         currentTheme = resolved;
         iconThemeController.refreshBindings(viewRegistry);
@@ -65,6 +70,7 @@ public final class AppThemeController {
 
     /** Reverts bound Views to their original colors while keeping bindings ready for reapply. */
     public void clearTheme() {
+        notifyPaletteWillChange();
         viewRegistry.apply(null);
         currentTheme = null;
         iconThemeController.refreshBindings(viewRegistry);
@@ -82,6 +88,11 @@ public final class AppThemeController {
     public void setPaletteListener(PaletteListener listener) {
         paletteListener = listener;
         notifyPaletteChanged();
+    }
+
+    private void notifyPaletteWillChange() {
+        PaletteListener listener = paletteListener;
+        if (listener != null) listener.onPaletteWillChange();
     }
 
     private void notifyPaletteChanged() {
