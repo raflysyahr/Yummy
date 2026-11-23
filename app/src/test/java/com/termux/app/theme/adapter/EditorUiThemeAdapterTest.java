@@ -226,6 +226,21 @@ public class EditorUiThemeAdapterTest {
     }
 
     @Test
+    public void resolvesVsCodeAlphaHexColorsIntoAndroidArgbWithoutLosingAlpha()
+        throws Exception {
+        LoadedTheme theme = theme(
+            "{\"name\":\"Alpha Colors\",\"type\":\"dark\",\"colors\":{"
+                + "\"editor.background\":\"#12345678\","
+                + "\"editor.foreground\":\"#A1B2C3D4\","
+                + "\"editorLineNumber.foreground\":\"#1234\"}}"
+        );
+        java.util.Map<String, Integer> colors = adapter.resolve(theme).getColorsBySoraField();
+        assertEquals(Integer.valueOf(0x78123456), colors.get("WHOLE_BACKGROUND"));
+        assertEquals(Integer.valueOf(0xD4A1B2C3), colors.get("TEXT_NORMAL"));
+        assertEquals(Integer.valueOf(0x44112233), colors.get("LINE_NUMBER"));
+    }
+
+    @Test
     public void missingAndDefaultColorsAreOmittedSoRuntimeCanRestoreBasePalette()
         throws Exception {
         LoadedTheme theme = theme(
