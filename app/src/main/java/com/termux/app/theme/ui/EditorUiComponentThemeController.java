@@ -253,6 +253,13 @@ public final class EditorUiComponentThemeController {
         applyImageTint(R.id.yummy_btn_tabs_menu, tabActionForeground);
     }
 
+    /** Applies a resolved background color when both the view and color are available. */
+    private void setBackground(int viewId, Integer color) {
+        if (color == null) return;
+        View view = activity.findViewById(viewId);
+        if (view != null) view.setBackgroundColor(color);
+    }
+
     private void applyImageTint(int viewId, Integer color) {
         if (color == null) return;
         View view = activity.findViewById(viewId);
