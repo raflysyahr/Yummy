@@ -75,6 +75,8 @@ public final class EditorUiThemeAdapter {
         addMapping(result, "editorBracketMatch.foreground", "HIGHLIGHTED_DELIMITERS_FOREGROUND");
         // Sora's MATCHED_TEXT_* fields are used for find/matched text occurrences, not brackets.
         addMapping(result, "editor.findMatchBackground", "MATCHED_TEXT_BACKGROUND");
+        addMapping(result, "editor.findMatchBorder", "MATCHED_TEXT_BORDER");
+        addMapping(result, "editor.selectionHighlightBorder", "SELECTED_TEXT_BORDER");
 
         // Sora completion and hover widgets.
         addMapping(result, "editorSuggestWidget.background", "COMPLETION_WND_BACKGROUND");

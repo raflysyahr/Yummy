@@ -272,6 +272,35 @@ public class SoraEditorUiThemeLifecycleTest {
         activity.finish();
     }
 
+    @Test
+    public void selectionAndFindBordersApplyAndRestoreWithoutChangingSyntaxColors()
+        throws Exception {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        CodeEditor editor = new CodeEditor(activity);
+        EditorColorScheme scheme = editor.getColorScheme();
+        assertNotNull("Sora must initialize a color scheme", scheme);
+        scheme.setColor(EditorColorScheme.MATCHED_TEXT_BORDER, 0xFF010203);
+        scheme.setColor(EditorColorScheme.SELECTED_TEXT_BORDER, 0xFF111213);
+        scheme.setColor(EditorColorScheme.KEYWORD, 0xFF212223);
+
+        SoraEditorUiThemeController controller = new SoraEditorUiThemeController(editor);
+        controller.apply(theme("selection-find-borders",
+            "{\"name\":\"Selection and Find Borders\",\"type\":\"dark\",\"colors\":{"
+                + "\"editor.findMatchBorder\":\"#AABBCC\","
+                + "\"editor.selectionHighlightBorder\":\"#DDEEFF\"}}"));
+
+        assertEquals(0xFFAABBCC, scheme.getColor(EditorColorScheme.MATCHED_TEXT_BORDER));
+        assertEquals(0xFFDDEEFF, scheme.getColor(EditorColorScheme.SELECTED_TEXT_BORDER));
+        assertEquals("TextMate syntax colors must remain untouched", 0xFF212223,
+            scheme.getColor(EditorColorScheme.KEYWORD));
+
+        controller.clear();
+        assertEquals(0xFF010203, scheme.getColor(EditorColorScheme.MATCHED_TEXT_BORDER));
+        assertEquals(0xFF111213, scheme.getColor(EditorColorScheme.SELECTED_TEXT_BORDER));
+        assertEquals(0xFF212223, scheme.getColor(EditorColorScheme.KEYWORD));
+        activity.finish();
+    }
+
     private static LoadedTheme theme(String id, String document) throws Exception {
         ThemeMetadata metadata = new ThemeMetadata(
             id, id, ThemeAppearance.DARK, ThemeSource.IMPORTED, "theme.json",

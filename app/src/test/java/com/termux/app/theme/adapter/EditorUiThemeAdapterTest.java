@@ -174,6 +174,25 @@ public class EditorUiThemeAdapterTest {
     }
 
     @Test
+    public void resolvesFindAndSelectionHighlightBordersIndependently() throws Exception {
+        LoadedTheme theme = theme(
+            "{\"name\":\"Editor Borders\",\"type\":\"dark\",\"colors\":{"
+                + "\"editor.findMatchBorder\":\"#AABBCC\","
+                + "\"editor.selectionHighlightBorder\":\"#DDEEFF\"}}"
+        );
+
+        ResolvedEditorUiTheme resolved = adapter.resolve(theme);
+        java.util.Map<String, Integer> colors = resolved.getColorsBySoraField();
+        assertEquals(Integer.valueOf(0xFFAABBCC), colors.get("MATCHED_TEXT_BORDER"));
+        assertEquals(Integer.valueOf(0xFFDDEEFF), colors.get("SELECTED_TEXT_BORDER"));
+        assertEquals("editor.findMatchBorder",
+            resolved.getSourceIdentifiers().get("MATCHED_TEXT_BORDER"));
+        assertEquals("editor.selectionHighlightBorder",
+            resolved.getSourceIdentifiers().get("SELECTED_TEXT_BORDER"));
+        assertFalse(colors.containsKey("KEYWORD"));
+    }
+
+    @Test
     public void missingAndDefaultColorsAreOmittedSoRuntimeCanRestoreBasePalette()
         throws Exception {
         LoadedTheme theme = theme(
