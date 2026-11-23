@@ -781,6 +781,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 () -> mEditorUiComponentThemeController.refreshDynamicViews(),
                 popup -> mEditorUiComponentThemeController.applyPopup(popup)
             );
+            mEditorController.setEditorUiDialogThemeCallbacks(
+                dialog -> mEditorUiComponentThemeController.applyDialog(dialog),
+                () -> mEditorUiComponentThemeController.getPopupBackgroundColor()
+            );
         }
         mUiSchemaRuntime = new YummyUiSchemaRuntime();
         mThemePackageStorage = new ThemePackageStorage(getApplicationContext());

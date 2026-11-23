@@ -125,6 +125,8 @@ public class EditorController {
     private YummyUiSchemaViewBinder mUiSchemaBinder;
     private Runnable mEditorUiThemeRefresh;
     private java.util.function.Consumer<View> mEditorUiPopupThemeApplier;
+    private java.util.function.Consumer<AlertDialog> mEditorUiDialogThemeApplier;
+    private java.util.function.Supplier<Integer> mEditorUiPopupBackgroundColorProvider;
 
     private final List<EditorDocument> mDocuments = new ArrayList<>();
     private EditorDocument mActiveDocument;
@@ -512,6 +514,15 @@ public class EditorController {
         mEditorUiThemeRefresh = refreshTabs;
         mEditorUiPopupThemeApplier = popupApplier;
         if (mEditorUiThemeRefresh != null) mEditorUiThemeRefresh.run();
+    }
+
+    /** Connects Editor UI colors to editor-owned dialogs and PopupWindow chrome. */
+    public void setEditorUiDialogThemeCallbacks(
+        @Nullable java.util.function.Consumer<AlertDialog> dialogApplier,
+        @Nullable java.util.function.Supplier<Integer> popupBackgroundColorProvider
+    ) {
+        mEditorUiDialogThemeApplier = dialogApplier;
+        mEditorUiPopupBackgroundColorProvider = popupBackgroundColorProvider;
     }
 
     /** Supplies the shared UI Schema runtime for Editor-owned app UI components. */
@@ -948,6 +959,9 @@ public class EditorController {
                     AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL }) {
                 android.widget.Button button = closeDialog.getButton(which);
                 if (button != null) button.setTypeface(nunitoTypeface(true));
+            }
+            if (mEditorUiDialogThemeApplier != null) {
+                mEditorUiDialogThemeApplier.accept(closeDialog);
             }
         });
         closeDialog.show();
@@ -1510,7 +1524,10 @@ public class EditorController {
             View.MeasureSpec.makeMeasureSpec(maxPopupHeight, View.MeasureSpec.AT_MOST));
         int popupHeight = Math.min(maxPopupHeight, scroll.getMeasuredHeight());
         mEncodingPopup = new PopupWindow(scroll, popupWidth, popupHeight, true);
-        mEncodingPopup.setBackgroundDrawable(new ColorDrawable(0xFF202329));
+        Integer themedPopupBackground = mEditorUiPopupBackgroundColorProvider == null
+            ? null : mEditorUiPopupBackgroundColorProvider.get();
+        mEncodingPopup.setBackgroundDrawable(new ColorDrawable(
+            themedPopupBackground == null ? 0xFF202329 : themedPopupBackground));
         mEncodingPopup.setOutsideTouchable(true);
         mEncodingPopup.setElevation(dpInt(10));
         mEncodingPopup.setOnDismissListener(() -> {

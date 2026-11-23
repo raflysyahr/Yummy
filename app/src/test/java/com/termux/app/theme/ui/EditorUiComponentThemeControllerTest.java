@@ -55,6 +55,35 @@ public class EditorUiComponentThemeControllerTest {
     }
 
     @Test
+    public void resolvesDialogActionForegroundFromVscodeButtonForeground() throws Exception {
+        VSCodeColorTheme theme = theme(
+            "{\"name\":\"Dialog\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorWidget.foreground\":\"#E1E2E3\","
+                + "\"button.foreground\":\"#123456\"}}"
+        );
+
+        EditorUiComponentThemeController.Palette palette =
+            EditorUiComponentThemeController.resolve(theme);
+
+        assertEquals(Integer.valueOf(0xFF123456), palette.buttonForeground);
+        assertEquals(Integer.valueOf(0xFFE1E2E3), palette.popupForeground);
+    }
+
+    @Test
+    public void dialogActionForegroundCanFallBackToPopupForeground() throws Exception {
+        VSCodeColorTheme theme = theme(
+            "{\"name\":\"Dialog\",\"type\":\"dark\",\"colors\":{"
+                + "\"editorWidget.foreground\":\"#ABCDEF\"}}"
+        );
+
+        EditorUiComponentThemeController.Palette palette =
+            EditorUiComponentThemeController.resolve(theme);
+
+        assertNull(palette.buttonForeground);
+        assertEquals(Integer.valueOf(0xFFABCDEF), palette.popupForeground);
+    }
+
+    @Test
     public void missingDefaultAndInvalidColorsRemainUnmapped() throws Exception {
         VSCodeColorTheme theme = theme(
             "{\"name\":\"Sparse\",\"type\":\"dark\",\"colors\":{"

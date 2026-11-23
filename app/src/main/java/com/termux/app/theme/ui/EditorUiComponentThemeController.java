@@ -1,11 +1,14 @@
 package com.termux.app.theme.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -64,6 +67,7 @@ public final class EditorUiComponentThemeController {
         Integer panelBackground, panelForeground;
         Integer divider, popupBackground, popupForeground;
         Integer popupSelectedBackground, popupSelectedForeground;
+        Integer buttonForeground;
     }
 
     public EditorUiComponentThemeController(Activity activity) {
@@ -115,6 +119,33 @@ public final class EditorUiComponentThemeController {
         return palette == null ? null : palette.popupBackground;
     }
 
+    /** Styles editor-owned confirmation dialogs without changing the Activity or terminal theme. */
+    public void applyDialog(AlertDialog dialog) {
+        if (dialog == null || currentTheme == null || palette == null) return;
+
+        Window window = dialog.getWindow();
+        if (window != null && palette.popupBackground != null) {
+            window.setBackgroundDrawable(new ColorDrawable(palette.popupBackground));
+        }
+
+        int titleId = activity.getResources().getIdentifier("alertTitle", "id", "android");
+        TextView title = titleId == 0 ? null : dialog.findViewById(titleId);
+        setTextColor(title, palette.popupForeground);
+        setTextColor(dialog.findViewById(android.R.id.message), palette.popupForeground);
+
+        Integer actionForeground = palette.buttonForeground != null
+            ? palette.buttonForeground : palette.popupForeground;
+        for (int which : new int[] { AlertDialog.BUTTON_POSITIVE,
+                AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL }) {
+            Button button = dialog.getButton(which);
+            setTextColor(button, actionForeground);
+        }
+    }
+
+    private static void setTextColor(TextView view, Integer color) {
+        if (view != null && color != null) view.setTextColor(color);
+    }
+
     /** Removes only this target's overrides and restores the latest captured base appearance. */
     public void clear() {
         restoreBaseStates();
@@ -144,6 +175,7 @@ public final class EditorUiComponentThemeController {
             "list.activeSelectionBackground", "menu.selectionBackground");
         p.popupSelectedForeground = firstColor(document,
             "list.activeSelectionForeground", "menu.selectionForeground");
+        p.buttonForeground = color(document, "button.foreground");
         return p;
     }
 
