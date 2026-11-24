@@ -24,7 +24,9 @@ import java.util.Collections;
 import java.util.EnumSet;
 
 import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
+import io.github.rosemoe.sora.langs.textmate.TextMateLanguage;
 import io.github.rosemoe.sora.langs.textmate.registry.FileProviderRegistry;
+import io.github.rosemoe.sora.langs.textmate.registry.GrammarRegistry;
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry;
 import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel;
 import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver;
@@ -54,9 +56,13 @@ public class SoraEditorUiThemeSuccessfulSyntaxActivationRuntimeTest {
         ThemeRegistry registry = ThemeRegistry.getInstance();
         registry.loadTheme(baseModel);
         registry.setTheme(baseRegistryName);
+        GrammarRegistry.getInstance().loadGrammars("textmate/languages.json");
 
         CodeEditor editor = new CodeEditor(activity);
         editor.setColorScheme(TextMateColorScheme.create(registry));
+        // Match EditorController: TextMate color changes are exercised with a real grammar.
+        editor.setText("class Step42 { if (true) return; }");
+        editor.setEditorLanguage(TextMateLanguage.create("source.java", true));
         EditorColorScheme scheme = editor.getColorScheme();
         SoraEditorUiThemeController controller = new SoraEditorUiThemeController(editor);
         controller.apply(editorUiTheme("editor-ui-active",
