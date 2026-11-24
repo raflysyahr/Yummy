@@ -40,7 +40,7 @@ public class SoraEditorColorFieldCoverageTest {
             "FUNCTION_CHAR_BACKGROUND_STROKE", "HIGHLIGHTED_DELIMITERS_UNDERLINE",
             "LINE_NUMBER_PANEL", "LINE_NUMBER_PANEL_TEXT", "SIDE_BLOCK_LINE",
             "SNIPPET_BACKGROUND_INACTIVE", "STRIKETHROUGH", "STRIKE_THROUGH",
-            "UNDERLINE", "LINE_BLOCK_LABEL");
+            "UNDERLINE", "LINE_BLOCK_LABEL", "MINIMAP_VIEWPORT_BORDER");
 
         Set<String> allSoraFields = publicStaticIntFields();
         Set<String> classified = new HashSet<>();

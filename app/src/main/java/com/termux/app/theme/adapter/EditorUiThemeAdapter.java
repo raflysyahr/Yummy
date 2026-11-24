@@ -116,7 +116,11 @@ public final class EditorUiThemeAdapter {
         addMapping(result, "editor.snippetFinalTabstopHighlightBackground", "SNIPPET_BACKGROUND_RELATED");
         addMapping(result, "editorStickyScroll.border", "STICKY_SCROLL_DIVIDER");
 
-        // Diagnostic markers and scrollbar states supported by Sora 0.24.4.
+        // Experimental minimap colors introduced by Sora 0.24.5.
+        addMapping(result, "minimap.background", "MINIMAP_BACKGROUND");
+        addMapping(result, "minimapSlider.background", "MINIMAP_VIEWPORT");
+
+        // Diagnostic markers and scrollbar states supported by Sora 0.24.5.
         addMapping(result, "editorError.foreground", "PROBLEM_ERROR");
         addMapping(result, "editorWarning.foreground", "PROBLEM_WARNING");
         // Sora exposes a dedicated typo/hint marker color; VS Code's hint foreground is
