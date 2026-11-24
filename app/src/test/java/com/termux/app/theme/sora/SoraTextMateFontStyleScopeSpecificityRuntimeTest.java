@@ -119,9 +119,14 @@ public class SoraTextMateFontStyleScopeSpecificityRuntimeTest {
     }
 
     private static JSONObject tokenRule(String scope, String fontStyle) throws Exception {
+        // Keep a concrete foreground color on every rule. Sora derives the TextMate
+        // underline color from the token foreground; without it, this test can exercise
+        // an unrelated undefined-underline-color path instead of scope specificity.
         return new JSONObject()
             .put("scope", scope)
-            .put("settings", new JSONObject().put("fontStyle", fontStyle));
+            .put("settings", new JSONObject()
+                .put("foreground", "#FF3366")
+                .put("fontStyle", fontStyle));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
