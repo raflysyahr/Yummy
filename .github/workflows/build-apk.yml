@@ -238,10 +238,10 @@ jobs:
         if: always()
         shell: bash
         run: |
-          REPORT="app/build/test-results/testDebugUnitTest/TEST-com.termux.app.theme.sora.SoraTextMateFontStyleRuntimeTest.xml"
+          REPORT="app/build/test-results/testDebugUnitTest/TEST-com.termux.app.theme.sora.SoraEditorColorFieldCoverageTest.xml"
 
           if [ -f "$REPORT" ]; then
-            echo "===== STEP 42 FAILURE DETAILS ====="
+            echo "===== STEP 46 FAILURE DETAILS ====="
             grep -A 15 -B 5 -E '<failure|<error' "$REPORT" || true
           else
             echo "Test XML report not found."
