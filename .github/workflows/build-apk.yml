@@ -233,20 +233,33 @@ jobs:
 
       - name: Run all test
         run: ./gradlew :app:testDebugUnitTest
-
-      - name: Print Step 46 Test Failure Details
-        if: always()
-        shell: bash
+      
+      - name: Show Sora Color Coverage Failure
+        if: failure()
         run: |
-          REPORT="app/build/test-results/testDebugUnitTest/TEST-com.termux.app.theme.sora.SoraEditorColorFieldCoverageTest.xml"
+          REPORT="app/build/test-results/testDebugUnitTest/TEST-com.termux.app.theme.adapter.SoraEditorColorFieldCoverageTest.xml"
 
           if [ -f "$REPORT" ]; then
-            echo "===== STEP 46 FAILURE DETAILS ====="
-            grep -A 15 -B 5 -E '<failure|<error' "$REPORT" || true
+            echo "===== SORA COLOR COVERAGE FAILURE ====="
+            cat "$REPORT"
           else
             echo "Test XML report not found."
-            find app/build/test-results/testDebugUnitTest -maxdepth 1 -type f -print || true
+            find app/build/test-results/testDebugUnitTest -type f -name '*SoraEditorColorFieldCoverageTest*' -print
           fi
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
       - name: Upload Unit Test Report
         if: always()
