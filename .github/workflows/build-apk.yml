@@ -234,11 +234,11 @@ jobs:
       - name: Run all test
         run: ./gradlew :app:testDebugUnitTest
 
-      - name: Print Step 42 Test Failure Details
+      - name: Print Step 46 Test Failure Details
         if: always()
         shell: bash
         run: |
-          REPORT="app/build/test-results/testDebugUnitTest/TEST-com.termux.app.theme.sora.SoraEditorUiThemeSuccessfulSyntaxActivationRuntimeTest.xml"
+          REPORT="app/build/test-results/testDebugUnitTest/TEST-com.termux.app.theme.sora.SoraTextMateFontStyleRuntimeTest.xml"
 
           if [ -f "$REPORT" ]; then
             echo "===== STEP 42 FAILURE DETAILS ====="
