@@ -80,6 +80,9 @@ public class SoraEditorUiThemeSuccessfulSyntaxActivationRuntimeTest {
             null, null, null);
         new SoraEditorThemeApplier().apply(editor, syntaxTheme, null, baseThemeJson);
 
+        // SoraEditorThemeApplier refreshes TextMateColorScheme after activating the registry
+        // theme, so always inspect the editor's current scheme rather than the old instance.
+        scheme = editor.getColorScheme();
         assertEquals("Successful TextMate activation must update its syntax-owned keyword color",
             0xFFFF3366, scheme.getColor(EditorColorScheme.KEYWORD));
         controller.captureSyntaxBaseColors();
@@ -90,6 +93,7 @@ public class SoraEditorUiThemeSuccessfulSyntaxActivationRuntimeTest {
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, latestAppBackground);
         scheme.setColor(EditorColorScheme.TEXT_NORMAL, latestAppForeground);
         controller.refreshBaseAndReapply();
+        scheme = editor.getColorScheme();
 
         assertEquals("Editor UI background must remain the top overlay",
             0xFFAABBCC, scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
@@ -102,6 +106,7 @@ public class SoraEditorUiThemeSuccessfulSyntaxActivationRuntimeTest {
         assertEquals(0xFFABCDEF, scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
         assertEquals(latestAppForeground, scheme.getColor(EditorColorScheme.TEXT_NORMAL));
         controller.clear();
+        scheme = editor.getColorScheme();
         assertEquals(latestAppBackground, scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND));
         assertEquals(latestAppForeground, scheme.getColor(EditorColorScheme.TEXT_NORMAL));
         assertEquals("Clearing Editor UI must not roll back the newly activated TextMate syntax",

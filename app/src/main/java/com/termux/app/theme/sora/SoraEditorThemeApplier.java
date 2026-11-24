@@ -18,6 +18,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
 
+import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry;
 import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -71,9 +72,15 @@ public final class SoraEditorThemeApplier {
 
             ThemeRegistry registry = ThemeRegistry.getInstance();
             registry.loadTheme(model);
-            // loadTheme() only registers the model. setTheme() is the operation that activates it
-            // and notifies the TextMateColorScheme already attached to the editor.
+            // loadTheme() only registers the model. setTheme() activates the registry entry;
+            // the editor's TextMateColorScheme is then recreated below from that active theme.
             registry.setTheme(prepared.registryName);
+
+            // TextMateColorScheme resolves token colors when it is created. Recreate it after
+            // changing the process-wide registry theme so this editor immediately receives the
+            // newly activated token palette. Callers remove App UI / Editor UI overlays before
+            // apply() and reapply them after this method returns.
+            editor.setColorScheme(TextMateColorScheme.create(registry));
         } catch (SoraEditorThemeException error) {
             throw error;
         } catch (Exception error) {
