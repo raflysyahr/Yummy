@@ -69,7 +69,11 @@ public class SoraTextMateUnderlineWithoutForegroundRuntimeTest {
         editor.setEditorLanguage(language);
 
         try {
+            // TextMate's token-color default is independent from the workbench
+            // colors.editor.foreground entry. Define a global token foreground so
+            // the scoped underline rule can intentionally omit its own foreground.
             JSONArray rules = new JSONArray()
+                .put(tokenDefaultForeground("#E6EDF3"))
                 .put(tokenRuleWithoutForeground("keyword.control", "underline"))
                 .put(tokenRule("string.quoted.double", "#33AA66", "underline"));
             ResolvedEditorTheme importedTheme = new ResolvedEditorTheme(
@@ -115,6 +119,11 @@ public class SoraTextMateUnderlineWithoutForegroundRuntimeTest {
             registry.setTheme(baseRegistryName);
             activity.finish();
         }
+    }
+
+    private static JSONObject tokenDefaultForeground(String foreground) throws Exception {
+        return new JSONObject()
+            .put("settings", new JSONObject().put("foreground", foreground));
     }
 
     private static JSONObject tokenRuleWithoutForeground(String scope, String fontStyle)
