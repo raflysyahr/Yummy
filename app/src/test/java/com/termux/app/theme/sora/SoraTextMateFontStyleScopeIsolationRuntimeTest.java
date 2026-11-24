@@ -74,9 +74,9 @@ public class SoraTextMateFontStyleScopeIsolationRuntimeTest {
                 TextStyle.isItalics(baseComment.getStyle()));
 
             JSONArray rules = new JSONArray()
-                .put(tokenRule("keyword.control", "#FFFF3366", "bold"))
-                .put(tokenRule("string.quoted.double", "#FF33AA66", "italic"))
-                .put(tokenRule("comment.line", "#FF6699FF", "normal"));
+                .put(tokenRule("keyword.control", "#FF3366", "bold"))
+                .put(tokenRule("string.quoted.double", "#33AA66", "italic"))
+                .put(tokenRule("comment.line", "#6699FF", "normal"));
             ResolvedEditorTheme importedTheme = new ResolvedEditorTheme(
                 "step49-font-style-isolation",
                 "Step 49 Font Style Scope Isolation",
