@@ -34,8 +34,8 @@ android {
         implementation "io.noties.markwon:ext-strikethrough:$markwonVersion"
         implementation "io.noties.markwon:linkify:$markwonVersion"
         implementation "io.noties.markwon:recycler:$markwonVersion"
-        implementation "io.github.rosemoe:editor:0.24.4"
-        implementation "io.github.rosemoe:language-textmate:0.24.4"
+        implementation "io.github.rosemoe:editor:0.24.5"
+        implementation "io.github.rosemoe:language-textmate:0.24.5"
         // Renders SVG assets from VS Code File Icon Themes without requiring conversion.
         implementation "com.caverock:androidsvg-aar:1.4"
         implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
