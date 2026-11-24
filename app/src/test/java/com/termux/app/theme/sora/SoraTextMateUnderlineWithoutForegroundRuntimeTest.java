@@ -33,7 +33,6 @@ import io.github.rosemoe.sora.widget.CodeEditor;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /** Regression coverage for underlined TextMate tokens that have no explicit foreground. */
@@ -88,13 +87,13 @@ public class SoraTextMateUnderlineWithoutForegroundRuntimeTest {
 
             new SoraEditorThemeApplier().apply(editor, importedTheme, null, baseThemeJson);
 
-            // Sora 0.24.5 must keep an extended span for underline even when the
-            // TextMate theme resolves its foreground to the default sentinel.
+            // The scoped rule omits foreground, so TextMate inherits the global
+            // token foreground and uses that resolved color for underline.
             Span defaultForegroundToken = firstSpan(
                 language, "if", "underline without explicit foreground");
             assertNotNull("Token span must be produced without an analysis exception",
                 defaultForegroundToken);
-            assertNull("Undefined/default underline color must remain unset",
+            assertNotNull("Underline must use the inherited global token foreground",
                 defaultForegroundToken.getUnderlineColor());
             assertEquals("Token must retain the inherited editor foreground",
                 Color.parseColor("#E6EDF3"),
