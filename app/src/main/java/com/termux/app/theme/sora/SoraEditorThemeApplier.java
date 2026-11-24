@@ -18,7 +18,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
 
-import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme;
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry;
 import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel;
 import io.github.rosemoe.sora.widget.CodeEditor;
@@ -71,16 +70,17 @@ public final class SoraEditorThemeApplier {
             model.setDark(resolveDarkAppearance(resolvedTheme, baseDocument));
 
             ThemeRegistry registry = ThemeRegistry.getInstance();
-            registry.loadTheme(model);
-            // loadTheme() only registers the model. setTheme() activates the registry entry;
-            // the editor's TextMateColorScheme is then recreated below from that active theme.
-            registry.setTheme(prepared.registryName);
-
-            // TextMateColorScheme resolves token colors when it is created. Recreate it after
-            // changing the process-wide registry theme so this editor immediately receives the
-            // newly activated token palette. Callers remove App UI / Editor UI overlays before
-            // apply() and reapply them after this method returns.
-            editor.setColorScheme(TextMateColorScheme.create(registry));
+            // Register without activating, then activate exactly once. In Sora 0.24.4,
+            // loadTheme(model) defaults to isCurrentTheme=true and already dispatches a theme
+            // change; calling setTheme() after that would dispatch the same activation twice.
+            registry.loadTheme(model, false);
+            if (!registry.setTheme(prepared.registryName)) {
+                throw new SoraEditorThemeException(
+                    "Could not activate registered TextMate theme '" + prepared.registryName + "'");
+            }
+            // TextMateColorScheme and TextMateAnalyzer already listen to ThemeRegistry changes.
+            // Do not replace the editor's color scheme here: doing so needlessly reattaches it
+            // and can disturb the independently managed Editor UI color snapshots.
         } catch (SoraEditorThemeException error) {
             throw error;
         } catch (Exception error) {
