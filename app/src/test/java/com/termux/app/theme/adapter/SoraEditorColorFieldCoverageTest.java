@@ -10,6 +10,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +96,67 @@ public class SoraEditorColorFieldCoverageTest {
             assertFalse("Editor UI mapping must not alias TextMate color ID: "
                 + syntaxFieldName, mappedIds.contains(syntaxColorId));
         }
+    }
+
+    @Test
+    public void everyPublicSoraColorIdIsUniqueWithinDeclaredRangeExceptLegacyAlias()
+        throws Exception {
+        int startColorId = readDeclaredColorId("START_COLOR_ID");
+        int endColorId = readDeclaredColorId("END_COLOR_ID");
+        assertTrue("Sora color ID range must start above zero", startColorId > 0);
+        assertTrue("Sora color ID range must be ordered", endColorId >= startColorId);
+
+        Map<Integer, Set<String>> fieldsByColorId = new HashMap<>();
+        int publicColorFieldCount = 0;
+        for (Field field : EditorColorScheme.class.getFields()) {
+            int modifiers = field.getModifiers();
+            if (field.getType() != int.class
+                || !Modifier.isPublic(modifiers)
+                || !Modifier.isStatic(modifiers)
+                || !Modifier.isFinal(modifiers)) {
+                continue;
+            }
+
+            publicColorFieldCount++;
+            int colorId = field.getInt(null);
+            assertTrue("Sora color ID must be >= START_COLOR_ID: " + field.getName(),
+                colorId >= startColorId);
+            assertTrue("Sora color ID must be <= END_COLOR_ID: " + field.getName(),
+                colorId <= endColorId);
+            Set<String> owners = fieldsByColorId.get(colorId);
+            if (owners == null) {
+                owners = new HashSet<>();
+                fieldsByColorId.put(colorId, owners);
+            }
+            owners.add(field.getName());
+        }
+
+        assertTrue("The pinned Sora version must expose public color ID fields",
+            publicColorFieldCount > 0);
+
+        Set<String> expectedAlias = names("STRIKETHROUGH", "STRIKE_THROUGH");
+        int canonicalId = EditorColorScheme.class.getField("STRIKETHROUGH").getInt(null);
+        int aliasId = EditorColorScheme.class.getField("STRIKE_THROUGH").getInt(null);
+        assertEquals("STRIKE_THROUGH must remain an alias of STRIKETHROUGH",
+            canonicalId, aliasId);
+        assertEquals("The documented alias pair must be the only shared color ID",
+            expectedAlias, fieldsByColorId.get(canonicalId));
+
+        int duplicateIdGroups = 0;
+        for (Map.Entry<Integer, Set<String>> entry : fieldsByColorId.entrySet()) {
+            if (entry.getValue().size() <= 1) continue;
+            duplicateIdGroups++;
+            assertEquals("Only the documented STRIKETHROUGH alias may share an ID "
+                + entry.getKey(), expectedAlias, entry.getValue());
+        }
+        assertEquals("Sora must expose exactly one documented alias ID group",
+            1, duplicateIdGroups);
+    }
+
+    private static int readDeclaredColorId(String fieldName) throws Exception {
+        Field field = EditorColorScheme.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.getInt(null);
     }
 
     private static Set<String> mappedFields(Map<String, List<String>> mappings) {
