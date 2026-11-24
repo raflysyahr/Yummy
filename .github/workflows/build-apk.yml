@@ -237,7 +237,7 @@ jobs:
       - name: Show Sora Color Coverage Failure
         if: failure()
         run: |
-          REPORT="app/build/test-results/testDebugUnitTest/TEST-com.termux.app.theme.adapter.SoraEditorColorFieldCoverageTest.xml"
+          REPORT="app/build/test-results/testDebugUnitTest/TEST-com.termux.app.theme.sora.SoraTextMateUnderlineWithoutForegroundRuntimeTest.xml"
 
           if [ -f "$REPORT" ]; then
             echo "===== SORA COLOR COVERAGE FAILURE ====="
